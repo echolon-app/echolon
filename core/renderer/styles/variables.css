@@ -1,0 +1,126 @@
+/* Color palette */
+:root {
+  /* Brand colors (defaults, will be overridden by color schemes) */
+  --color-primary: #6366f1;
+  --color-primary-hover: #4f46e5;
+  --color-primary-light: #818cf8;
+  --color-secondary: #ec4899;
+  --color-accent: #14b8a6;
+
+  /* HTTP Method colors */
+  --color-get: #61affe;
+  --color-post: #49cc90;
+  --color-put: #fca130;
+  --color-patch: #50e3c2;
+  --color-delete: #f93e3e;
+  --color-head: #9012fe;
+  --color-options: #0d5aa7;
+
+  /* Status colors */
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-info: #3b82f6;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+  --spacing-2xl: 32px;
+
+  /* Border radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 9999px;
+
+  /* Font sizes */
+  --font-xs: 11px;
+  --font-sm: 12px;
+  --font-md: 13px;
+  --font-lg: 14px;
+  --font-xl: 16px;
+  --font-2xl: 18px;
+  --font-3xl: 24px;
+
+  /* Font families */
+  --font-sans: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+  /* Transitions */
+  --transition-fast: 100ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  /* Z-index layers */
+  --z-dropdown: 100;
+  --z-modal-backdrop: 200;
+  --z-modal: 210;
+  --z-tooltip: 300;
+  --z-context-menu: 400;
+}
+
+/* ===== COLOR SCHEMES ===== */
+
+/* Terminal - Black & Green (Logo-inspired) */
+[data-color-scheme='terminal'] {
+  --color-primary: #22c55e;
+  --color-primary-hover: #16a34a;
+  --color-primary-light: #4ade80;
+  --color-secondary: #10b981;
+  --color-accent: #34d399;
+}
+
+/* Midnight - Indigo (Original theme) */
+[data-color-scheme='midnight'] {
+  --color-primary: #6366f1;
+  --color-primary-hover: #4f46e5;
+  --color-primary-light: #818cf8;
+  --color-secondary: #ec4899;
+  --color-accent: #14b8a6;
+}
+
+/* Ocean - Deep Blue */
+[data-color-scheme='ocean'] {
+  --color-primary: #0ea5e9;
+  --color-primary-hover: #0284c7;
+  --color-primary-light: #38bdf8;
+  --color-secondary: #06b6d4;
+  --color-accent: #22d3ee;
+}
+
+/* Sunset - Warm Orange/Amber */
+[data-color-scheme='sunset'] {
+  --color-primary: #f97316;
+  --color-primary-hover: #ea580c;
+  --color-primary-light: #fb923c;
+  --color-secondary: #f59e0b;
+  --color-accent: #fbbf24;
+}
+
+/* Rose - Pink/Magenta */
+[data-color-scheme='rose'] {
+  --color-primary: #ec4899;
+  --color-primary-hover: #db2777;
+  --color-primary-light: #f472b6;
+  --color-secondary: #f43f5e;
+  --color-accent: #fb7185;
+}
+
+/* Emerald - Teal/Cyan */
+[data-color-scheme='emerald'] {
+  --color-primary: #14b8a6;
+  --color-primary-hover: #0d9488;
+  --color-primary-light: #2dd4bf;
+  --color-secondary: #06b6d4;
+  --color-accent: #22d3ee;
+}

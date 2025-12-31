@@ -1,0 +1,98 @@
+.response-time-tooltip {
+  width: 340px;
+  padding: var(--spacing-md);
+  font-size: var(--font-sm);
+}
+
+.response-time-tooltip__header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--border-secondary);
+}
+
+.response-time-tooltip__header svg {
+  width: 18px;
+  height: 18px;
+  color: var(--text-secondary);
+}
+
+.response-time-tooltip__title {
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.response-time-tooltip__total {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.response-time-tooltip__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.response-time-tooltip__row {
+  display: grid;
+  grid-template-columns: 120px 1fr 70px;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.response-time-tooltip__label {
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  white-space: nowrap;
+}
+
+.response-time-tooltip__bar-container {
+  position: relative;
+  height: 12px;
+  background-color: var(--bg-tertiary);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.response-time-tooltip__bar {
+  position: absolute;
+  top: 2px;
+  height: 8px;
+  border-radius: 2px;
+  min-width: 0;
+  transition: width 0.2s ease;
+}
+
+.response-time-tooltip__bar--dashed {
+  background: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent 3px,
+    var(--border-color) 3px,
+    var(--border-color) 6px
+  ) !important;
+  border: 1px dashed;
+  border-radius: 2px;
+  background-color: rgba(252, 165, 165, 0.2) !important;
+}
+
+.response-time-tooltip__value {
+  text-align: right;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  white-space: nowrap;
+}
+
+/* Light theme adjustments */
+[data-theme='light'] .response-time-tooltip__bar-container {
+  background-color: #f3f4f6;
+}
+
+[data-theme='light'] .response-time-tooltip__bar--dashed {
+  background-color: rgba(252, 165, 165, 0.3) !important;
+}

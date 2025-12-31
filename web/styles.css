@@ -1,0 +1,107 @@
+/* Web-specific styles for Echolon Web */
+
+.echolon-web-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: 1rem;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  color: var(--text-primary, #1a1a1a);
+  background: var(--bg-primary, #ffffff);
+}
+
+.echolon-web-loading__spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-color, #e5e7eb);
+  border-top-color: var(--primary-color, #3b82f6);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.echolon-web-loading p {
+  margin: 0;
+  font-size: 1rem;
+  opacity: 0.7;
+}
+
+.echolon-web-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  padding: 2rem;
+  text-align: center;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  color: var(--text-primary, #1a1a1a);
+  background: var(--bg-primary, #ffffff);
+}
+
+.echolon-web-error h2 {
+  margin: 0 0 1rem;
+  font-size: 1.5rem;
+  color: var(--error-color, #ef4444);
+}
+
+.echolon-web-error p {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  max-width: 600px;
+}
+
+.echolon-web-error__hint {
+  opacity: 0.7;
+  font-size: 0.875rem !important;
+}
+
+.echolon-web-error__hint code {
+  background: var(--bg-secondary, #f3f4f6);
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+  font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+  font-size: 0.8125rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Ensure the container takes full height when standalone */
+#echolon {
+  height: 100%;
+}
+
+/* When #echolon is direct child of body (standalone mode) */
+body > #echolon {
+  min-height: 100vh;
+}
+
+/* Allow the main layout to fill its container */
+#echolon .main-layout {
+  height: 100%;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .echolon-web-loading,
+  .echolon-web-error {
+    --text-primary: #f9fafb;
+    --bg-primary: #111827;
+    --bg-secondary: #1f2937;
+    --border-color: #374151;
+  }
+}
+
+/* When theme is explicitly set */
+[data-theme="dark"] .echolon-web-loading,
+[data-theme="dark"] .echolon-web-error {
+  --text-primary: #f9fafb;
+  --bg-primary: #111827;
+  --bg-secondary: #1f2937;
+  --border-color: #374151;
+}

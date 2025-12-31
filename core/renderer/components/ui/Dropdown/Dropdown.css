@@ -1,0 +1,212 @@
+.dropdown {
+  position: relative;
+  display: inline-flex;
+}
+
+.dropdown--disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Sizes */
+.dropdown--sm .dropdown__trigger {
+  height: 28px;
+  padding: 0 var(--spacing-sm);
+  font-size: var(--font-xs);
+}
+
+.dropdown--md .dropdown__trigger {
+  height: 32px;
+  padding: 0 var(--spacing-md);
+  font-size: var(--font-sm);
+}
+
+.dropdown--lg .dropdown__trigger {
+  height: 40px;
+  padding: 0 var(--spacing-lg);
+  font-size: var(--font-md);
+}
+
+.dropdown__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  min-width: 100px;
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.dropdown__trigger:hover {
+  border-color: var(--border-hover);
+}
+
+.dropdown__trigger:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.dropdown__value {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-weight: 500;
+}
+
+.dropdown__icon {
+  display: flex;
+  align-items: center;
+}
+
+.dropdown__icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.dropdown__chevron {
+  display: flex;
+  align-items: center;
+  color: var(--text-tertiary);
+  transition: transform var(--transition-fast);
+}
+
+.dropdown__chevron svg {
+  width: 16px;
+  height: 16px;
+}
+
+.dropdown--open .dropdown__chevron {
+  transform: rotate(180deg);
+}
+
+.dropdown__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 100%;
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--spacing-xs);
+  list-style: none;
+  background-color: var(--dropdown-bg);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: var(--z-dropdown);
+  animation: slideIn var(--transition-fast);
+}
+
+.dropdown__option {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color var(--transition-fast);
+}
+
+.dropdown__option:hover {
+  background-color: var(--bg-hover);
+}
+
+.dropdown__option--selected {
+  background-color: var(--bg-active);
+}
+
+.dropdown__option--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dropdown__option--disabled:hover {
+  background-color: transparent;
+}
+
+.dropdown__option-icon {
+  display: flex;
+  align-items: center;
+}
+
+.dropdown__option-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.dropdown__divider {
+  height: 1px;
+  margin: var(--spacing-xs) 0;
+  background-color: var(--border-primary);
+}
+
+.dropdown__custom-input {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+}
+
+.dropdown__custom-field {
+  flex: 1;
+  height: 28px;
+  padding: 0 var(--spacing-sm);
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-xs);
+  font-weight: 500;
+}
+
+.dropdown__custom-field:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+.dropdown__custom-field::placeholder {
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+.dropdown__custom-submit {
+  height: 28px;
+  padding: 0 var(--spacing-sm);
+  background-color: var(--color-primary);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: white;
+  font-family: var(--font-sans);
+  font-size: var(--font-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.dropdown__custom-submit:hover {
+  opacity: 0.9;
+}
+
+.dropdown__custom-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Echolon Web - API Reference</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    html, body {
+      height: 100%;
+    }
+    #echolon {
+      height: 100vh;
+    }
+  </style>
+</head>
+<body>
+  <div id="echolon"></div>
+  
+  <!-- Configuration via script tag attributes -->
+  <script
+    id="api-reference"
+    data-url="https://petstore3.swagger.io/api/v3/openapi.json"
+    data-theme="system"
+  ></script>
+  
+  <script type="module" src="./index.tsx"></script>
+  <!-- Or use echolon via CDN -->
+  <!--<script src="https://cdn.jsdelivr.net/npm/@echolon/web/dist/echolon-web.umd.js"></script>-->
+</body>
+</html>
+

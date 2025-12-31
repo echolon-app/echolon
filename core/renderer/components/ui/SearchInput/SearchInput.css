@@ -1,0 +1,37 @@
+.search-input {
+  position: relative;
+  width: 100%;
+}
+
+.search-input__clear {
+  position: absolute;
+  right: var(--spacing-sm);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.search-input__clear:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-hover);
+}
+
+.search-input__clear svg {
+  width: 14px;
+  height: 14px;
+}
+
+.search-input .input-wrapper {
+  padding-right: 32px;
+}

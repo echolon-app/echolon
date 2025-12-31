@@ -1,0 +1,231 @@
+.editable-table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+}
+
+.editable-table__header {
+  display: flex;
+  background-color: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-primary);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.editable-table__body {
+  display: flex;
+  flex-direction: column;
+  max-height: 300px;
+  overflow-y: auto;
+  overflow-x: visible;
+  position: relative;
+}
+
+.editable-table__row {
+  display: flex;
+  border-bottom: 1px solid var(--border-primary);
+  transition: background-color var(--transition-fast);
+  position: relative;
+  overflow: visible;
+}
+
+.editable-table__row:last-child {
+  border-bottom: none;
+}
+
+.editable-table__row:hover {
+  background-color: var(--bg-hover);
+}
+
+.editable-table__row:hover .editable-table__delete {
+  opacity: 1;
+}
+
+.editable-table__row--focused {
+  background-color: var(--bg-hover);
+}
+
+.editable-table__row--disabled {
+  opacity: 0.5;
+}
+
+.editable-table__row--disabled .editable-table__cell--key,
+.editable-table__row--disabled .editable-table__cell--value {
+  text-decoration: line-through;
+}
+
+.editable-table__row--inherited {
+  background-color: var(--color-primary-alpha);
+  border-left: 2px solid var(--color-primary);
+}
+
+.editable-table__row--inherited:hover {
+  background-color: color-mix(in srgb, var(--color-primary-alpha) 70%, var(--bg-hover));
+}
+
+.editable-table__row--system {
+  background-color: color-mix(in srgb, var(--color-warning) 10%, transparent);
+  border-left: 2px solid var(--color-warning);
+}
+
+.editable-table__row--system:hover {
+  background-color: color-mix(in srgb, var(--color-warning) 15%, var(--bg-hover));
+}
+
+.editable-table__row--system .editable-table__inherited-badge {
+  color: var(--color-warning);
+}
+
+.editable-table__row--system .input {
+  color: var(--text-secondary);
+}
+
+.editable-table__inherited-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-right: var(--spacing-xs);
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.editable-table__inherited-badge svg {
+  width: 12px;
+  height: 12px;
+}
+
+.editable-table__cell {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-xs);
+  min-height: 28px;
+}
+
+.editable-table__cell--checkbox {
+  width: 40px;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.editable-table__cell--key {
+  flex: 1;
+  min-width: 120px;
+  position: relative;
+  overflow: visible;
+}
+
+.editable-table__cell--value {
+  flex: 1.5;
+  min-width: 150px;
+  position: relative;
+  overflow: visible;
+}
+
+.editable-table__cell--description {
+  flex: 1.3;
+  min-width: 120px;
+}
+
+.editable-table__cell--actions {
+  width: 40px;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.editable-table__cell .input-wrapper {
+  border: none;
+  background: transparent;
+  border-radius: 0;
+}
+
+.editable-table__cell .input-wrapper:focus-within {
+  box-shadow: none;
+  background-color: var(--bg-input);
+}
+
+.editable-table__checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-secondary);
+  border-radius: var(--radius-sm);
+  color: white;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.editable-table__checkbox svg {
+  width: 12px;
+  height: 12px;
+  opacity: 0;
+}
+
+.editable-table__checkbox--checked {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.editable-table__checkbox--checked svg {
+  opacity: 1;
+}
+
+.editable-table__checkbox:hover:not(:disabled) {
+  border-color: var(--color-primary);
+}
+
+.editable-table__checkbox:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.editable-table__delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  opacity: 0;
+  transition: all var(--transition-fast);
+}
+
+.editable-table__delete:hover {
+  background-color: var(--bg-hover);
+  color: var(--color-error);
+}
+
+.editable-table__delete svg {
+  width: 14px;
+  height: 14px;
+}
+
+.editable-table__footer {
+  display: flex;
+  padding: var(--spacing-xs);
+  border-top: 1px solid var(--border-primary);
+  background-color: var(--bg-secondary);
+}
+
+.editable-table__footer .btn {
+  font-size: var(--font-xs);
+}
+
+.editable-table__footer .btn svg {
+  width: 12px;
+  height: 12px;
+}

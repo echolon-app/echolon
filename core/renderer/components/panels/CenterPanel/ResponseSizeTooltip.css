@@ -1,0 +1,67 @@
+.response-size-tooltip {
+  width: 280px;
+  padding: var(--spacing-md);
+  font-size: var(--font-sm);
+}
+
+.response-size-tooltip__section:not(:last-child) {
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-md);
+  border-bottom: 1px solid var(--border-secondary);
+}
+
+.response-size-tooltip__header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+}
+
+.response-size-tooltip__header svg {
+  width: 16px;
+  height: 16px;
+}
+
+.response-size-tooltip__header--response svg {
+  color: #3b82f6;
+}
+
+.response-size-tooltip__header--request svg {
+  color: #f59e0b;
+}
+
+.response-size-tooltip__title {
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.response-size-tooltip__total {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.response-size-tooltip__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 24px;
+}
+
+.response-size-tooltip__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.response-size-tooltip__label {
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+}
+
+.response-size-tooltip__value {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+}

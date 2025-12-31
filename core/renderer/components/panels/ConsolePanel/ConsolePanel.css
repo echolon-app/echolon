@@ -1,0 +1,121 @@
+.console-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--console-bg);
+}
+
+.console-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-bottom: 1px solid var(--border-primary);
+  flex-shrink: 0;
+}
+
+.console-panel__title {
+  font-size: var(--font-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.console-panel__actions {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.console-panel__actions .btn {
+  height: 24px;
+  padding: 0 var(--spacing-sm);
+  font-size: var(--font-xs);
+}
+
+.console-panel__actions .btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.console-panel__content {
+  flex: 1;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+}
+
+.console-panel__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-tertiary);
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+}
+
+.console-panel__entry {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.console-panel__entry:hover {
+  background-color: var(--bg-hover);
+}
+
+.console-panel__entry--info .console-panel__entry-icon {
+  color: var(--color-info);
+}
+
+.console-panel__entry--warn .console-panel__entry-icon {
+  color: var(--color-warning);
+}
+
+.console-panel__entry--error {
+  background-color: rgba(239, 68, 68, 0.05);
+}
+
+.console-panel__entry--error .console-panel__entry-icon {
+  color: var(--color-error);
+}
+
+.console-panel__entry--success .console-panel__entry-icon {
+  color: var(--color-success);
+}
+
+.console-panel__entry-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.console-panel__entry-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.console-panel__entry-time {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-size: var(--font-xs);
+}
+
+.console-panel__entry-message {
+  flex: 1;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.console-panel__entry-details {
+  width: 100%;
+  margin-top: var(--spacing-xs);
+  padding: var(--spacing-sm);
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  white-space: pre-wrap;
+  word-break: break-all;
+}

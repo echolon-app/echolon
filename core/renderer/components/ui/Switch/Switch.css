@@ -1,0 +1,127 @@
+.switch-container {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+}
+
+.switch__track {
+  position: relative;
+  border-radius: 999px;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.switch__thumb {
+  position: absolute;
+  border-radius: 50%;
+  background-color: var(--text-tertiary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform var(--transition-fast), background-color var(--transition-fast);
+}
+
+.switch__label {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Sizes */
+.switch--sm .switch__track {
+  width: 28px;
+  height: 16px;
+}
+
+.switch--sm .switch__thumb {
+  width: 12px;
+  height: 12px;
+  top: 50%;
+  left: 2px;
+  transform: translateY(-50%);
+}
+
+.switch--md .switch__track {
+  width: 36px;
+  height: 20px;
+}
+
+.switch--md .switch__thumb {
+  width: 16px;
+  height: 16px;
+  top: 50%;
+  left: 2px;
+  transform: translateY(-50%);
+}
+
+.switch--lg .switch__track {
+  width: 44px;
+  height: 24px;
+}
+
+.switch--lg .switch__thumb {
+  width: 20px;
+  height: 20px;
+  top: 50%;
+  left: 2px;
+  transform: translateY(-50%);
+}
+
+/* Checked state */
+.switch--checked .switch__track {
+  background-color: var(--color-success);
+  border-color: var(--color-success);
+}
+
+.switch--checked .switch__thumb {
+  background-color: white;
+}
+
+.switch--checked.switch--sm .switch__thumb {
+  transform: translateY(-50%) translateX(12px);
+}
+
+.switch--checked.switch--md .switch__thumb {
+  transform: translateY(-50%) translateX(16px);
+}
+
+.switch--checked.switch--lg .switch__thumb {
+  transform: translateY(-50%) translateX(20px);
+}
+
+/* Disabled state */
+.switch--disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.switch--disabled .switch__label {
+  cursor: not-allowed;
+}
+
+/* Focus state */
+.switch:focus-visible .switch__track {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Hover state (when not disabled) */
+.switch:not(.switch--disabled):hover .switch__track {
+  border-color: var(--color-primary);
+}
+
+.switch:not(.switch--disabled):hover.switch--checked .switch__track {
+  background-color: var(--color-success-hover);
+  border-color: var(--color-success-hover);
+}

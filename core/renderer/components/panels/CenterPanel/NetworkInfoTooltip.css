@@ -1,0 +1,61 @@
+.network-info-tooltip {
+  width: 320px;
+  padding: var(--spacing-md);
+  font-size: var(--font-sm);
+}
+
+.network-info-tooltip__section:not(:last-child) {
+  margin-bottom: var(--spacing-sm);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--border-secondary);
+}
+
+.network-info-tooltip__header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+}
+
+.network-info-tooltip__header svg {
+  width: 16px;
+  height: 16px;
+  color: var(--text-secondary);
+}
+
+.network-info-tooltip__title {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.network-info-tooltip__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 24px;
+}
+
+.network-info-tooltip__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacing-md);
+}
+
+.network-info-tooltip__label {
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.network-info-tooltip__value {
+  color: var(--text-primary);
+  font-size: var(--font-xs);
+  text-align: right;
+  word-break: break-all;
+}
+
+.network-info-tooltip__value--wrap {
+  max-width: 160px;
+}

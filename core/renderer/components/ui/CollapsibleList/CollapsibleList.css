@@ -1,0 +1,165 @@
+.collapsible-list__header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm);
+  cursor: pointer;
+  user-select: none;
+  border-radius: var(--radius-md);
+  transition: background-color var(--transition-fast);
+}
+
+.collapsible-list__header:hover {
+  background-color: var(--bg-hover);
+}
+
+.collapsible-list__chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--text-tertiary);
+  transition: transform var(--transition-fast);
+}
+
+.collapsible-list__chevron svg {
+  width: 14px;
+  height: 14px;
+}
+
+.collapsible-list:not(.collapsible-list--collapsed) > .collapsible-list__header > .collapsible-list__chevron {
+  transform: rotate(90deg);
+}
+
+.collapsible-list__icon {
+  display: flex;
+  align-items: center;
+  color: var(--text-tertiary);
+}
+
+.collapsible-list__icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.collapsible-list__title {
+  flex: 1;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collapsible-list__title--clickable {
+  padding: 2px 6px;
+  margin: -2px -6px;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.collapsible-list__title-input {
+  flex: 1;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  outline: none;
+  min-width: 0;
+}
+
+.collapsible-list__title-input:focus {
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+.collapsible-list__subtitle {
+  font-size: var(--font-xs);
+  font-weight: 500;
+  color: var(--text-tertiary);
+  background-color: var(--bg-secondary);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.collapsible-list__badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--color-primary);
+  opacity: 0.8;
+}
+
+.collapsible-list__badge svg {
+  width: 14px;
+  height: 14px;
+}
+
+.collapsible-list__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.collapsible-list__header:hover .collapsible-list__actions {
+  opacity: 1;
+}
+
+.collapsible-list__content {
+  padding-left: var(--spacing-lg);
+}
+
+.collapsible-list-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: background-color var(--transition-fast);
+}
+
+.collapsible-list-item:hover {
+  background-color: var(--bg-hover);
+}
+
+/*.collapsible-list-item--active {
+  background-color: var(--bg-active);
+}*/
+
+.collapsible-list-item--active:hover {
+  background-color: var(--bg-active);
+}
+
+.collapsible-list-item__icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.collapsible-list-item__icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.collapsible-list-item__content {
+  flex: 1;
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collapsible-list-item--active .collapsible-list-item__content {
+  color: var(--text-primary);
+  font-weight: 500;
+}

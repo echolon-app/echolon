@@ -1,0 +1,2 @@
+export { ShortcutsModal } from './ShortcutsModal';
+

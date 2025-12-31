@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" data-color-scheme="terminal">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src *;">
+    <title>Echolon</title>
+    
+    <!-- Record startup time as early as possible -->
+    <script>
+      window.__APP_START_TIME__ = performance.now();
+    </script>
+    
+    <!-- Sync theme from localStorage before any paint -->
+    <script>
+      (function() {
+        try {
+          // Read theme preference
+          var storedTheme = localStorage.getItem('echolonTheme');
+          var theme = storedTheme ? JSON.parse(storedTheme) : 'dark';
+          
+          // Handle system theme
+          if (theme === 'system') {
+            theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          }
+          
+          // Read color scheme
+          var storedColorScheme = localStorage.getItem('echolonColorScheme');
+          var colorScheme = storedColorScheme ? JSON.parse(storedColorScheme) : 'terminal';
+          
+          // Apply immediately to prevent flash
+          document.documentElement.setAttribute('data-theme', theme);
+          document.documentElement.setAttribute('data-color-scheme', colorScheme);
+        } catch (e) {
+          // Fallback to defaults already set on html element
+          console.warn('Failed to load theme from localStorage:', e);
+        }
+      })();
+    </script>
+    
+    <!-- Critical CSS - inline to prevent FOUC -->
+    <style>
+      /* ===== CSS Variables ===== */
+      :root {
+        /* Brand colors (defaults) */
+        --color-primary: #6366f1;
+        --color-primary-hover: #4f46e5;
+        --color-primary-light: #818cf8;
+        
+        /* Spacing */
+        --spacing-xs: 4px;
+        --spacing-sm: 8px;
+        --spacing-md: 12px;
+        --spacing-lg: 16px;
+        --spacing-xl: 24px;
+        
+        /* Border radius */
+        --radius-sm: 4px;
+        --radius-md: 6px;
+        --radius-lg: 8px;
+        
+        /* Font families */
+        --font-sans: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+        
+        /* Transitions */
+        --transition-fast: 100ms ease;
+        --transition-normal: 200ms ease;
+      }
+      
+      /* ===== Color Schemes ===== */
+      [data-color-scheme='terminal'] {
+        --color-primary: #22c55e;
+        --color-primary-hover: #16a34a;
+        --color-primary-light: #4ade80;
+      }
+      
+      [data-color-scheme='midnight'] {
+        --color-primary: #6366f1;
+        --color-primary-hover: #4f46e5;
+        --color-primary-light: #818cf8;
+      }
+      
+      [data-color-scheme='ocean'] {
+        --color-primary: #0ea5e9;
+        --color-primary-hover: #0284c7;
+        --color-primary-light: #38bdf8;
+      }
+      
+      [data-color-scheme='sunset'] {
+        --color-primary: #f97316;
+        --color-primary-hover: #ea580c;
+        --color-primary-light: #fb923c;
+      }
+      
+      [data-color-scheme='rose'] {
+        --color-primary: #ec4899;
+        --color-primary-hover: #db2777;
+        --color-primary-light: #f472b6;
+      }
+      
+      [data-color-scheme='emerald'] {
+        --color-primary: #14b8a6;
+        --color-primary-hover: #0d9488;
+        --color-primary-light: #2dd4bf;
+      }
+      
+      /* ===== Dark Theme ===== */
+      [data-theme='dark'] {
+        --bg-primary: #0f0f1a;
+        --bg-secondary: #1a1a2e;
+        --bg-tertiary: #232342;
+        --bg-elevated: #2a2a4a;
+        --text-primary: #f8f8fc;
+        --text-secondary: #a8a8c0;
+        --text-tertiary: #6b6b8a;
+        --border-primary: #2d2d50;
+      }
+      
+      /* Terminal color scheme - deeper blacks */
+      [data-theme='dark'][data-color-scheme='terminal'] {
+        --bg-primary: #0a0a0a;
+        --bg-secondary: #111111;
+        --bg-tertiary: #1a1a1a;
+        --bg-elevated: #222222;
+        --border-primary: #222222;
+      }
+      
+      /* ===== Light Theme ===== */
+      [data-theme='light'] {
+        --bg-primary: #ffffff;
+        --bg-secondary: #f8f9fc;
+        --bg-tertiary: #f0f2f7;
+        --bg-elevated: #ffffff;
+        --text-primary: #1a1a2e;
+        --text-secondary: #4a4a68;
+        --text-tertiary: #6b6b8a;
+        --border-primary: #e2e4ea;
+      }
+      
+      /* ===== Base Styles ===== */
+      *, *::before, *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      
+      html, body {
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+      }
+      
+      body {
+        font-family: var(--font-sans);
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--text-primary);
+        background-color: var(--bg-primary);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      
+      #root {
+        height: 100%;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+      
+      /* ===== Loading Screen ===== */
+      #app-loader {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: var(--bg-primary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        transition: opacity 0.2s ease, visibility 0.2s ease;
+      }
+      
+      #app-loader.hidden {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+      
+      .loader-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 24px;
+      }
+      
+      .loader-logo {
+        width: 64px;
+        height: 64px;
+        animation: pulse-logo 2s ease-in-out infinite;
+      }
+      
+      .loader-spinner {
+        width: 32px;
+        height: 32px;
+        border: 3px solid var(--border-primary);
+        border-top-color: var(--color-primary);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      
+      .loader-text {
+        color: var(--text-secondary);
+        font-size: 13px;
+        letter-spacing: 0.5px;
+      }
+      
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      
+      @keyframes pulse-logo {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.7; transform: scale(0.95); }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Loading screen - hidden once React is ready -->
+    <div id="app-loader">
+      <div class="loader-content">
+        <svg class="loader-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Echolon logo - terminal bracket style -->
+          <rect x="10" y="10" width="80" height="80" rx="12" fill="var(--bg-secondary)" stroke="var(--border-primary)" stroke-width="2"/>
+          <path d="M30 35 L20 50 L30 65" stroke="var(--color-primary)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          <path d="M70 35 L80 50 L70 65" stroke="var(--color-primary)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          <circle cx="40" cy="50" r="4" fill="var(--color-primary)"/>
+          <circle cx="50" cy="50" r="4" fill="var(--color-primary)" opacity="0.7"/>
+          <circle cx="60" cy="50" r="4" fill="var(--color-primary)" opacity="0.4"/>
+        </svg>
+        <div class="loader-spinner"></div>
+        <div class="loader-text">Loading Echolon...</div>
+      </div>
+    </div>
+    
+    <div id="root"></div>
+    <script type="module" src="/renderer/index.tsx"></script>
+  </body>
+</html>

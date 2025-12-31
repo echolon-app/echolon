@@ -1,0 +1,80 @@
+.code-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--bg-primary);
+}
+
+.code-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: 1px solid var(--border-primary);
+  background-color: var(--bg-secondary);
+}
+
+.code-panel__header h3 {
+  margin: 0;
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.code-panel__header .btn {
+  padding: var(--spacing-xs);
+}
+
+.code-panel__header .btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.code-panel__format-selector {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.code-panel__format-selector .dropdown {
+  min-width: 200px;
+}
+
+.code-panel__copy-btn {
+  padding: var(--spacing-xs) !important;
+}
+
+.code-panel__copy-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.code-panel__copy-btn.copied {
+  color: var(--color-success);
+}
+
+.code-panel__editor {
+  flex: 1;
+  overflow: hidden;
+}
+
+.code-panel__editor .ace_editor {
+  background-color: var(--bg-primary) !important;
+}
+
+.code-panel__editor .ace_gutter {
+  background-color: var(--bg-secondary) !important;
+}
+
+
+.code-panel__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  color: var(--text-tertiary);
+  font-size: var(--font-sm);
+}

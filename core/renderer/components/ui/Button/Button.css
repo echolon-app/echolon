@@ -1,0 +1,128 @@
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Sizes */
+.btn--sm {
+  height: 28px;
+  padding: 0 var(--spacing-sm);
+  font-size: var(--font-xs);
+}
+
+.btn--md {
+  height: 32px;
+  padding: 0 var(--spacing-md);
+  font-size: var(--font-sm);
+}
+
+.btn--lg {
+  height: 40px;
+  padding: 0 var(--spacing-lg);
+  font-size: var(--font-md);
+}
+
+/* Variants */
+.btn--primary {
+  background-color: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+}
+
+.btn--primary:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
+}
+
+.btn--primary:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.btn--secondary {
+  background-color: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
+  border: 1px solid var(--border-primary);
+}
+
+.btn--secondary:hover:not(:disabled) {
+  background-color: var(--bg-hover);
+  border-color: var(--border-hover);
+}
+
+.btn--ghost {
+  background-color: var(--btn-ghost-bg);
+  color: var(--btn-ghost-text);
+}
+
+.btn--ghost:hover:not(:disabled) {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.btn--danger {
+  background-color: var(--color-error);
+  color: white;
+}
+
+.btn--danger:hover:not(:disabled) {
+  background-color: #dc2626;
+}
+
+/* Loading state */
+.btn--loading {
+  position: relative;
+  color: transparent;
+}
+
+.btn--loading .btn__spinner {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: currentColor;
+}
+
+.btn--loading .btn__spinner svg {
+  width: 16px;
+  height: 16px;
+  animation: spin 0.8s linear infinite;
+}
+
+/* Icon */
+.btn__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn__icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.btn__text {
+  display: flex;
+  align-items: center;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

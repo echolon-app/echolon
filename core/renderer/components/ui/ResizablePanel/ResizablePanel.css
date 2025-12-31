@@ -1,0 +1,118 @@
+.resizable-panel {
+  display: flex;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.resizable-panel--horizontal {
+  flex-direction: row;
+  height: 100%;
+}
+
+.resizable-panel--vertical {
+  flex-direction: column;
+  width: 100%;
+}
+
+.resizable-panel--resizing {
+  user-select: none;
+}
+
+.resizable-panel__content {
+  flex: 1;
+  overflow: hidden;
+}
+
+.resizable-panel__handle {
+  flex-shrink: 0;
+  background-color: transparent;
+  transition: background-color var(--transition-fast);
+}
+
+.resizable-panel__handle:hover {
+  background-color: var(--color-primary);
+}
+
+.resizable-panel--horizontal .resizable-panel__handle {
+  width: 4px;
+  cursor: col-resize;
+}
+
+.resizable-panel--vertical .resizable-panel__handle {
+  height: 4px;
+  cursor: row-resize;
+}
+
+.resizable-panel--handle-start.resizable-panel--horizontal .resizable-panel__handle {
+  margin-right: -2px;
+}
+
+.resizable-panel--handle-start.resizable-panel--vertical .resizable-panel__handle {
+  margin-bottom: -2px;
+}
+
+.resizable-panel--handle-end.resizable-panel--horizontal .resizable-panel__handle {
+  margin-left: -2px;
+}
+
+.resizable-panel--handle-end.resizable-panel--vertical .resizable-panel__handle {
+  margin-top: -2px;
+}
+
+.resizable-split {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+.resizable-split--horizontal {
+  flex-direction: row;
+}
+
+.resizable-split--vertical {
+  flex-direction: column;
+}
+
+.resizable-split--resizing {
+  user-select: none;
+}
+
+.resizable-split--resizing .resizable-split__pane {
+  pointer-events: none;
+}
+
+.resizable-split__pane {
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.resizable-split__handle {
+  flex-shrink: 0;
+  background-color: var(--border-primary);
+  transition: background-color var(--transition-fast);
+  z-index: 1;
+}
+
+.resizable-split__handle:hover {
+  background-color: var(--color-primary);
+}
+
+.resizable-split--horizontal .resizable-split__handle {
+  width: 1px;
+  cursor: col-resize;
+}
+
+.resizable-split--horizontal .resizable-split__handle:hover {
+  width: 3px;
+  margin: 0 -1px;
+}
+
+.resizable-split--vertical .resizable-split__handle {
+  height: 1px;
+  cursor: row-resize;
+}
+
+.resizable-split--vertical .resizable-split__handle:hover {
+  height: 3px;
+  margin: -1px 0;
+}

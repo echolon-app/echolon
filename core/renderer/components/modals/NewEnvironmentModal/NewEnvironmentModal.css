@@ -1,0 +1,31 @@
+.new-environment-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.new-environment-modal__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.new-environment-modal__field label {
+  font-size: var(--font-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.new-environment-modal__hint {
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.new-environment-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+}

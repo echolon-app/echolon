@@ -1,0 +1,315 @@
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+  z-index: 1;
+}
+
+.input-wrapper:hover {
+  border-color: var(--border-hover);
+}
+
+.input-wrapper:focus-within {
+  border-color: var(--color-primary);
+}
+
+.input-wrapper--error {
+  border-color: var(--color-error);
+}
+
+.input-wrapper--error:focus-within {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+
+/* Sizes */
+.input-wrapper--sm {
+  height: 28px;
+}
+
+.input-wrapper--sm .input {
+  font-size: var(--font-xs);
+  padding: 0 var(--spacing-sm);
+}
+
+.input-wrapper--sm .input--editable {
+  line-height: 26px;
+}
+
+.input-wrapper--sm .input__icon {
+  padding: 0 var(--spacing-xs);
+}
+
+.input-wrapper--md {
+  height: 32px;
+}
+
+.input-wrapper--md .input {
+  font-size: var(--font-sm);
+  padding: 0 var(--spacing-md);
+}
+
+.input-wrapper--md .input--editable {
+  line-height: 30px;
+}
+
+.input-wrapper--md .input__icon {
+  padding: 0 var(--spacing-sm);
+}
+
+.input-wrapper--lg {
+  height: 40px;
+}
+
+.input-wrapper--lg .input {
+  font-size: var(--font-md);
+  padding: 0 var(--spacing-lg);
+}
+
+.input-wrapper--lg .input--editable {
+  line-height: 38px;
+}
+
+.input-wrapper--lg .input__icon {
+  padding: 0 var(--spacing-md);
+}
+
+/* Icon positioning */
+.input-wrapper--icon-left .input {
+  padding-left: 0;
+}
+
+.input-wrapper--icon-right .input {
+  padding-right: 0;
+}
+
+.input {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  outline: none;
+}
+
+.input::placeholder {
+  color: var(--input-placeholder);
+}
+
+.input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Editable div styles (contenteditable) */
+.input--editable {
+  display: block;
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  cursor: text;
+  line-height: 1;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.input--editable::-webkit-scrollbar {
+  display: none;
+}
+
+/* Placeholder via data attribute */
+.input--editable:empty::before {
+  content: attr(data-placeholder);
+  color: var(--input-placeholder);
+  pointer-events: none;
+}
+
+.input--editable:focus {
+  outline: none;
+}
+
+.input--editable[contenteditable="false"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.input__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.input__icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.input__icon[role='button'] {
+  cursor: pointer;
+}
+
+.input__icon[role='button']:hover {
+  color: var(--text-primary);
+}
+
+/* Variable highlighting (inside contenteditable) */
+.input__variable {
+  background-color: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+  border-radius: 3px;
+  padding: 1px 2px;
+  margin: 0 1px;
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), text-decoration var(--transition-fast);
+}
+
+.input__variable:hover {
+  background-color: rgba(34, 197, 94, 0.35);
+  text-decoration: underline;
+}
+
+.input__variable--invalid {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.input__variable--invalid:hover {
+  background-color: rgba(239, 68, 68, 0.35);
+}
+
+.input__variable-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  font-size: var(--font-xs);
+  color: var(--text-primary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 10000;
+  max-width: 300px;
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+.input__variable-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--border-primary);
+}
+
+.input__variable-tooltip-value {
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  color: var(--text-primary);
+}
+
+.input__variable-tooltip-source {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  padding-top: 2px;
+  border-top: 1px solid var(--border-secondary);
+  margin-top: 2px;
+}
+
+.input__suggestions {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  max-height: 280px;
+  overflow-y: auto;
+  z-index: 9999;
+}
+
+.input__suggestions--variables {
+  min-width: 250px;
+}
+
+.input__suggestions-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 8px 12px;
+  font-size: var(--font-xs);
+  font-weight: 600;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.input__suggestions-icon {
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  color: var(--color-primary);
+}
+
+.input__suggestion {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: 8px 12px;
+  font-size: var(--font-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.input__suggestion:hover,
+.input__suggestion--selected {
+  background-color: var(--bg-hover);
+}
+
+.input__suggestion:first-child:not(.input__suggestions-header + .input__suggestion) {
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.input__suggestion:last-child {
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
+.input__suggestion:only-child {
+  border-radius: var(--radius-md);
+}
+
+.input__suggestion-var-icon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  color: var(--color-primary);
+  background-color: rgba(99, 102, 241, 0.15);
+  border-radius: var(--radius-sm);
+}
+
+.input__suggestion-value {
+  margin-left: auto;
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

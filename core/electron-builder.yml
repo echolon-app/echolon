@@ -1,0 +1,117 @@
+appId: com.echolon.app
+productName: Echolon
+copyright: Copyright © 2024 Echolon Team
+
+directories:
+  output: release
+  buildResources: resources
+
+files:
+  - dist/**/*
+  - package.json
+
+extraMetadata:
+  main: dist/main/index.js
+
+# macOS Configuration
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+  icon: resources/icon.png
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # Code signing - set these environment variables:
+  # CSC_LINK: path to your .p12 certificate
+  # CSC_KEY_PASSWORD: certificate password
+  # For notarization, also set:
+  # APPLE_ID: your Apple ID email
+  # APPLE_APP_SPECIFIC_PASSWORD: app-specific password
+  # APPLE_TEAM_ID: your team ID
+  notarize: false
+
+dmg:
+  sign: false
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+# Windows Configuration
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - ia32
+    - target: portable
+      arch:
+        - x64
+  icon: resources/icon.png
+  # Code signing - set these environment variables:
+  # CSC_LINK: path to your .pfx certificate
+  # CSC_KEY_PASSWORD: certificate password
+  # For EV certificates, use:
+  # WIN_CSC_LINK and WIN_CSC_KEY_PASSWORD
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  installerIcon: resources/icon.png
+  uninstallerIcon: resources/icon.png
+  installerHeaderIcon: resources/icon.png
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Echolon
+
+# Linux Configuration
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+    - target: rpm
+      arch:
+        - x64
+  icon: resources/icon.png
+  category: Development
+  maintainer: Echolon Team
+  vendor: Echolon
+  synopsis: A powerful, local-first API client
+  description: Echolon is a Postman alternative that works completely offline with local storage.
+
+# Auto-updater configuration
+publish:
+  provider: generic
+  url: https://releases.echolon.app
+  # For GitHub releases, use:
+  # provider: github
+  # owner: your-username
+  # repo: echolon
+
+# Compression
+compression: maximum
+
+# Remove unnecessary locales to reduce app size
+electronLanguages:
+  - en
+
+afterSign: scripts/notarize.js
+

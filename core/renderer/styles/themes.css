@@ -1,0 +1,152 @@
+/* Dark theme (default) */
+[data-theme='dark'] {
+  /* Background colors */
+  --bg-primary: #0f0f1a;
+  --bg-secondary: #1a1a2e;
+  --bg-tertiary: #232342;
+  --bg-elevated: #2a2a4a;
+  --bg-hover: #323256;
+  --bg-active: #3d3d6b;
+  --bg-input: #1e1e38;
+
+  /* Text colors */
+  --text-primary: #f8f8fc;
+  --text-secondary: #a8a8c0;
+  --text-tertiary: #6b6b8a;
+  --text-muted: #4a4a68;
+  --text-inverse: #0f0f1a;
+
+  /* Border colors */
+  --border-primary: #2d2d50;
+  --border-secondary: #3a3a60;
+  --border-hover: #4a4a70;
+  --border-focus: var(--color-primary);
+
+  /* Scrollbar */
+  --scrollbar-track: var(--bg-secondary);
+  --scrollbar-thumb: var(--bg-elevated);
+  --scrollbar-thumb-hover: var(--bg-hover);
+
+  /* Code editor */
+  --editor-bg: #1a1a2e;
+  --editor-gutter: #232342;
+  --editor-line-highlight: color-mix(in srgb, var(--color-primary) 10%, transparent);
+
+  /* Primary color alpha variants (using color-mix for dynamic color support) */
+  --color-primary-alpha: color-mix(in srgb, var(--color-primary) 30%, transparent);
+  --color-primary-alpha-light: color-mix(in srgb, var(--color-primary) 15%, transparent);
+
+  /* Specific component colors */
+  --sidebar-bg: var(--bg-secondary);
+  --topbar-bg: var(--bg-primary);
+  --panel-bg: var(--bg-secondary);
+  --modal-bg: var(--bg-tertiary);
+  --dropdown-bg: var(--bg-elevated);
+  --tooltip-bg: var(--bg-elevated);
+  --console-bg: var(--bg-primary);
+
+  /* Tab colors */
+  --tab-bg: transparent;
+  --tab-bg-active: var(--bg-tertiary);
+  --tab-bg-hover: var(--bg-hover);
+  --tab-border: var(--border-primary);
+
+  /* Button variants */
+  --btn-primary-bg: var(--color-primary);
+  --btn-primary-text: white;
+  --btn-secondary-bg: var(--bg-elevated);
+  --btn-secondary-text: var(--text-primary);
+  --btn-ghost-bg: transparent;
+  --btn-ghost-text: var(--text-secondary);
+
+  /* Input */
+  --input-bg: var(--bg-input);
+  --input-border: var(--border-primary);
+  --input-placeholder: var(--text-tertiary);
+}
+
+/* Terminal color scheme dark mode - deeper blacks for authentic terminal feel */
+[data-theme='dark'][data-color-scheme='terminal'] {
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #111111;
+  --bg-tertiary: #1a1a1a;
+  --bg-elevated: #222222;
+  --bg-hover: #2a2a2a;
+  --bg-active: #333333;
+  --bg-input: #141414;
+  
+  --border-primary: #222222;
+  --border-secondary: #2a2a2a;
+  --border-hover: #333333;
+  
+  --editor-bg: #111111;
+  --editor-gutter: #1a1a1a;
+}
+
+/* Light theme */
+[data-theme='light'] {
+  /* Background colors */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fc;
+  --bg-tertiary: #f0f2f7;
+  --bg-elevated: #ffffff;
+  --bg-hover: #e8eaf0;
+  --bg-active: #dde0e8;
+  --bg-input: #ffffff;
+
+  /* Text colors */
+  --text-primary: #1a1a2e;
+  --text-secondary: #4a4a68;
+  --text-tertiary: #6b6b8a;
+  --text-muted: #a8a8c0;
+  --text-inverse: #f8f8fc;
+
+  /* Border colors */
+  --border-primary: #e2e4ea;
+  --border-secondary: #d0d3dc;
+  --border-hover: #c0c4d0;
+  --border-focus: var(--color-primary);
+
+  /* Scrollbar */
+  --scrollbar-track: var(--bg-secondary);
+  --scrollbar-thumb: #c0c4d0;
+  --scrollbar-thumb-hover: #a8adb8;
+
+  /* Code editor */
+  --editor-bg: #ffffff;
+  --editor-gutter: #f8f9fc;
+  --editor-line-highlight: color-mix(in srgb, var(--color-primary) 8%, transparent);
+
+  /* Primary color alpha variants (using color-mix for dynamic color support) */
+  --color-primary-alpha: color-mix(in srgb, var(--color-primary) 25%, transparent);
+  --color-primary-alpha-light: color-mix(in srgb, var(--color-primary) 12%, transparent);
+
+  /* Specific component colors */
+  --sidebar-bg: var(--bg-secondary);
+  --topbar-bg: var(--bg-primary);
+  --panel-bg: var(--bg-primary);
+  --modal-bg: var(--bg-primary);
+  --dropdown-bg: var(--bg-primary);
+  --tooltip-bg: #1a1a2e;
+  --console-bg: var(--bg-secondary);
+
+  /* Tab colors */
+  --tab-bg: transparent;
+  --tab-bg-active: var(--bg-primary);
+  --tab-bg-hover: var(--bg-hover);
+  --tab-border: var(--border-primary);
+
+  /* Button variants */
+  --btn-primary-bg: var(--color-primary);
+  --btn-primary-text: white;
+  --btn-secondary-bg: var(--bg-tertiary);
+  --btn-secondary-text: var(--text-primary);
+  --btn-ghost-bg: transparent;
+  --btn-ghost-text: var(--text-secondary);
+
+  /* Input */
+  --input-bg: var(--bg-input);
+  --input-border: var(--border-primary);
+  --input-placeholder: var(--text-tertiary);
+}
+

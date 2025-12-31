@@ -1,0 +1,2 @@
+export { MoveCollectionModal } from './MoveCollectionModal';
+

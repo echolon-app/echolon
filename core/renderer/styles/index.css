@@ -1,0 +1,210 @@
+@import './variables.css';
+@import './themes.css';
+
+/* Reset and base styles */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--font-md);
+  line-height: 1.5;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--radius-full);
+  
+  &:hover {
+    background: var(--scrollbar-thumb-hover);
+  }
+}
+
+/* Selection */
+::selection {
+  background-color: var(--color-primary);
+  color: white;
+}
+
+/* Focus visible - only for elements that don't have their own focus styling */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Remove focus outline for inputs that have their own focus styling */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible,
+.autocomplete__trigger:focus-visible,
+.input-wrapper input:focus-visible {
+  outline: none;
+}
+
+/* Links */
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+  
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+/* Code */
+code,
+pre {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+}
+
+/* Disable text selection on drag handles and interactive elements */
+.no-select {
+  user-select: none;
+}
+
+/* Drag handle cursor */
+.drag-handle {
+  cursor: grab;
+  
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+/* Resize cursors */
+.resize-horizontal {
+  cursor: col-resize;
+}
+
+.resize-vertical {
+  cursor: row-resize;
+}
+
+/* Hidden but accessible */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Truncate text */
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Method colors */
+.method-get { color: var(--color-get); }
+.method-post { color: var(--color-post); }
+.method-put { color: var(--color-put); }
+.method-patch { color: var(--color-patch); }
+.method-delete { color: var(--color-delete); }
+.method-head { color: var(--color-head); }
+.method-options { color: var(--color-options); }
+
+/* Status colors */
+.status-success { color: var(--color-success); }
+.status-warning { color: var(--color-warning); }
+.status-error { color: var(--color-error); }
+.status-info { color: var(--color-info); }
+
+/* Animation keyframes */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Utility classes for animations */
+.animate-fadeIn { animation: fadeIn var(--transition-normal); }
+.animate-slideIn { animation: slideIn var(--transition-normal); }
+.animate-slideUp { animation: slideUp var(--transition-normal); }
+.animate-scaleIn { animation: scaleIn var(--transition-normal); }
+.animate-spin { animation: spin 1s linear infinite; }
+.animate-pulse { animation: pulse 2s ease-in-out infinite; }
+

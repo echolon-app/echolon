@@ -1,0 +1,47 @@
+{
+  "name": "@echolon/web",
+  "version": "1.0.0",
+  "description": "Embeddable API reference and testing tool - web version of Echolon",
+  "main": "dist/echolon-web.umd.js",
+  "module": "dist/echolon-web.es.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [
+    "api",
+    "openapi",
+    "swagger",
+    "documentation",
+    "api-reference",
+    "rest",
+    "testing"
+  ],
+  "author": "Echolon Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/echolon/echolon"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.45",
+    "@types/react-dom": "^18.2.18",
+    "@types/react-window": "^1.8.8",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.10"
+  },
+  "dependencies": {
+    "ace-builds": "^1.32.3",
+    "react": "^18.2.0",
+    "react-ace": "^10.1.0",
+    "react-dom": "^18.2.0",
+    "react-window": "^2.2.3",
+    "uuid": "^9.0.1"
+  }
+}
