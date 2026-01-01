@@ -1,0 +1,54 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+
+const headings = [
+  { depth: 2, slug: 'overview', text: 'Overview' },
+  { depth: 2, slug: 'features', text: 'Features' },
+  { depth: 2, slug: 'limitations', text: 'Limitations' },
+];
+---
+
+<DocsLayout title="Web App" headings={headings}>
+  <div class="prose">
+    <h1>Web App</h1>
+    <p class="lead">
+      Use Echolon directly in your browser — no installation required.
+    </p>
+    
+    <h2 id="overview">Overview</h2>
+    <p>
+      The Echolon web app lets you test APIs from any device with a modern browser. Access it at <a href="https://app.echolon.app">app.echolon.app</a>.
+    </p>
+    
+    <h2 id="features">Features</h2>
+    <ul class="list">
+      <li>No installation required</li>
+      <li>Works on any modern browser</li>
+      <li>Local storage for your data</li>
+      <li>Same UI as the desktop app</li>
+    </ul>
+    
+    <h2 id="limitations">Limitations</h2>
+    <p>
+      Due to browser security restrictions, some features have limitations:
+    </p>
+    <ul class="list">
+      <li>CORS restrictions may require a proxy for some APIs</li>
+      <li>No direct file system access</li>
+      <li>Limited offline support</li>
+    </ul>
+  </div>
+</DocsLayout>
+
+<style>
+  .prose { color: var(--color-text-secondary); line-height: var(--line-height-relaxed); }
+  .prose h1 { font-size: var(--font-size-4xl); color: var(--color-text); margin-bottom: var(--spacing-4); }
+  .prose h2 { font-size: var(--font-size-2xl); color: var(--color-text); margin-top: var(--spacing-10); margin-bottom: var(--spacing-4); padding-top: var(--spacing-4); border-top: 1px solid var(--color-border-subtle); }
+  .prose h2:first-of-type { border-top: none; padding-top: 0; }
+  .prose p { margin-bottom: var(--spacing-4); }
+  .prose .lead { font-size: var(--font-size-lg); margin-bottom: var(--spacing-6); }
+  .prose .list { margin: var(--spacing-4) 0; padding-left: var(--spacing-6); }
+  .prose .list li { margin-bottom: var(--spacing-2); list-style: disc; }
+  .prose a { color: var(--color-primary); text-decoration: underline; text-underline-offset: 2px; }
+</style>
+

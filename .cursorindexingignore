@@ -1,0 +1,6 @@
+#Blocks only indexing/search, not AI access
+**/node_modules/
+**/dist/
+**/build/
+app/server/tmp/
+db-backups/

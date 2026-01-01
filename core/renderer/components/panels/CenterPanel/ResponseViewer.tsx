@@ -6,11 +6,12 @@ import {
   GlobeIcon, CopyIcon, CheckIcon, DownloadIcon, FilterIcon, SearchIcon,
   HelpIcon, CloseIcon, HorizontalLayoutIcon, VerticalLayoutIcon, ErrorIcon 
 } from '@/components/ui/icons';
-import { RequestExecution } from '@/types';
+import { RequestExecution, ScriptOutput } from '@/types';
 import { ContextMenu, useContextMenu, Tooltip, Dropdown } from '@/components/ui';
 import { ResponseTimeTooltip } from './ResponseTimeTooltip';
 import { ResponseSizeTooltip } from './ResponseSizeTooltip';
 import { NetworkInfoTooltip } from './NetworkInfoTooltip';
+import { formatLogTime } from '@/utils';
 import './ResponseViewer.css';
 
 // Simple JSONPath implementation
@@ -96,7 +97,7 @@ const applyJsonPath = (obj: any, path: string): any => {
   return result;
 };
 
-type ResponseTab = 'body' | 'cookies' | 'headers';
+type ResponseTab = 'body' | 'cookies' | 'headers' | 'scripts';
 type BodyViewMode = 'response' | 'example' | 'schema';
 type ContentDisplayMode = 'auto' | 'json' | 'html' | 'xml' | 'javascript' | 'raw' | 'hex' | 'base64';
 
@@ -146,6 +147,46 @@ interface ResponseViewerProps {
   onExpandToggle?: () => void;
   isExpanded?: boolean;
 }
+
+// Script output section component
+const ScriptOutputSection: React.FC<{ title: string; output: ScriptOutput }> = ({ title, output }) => {
+
+  return (
+    <div className={`response-viewer__script-section ${output.error ? 'response-viewer__script-section--error' : ''}`}>
+      <div className="response-viewer__script-header">
+        <span className="response-viewer__script-title">{title}</span>
+        <span className="response-viewer__script-duration">
+          {output.duration}ms
+        </span>
+        {output.error && (
+          <span className="response-viewer__script-error-badge">
+            <ErrorIcon /> Error
+          </span>
+        )}
+      </div>
+      <div className="response-viewer__script-logs">
+        {output.logs.length === 0 && !output.error && (
+          <div className="response-viewer__script-log response-viewer__script-log--info">
+            <span className="response-viewer__script-log-type">info</span>
+            <span className="response-viewer__script-log-message">Script executed successfully (no output)</span>
+          </div>
+        )}
+        {output.logs.map((log, index) => (
+          <div 
+            key={index} 
+            className={`response-viewer__script-log response-viewer__script-log--${log.type}`}
+          >
+            <span className="response-viewer__script-log-time">{formatLogTime(log.timestamp)}</span>
+            <span className="response-viewer__script-log-type">{log.type}</span>
+            <span className="response-viewer__script-log-message">
+              {log.args.join(' ')}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 
 export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoading, height = 300, specResponseInfo, onClose, onExpandToggle, isExpanded }) => {
@@ -637,6 +678,19 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
           </button>
             </>
           )}
+          {execution?.scriptsOutput && (execution.scriptsOutput.pre || execution.scriptsOutput.post) && (
+            <button
+              className={`response-viewer__tab ${activeTab === 'scripts' ? 'active' : ''} ${
+                (execution.scriptsOutput.pre?.error || execution.scriptsOutput.post?.error) ? 'response-viewer__tab--error' : ''
+              }`}
+              onClick={() => setActiveTab('scripts')}
+            >
+              Scripts
+              {(execution.scriptsOutput.pre?.error || execution.scriptsOutput.post?.error) && (
+                <span className="response-viewer__tab-badge response-viewer__tab-badge--error">!</span>
+              )}
+            </button>
+          )}
         </div>
 
         <div className="response-viewer__meta">
@@ -896,6 +950,26 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {activeTab === 'scripts' && execution?.scriptsOutput && (
+          <div className="response-viewer__scripts">
+            {execution.scriptsOutput.pre && (
+              <ScriptOutputSection 
+                title="Pre-request Script" 
+                output={execution.scriptsOutput.pre} 
+              />
+            )}
+            {execution.scriptsOutput.post && (
+              <ScriptOutputSection 
+                title="Post-request Script" 
+                output={execution.scriptsOutput.post} 
+              />
+            )}
+            {!execution.scriptsOutput.pre && !execution.scriptsOutput.post && (
+              <p className="response-viewer__empty-message">No script output</p>
+            )}
           </div>
         )}
       </div>

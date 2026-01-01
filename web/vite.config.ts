@@ -2,6 +2,8 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
+const isLibBuild = process.env.BUILD_MODE === 'lib';
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -13,28 +15,32 @@ export default defineConfig({
   define: {
     'process.env.WEB_MODE': JSON.stringify('true'),
   },
-  build: {
-    outDir: 'dist',
-    lib: {
-      entry: path.resolve(__dirname, 'index.tsx'),
-      name: 'EcholonWeb',
-      fileName: (format) => `echolon-web.${format}.js`,
-      formats: ['umd', 'es'],
-    },
-    rollupOptions: {
-      // Don't externalize React - bundle it for standalone use
-      output: {
-        // Global variable names for UMD build
-        globals: {},
-        // Ensure CSS is extracted
-        assetFileNames: (assetInfo) => {
-          if (assetInfo.name === 'style.css') return 'echolon-web.css';
-          return assetInfo.name || 'asset';
+  build: isLibBuild
+    ? {
+        // Library build for npm distribution
+        outDir: 'dist',
+        lib: {
+          entry: path.resolve(__dirname, 'index.tsx'),
+          name: 'EcholonWeb',
+          fileName: (format) => `echolon-web.${format}.js`,
+          formats: ['umd', 'es'],
         },
+        rollupOptions: {
+          output: {
+            globals: {},
+            assetFileNames: (assetInfo) => {
+              if (assetInfo.name === 'style.css') return 'echolon-web.css';
+              return assetInfo.name || 'asset';
+            },
+          },
+        },
+        cssCodeSplit: false,
+        sourcemap: true,
+      }
+    : {
+        // App build for web deployment
+        outDir: 'dist',
+        sourcemap: true,
       },
-    },
-    cssCodeSplit: false,
-    sourcemap: true,
-  },
 });
 

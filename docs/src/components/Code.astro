@@ -1,0 +1,94 @@
+---
+import { Code as AstroCode } from 'astro:components';
+
+interface Props {
+  code: string;
+  lang?: string;
+}
+
+const { code, lang = 'javascript' } = Astro.props;
+---
+
+<div class="code-wrapper">
+  <button class="copy-btn" data-code={code} aria-label="Copy code">
+    <svg class="copy-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+    </svg>
+    <svg class="check-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
+      <polyline points="20 6 9 17 4 12"></polyline>
+    </svg>
+  </button>
+  <AstroCode code={code} lang={lang} theme="tokyo-night" />
+</div>
+
+<style>
+  .code-wrapper {
+    position: relative;
+    margin: 1rem 0;
+  }
+  
+  .code-wrapper :global(pre) {
+    margin: 0;
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    overflow-x: auto;
+  }
+  
+  .code-wrapper :global(code) {
+    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  
+  .copy-btn {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    color: #666;
+    background: rgba(36, 40, 59, 0.8);
+    border: 1px solid #3b4261;
+    border-radius: 6px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s, color 0.2s, border-color 0.2s;
+    z-index: 10;
+  }
+  
+  .code-wrapper:hover .copy-btn {
+    opacity: 1;
+  }
+  
+  .copy-btn:hover {
+    color: #c0caf5;
+    border-color: #565f89;
+  }
+</style>
+
+<script>
+  document.querySelectorAll('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const code = btn.getAttribute('data-code');
+      if (code) {
+        await navigator.clipboard.writeText(code);
+        const copyIcon = btn.querySelector('.copy-icon') as HTMLElement;
+        const checkIcon = btn.querySelector('.check-icon') as HTMLElement;
+        if (copyIcon && checkIcon) {
+          copyIcon.style.display = 'none';
+          checkIcon.style.display = 'block';
+          setTimeout(() => {
+            copyIcon.style.display = 'block';
+            checkIcon.style.display = 'none';
+          }, 2000);
+        }
+      }
+    });
+  });
+</script>
+

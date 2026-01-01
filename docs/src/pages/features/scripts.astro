@@ -1,0 +1,584 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+import Code from '../../components/Code.astro';
+
+const headings = [
+  { depth: 2, slug: 'overview', text: 'Overview' },
+  { depth: 2, slug: 'pre-request-scripts', text: 'Pre-request Scripts' },
+  { depth: 2, slug: 'post-request-scripts', text: 'Post-request Scripts' },
+  { depth: 2, slug: 'scripting-api', text: 'Scripting API' },
+  { depth: 3, slug: 'echo-object', text: 'echo Object' },
+  { depth: 3, slug: 'req-object', text: 'req Object' },
+  { depth: 3, slug: 'res-object', text: 'res Object' },
+  { depth: 2, slug: 'sample-scripts', text: 'Sample Scripts' },
+  { depth: 2, slug: 'viewing-script-output', text: 'Viewing Script Output' },
+];
+
+// Code examples
+const codeExamples = {
+  timestampHeader: `// Add a timestamp to every request
+req.setHeader('X-Request-Time', Date.now().toString());
+console.log('Request will be sent at:', new Date().toISOString());`,
+
+  extractToken: `// Parse response and store auth token
+const data = JSON.parse(res.body);
+if (data.token) {
+  echo.setEnvVar('auth_token', data.token);
+  console.log('Token saved to environment');
+}
+console.log('Response status:', res.status);`,
+
+  echoExample: `// Get base URL from environment
+const baseUrl = echo.getEnvVar('baseUrl');
+console.log('Using base URL:', baseUrl);
+
+// Set a variable for later use
+echo.setEnvVar('lastRequestTime', Date.now().toString());`,
+
+  reqExample: `// Log current request details
+console.log('Making', req.method, 'request to', req.url);
+
+// Add authentication header
+const token = echo.getEnvVar('auth_token');
+if (token) {
+  req.setHeader('Authorization', 'Bearer ' + token);
+}
+
+// Modify the request body
+const body = JSON.parse(req.getBody() || '{}');
+body.timestamp = Date.now();
+req.setBody(JSON.stringify(body));`,
+
+  resExample: `// Check response status
+if (res.status !== 200) {
+  console.error('Request failed with status:', res.status, res.statusText);
+}
+
+// Parse JSON response
+try {
+  const data = JSON.parse(res.body);
+  console.log('Response data:', data);
+  
+  // Store user ID for next request
+  if (data.id) {
+    echo.setEnvVar('userId', data.id.toString());
+  }
+} catch (e) {
+  console.error('Failed to parse response as JSON');
+}
+
+// Log performance
+console.log('Request completed in', res.responseTime, 'ms');`,
+
+  setEnvVar: `// Set an environment variable
+echo.setEnvVar('my_env_variable', 'my_env_value');
+console.log('Environment variable set: my_env_variable');`,
+
+  addAuthHeader: `// Add Bearer token authentication
+const token = echo.getEnvVar('auth_token');
+if (token) {
+  req.setHeader('Authorization', 'Bearer ' + token);
+  console.log('Added auth header');
+} else {
+  console.warn('No auth token found in environment');
+}`,
+
+  generateTimestamp: `// Add timestamp to request
+const timestamp = Date.now();
+req.setHeader('X-Timestamp', timestamp.toString());
+console.log('Timestamp:', new Date(timestamp).toISOString());`,
+
+  generateUuid: `// Generate a simple UUID v4
+const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+  const r = Math.random() * 16 | 0;
+  const v = c === 'x' ? r : (r & 0x3 | 0x8);
+  return v.toString(16);
+});
+echo.setVar('requestId', uuid);
+req.setHeader('X-Request-ID', uuid);
+console.log('Generated UUID:', uuid);`,
+
+  logResponse: `// Log response details
+console.log('Status:', res.status, res.statusText);
+console.log('Response time:', res.responseTime, 'ms');
+console.log('Body preview:', res.body.substring(0, 200));`,
+
+  extractTokenPost: `// Extract and store auth token from response
+try {
+  const data = JSON.parse(res.body);
+  if (data.token || data.access_token) {
+    const token = data.token || data.access_token;
+    echo.setEnvVar('auth_token', token);
+    console.log('Token extracted and saved');
+  }
+} catch (e) {
+  console.error('Could not parse response:', e.message);
+}`,
+
+  validateResponse: `// Validate response status and content
+if (res.status >= 400) {
+  console.error('Request failed:', res.status, res.statusText);
+} else {
+  console.log('Request successful');
+  
+  // Check content type
+  const contentType = res.getHeader('content-type');
+  if (contentType && contentType.includes('application/json')) {
+    const data = JSON.parse(res.body);
+    console.log('Response contains', Object.keys(data).length, 'fields');
+  }
+}`,
+};
+---
+
+<DocsLayout title="Scripts" headings={headings}>
+  <div class="prose">
+    <h1>Scripts</h1>
+    <p class="lead">
+      Automate your workflow with pre-request and post-request scripts using JavaScript.
+    </p>
+    
+    <h2 id="overview">Overview</h2>
+    <p>
+      Scripts let you run JavaScript code before a request is sent (pre-request) or after a response is received (post-request). 
+      Use them to set variables, modify requests dynamically, validate responses, or chain requests together.
+    </p>
+    <p>
+      Echolon provides a scripting API giving you access to environment variables, request data, and response data through global objects.
+    </p>
+    
+    <div class="callout info">
+      <strong>Note:</strong> Scripts run in a sandboxed environment with access to common JavaScript utilities 
+      like <code>JSON</code>, <code>Date</code>, <code>Math</code>, <code>btoa</code>, <code>atob</code>, and more.
+    </div>
+    
+    <h2 id="pre-request-scripts">Pre-request Scripts</h2>
+    <p>
+      Pre-request scripts run <strong>before</strong> your request is sent. They're perfect for:
+    </p>
+    <ul class="list">
+      <li>Generating timestamps or random values</li>
+      <li>Computing authentication signatures</li>
+      <li>Setting dynamic headers or body content</li>
+      <li>Reading and setting environment variables</li>
+    </ul>
+    
+    <p>Example: Adding a timestamp header</p>
+    <Code code={codeExamples.timestampHeader} lang="javascript" />
+    
+    <h2 id="post-request-scripts">Post-request Scripts</h2>
+    <p>
+      Post-request scripts run <strong>after</strong> the response is received. Use them to:
+    </p>
+    <ul class="list">
+      <li>Validate status codes and response bodies</li>
+      <li>Extract values (like tokens) to use in subsequent requests</li>
+      <li>Log response data for debugging</li>
+      <li>Store values in environment variables</li>
+    </ul>
+    
+    <p>Example: Extracting and storing a token</p>
+    <Code code={codeExamples.extractToken} lang="javascript" />
+    
+    <h2 id="scripting-api">Scripting API</h2>
+    <p>
+      Echolon provides three global objects in scripts: <code>echo</code>, <code>req</code>, and <code>res</code>.
+    </p>
+    
+    <h3 id="echo-object">echo Object</h3>
+    <p>
+      The <code>echo</code> object provides methods to interact with environment and runtime variables.
+    </p>
+    
+    <div class="api-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Method</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>echo.getEnvVar(name)</code></td>
+            <td>Get an environment variable value</td>
+          </tr>
+          <tr>
+            <td><code>echo.setEnvVar(name, value)</code></td>
+            <td>Set an environment variable (persists for the session)</td>
+          </tr>
+          <tr>
+            <td><code>echo.getVar(name)</code></td>
+            <td>Get a runtime variable (request-scoped)</td>
+          </tr>
+          <tr>
+            <td><code>echo.setVar(name, value)</code></td>
+            <td>Set a runtime variable (request-scoped)</td>
+          </tr>
+          <tr>
+            <td><code>echo.sleep(ms)</code></td>
+            <td>Pause execution for specified milliseconds</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    
+    <p>Example:</p>
+    <Code code={codeExamples.echoExample} lang="javascript" />
+    
+    <h3 id="req-object">req Object</h3>
+    <p>
+      The <code>req</code> object provides access to the current request. In pre-request scripts, 
+      you can both read and modify the request.
+    </p>
+    
+    <div class="api-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Property/Method</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>req.url</code></td>
+            <td>The request URL (read/write)</td>
+          </tr>
+          <tr>
+            <td><code>req.method</code></td>
+            <td>The HTTP method (read/write)</td>
+          </tr>
+          <tr>
+            <td><code>req.headers</code></td>
+            <td>Headers object (read/write)</td>
+          </tr>
+          <tr>
+            <td><code>req.body</code></td>
+            <td>Request body (read/write)</td>
+          </tr>
+          <tr>
+            <td><code>req.getUrl()</code></td>
+            <td>Get the request URL</td>
+          </tr>
+          <tr>
+            <td><code>req.setUrl(url)</code></td>
+            <td>Set the request URL</td>
+          </tr>
+          <tr>
+            <td><code>req.getMethod()</code></td>
+            <td>Get the HTTP method</td>
+          </tr>
+          <tr>
+            <td><code>req.setMethod(method)</code></td>
+            <td>Set the HTTP method</td>
+          </tr>
+          <tr>
+            <td><code>req.getHeaders()</code></td>
+            <td>Get all headers as an object</td>
+          </tr>
+          <tr>
+            <td><code>req.getHeader(name)</code></td>
+            <td>Get a specific header value (case-insensitive)</td>
+          </tr>
+          <tr>
+            <td><code>req.setHeaders(headers)</code></td>
+            <td>Replace all headers</td>
+          </tr>
+          <tr>
+            <td><code>req.setHeader(name, value)</code></td>
+            <td>Set a specific header</td>
+          </tr>
+          <tr>
+            <td><code>req.getBody()</code></td>
+            <td>Get the request body</td>
+          </tr>
+          <tr>
+            <td><code>req.setBody(body)</code></td>
+            <td>Set the request body</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    
+    <p>Example:</p>
+    <Code code={codeExamples.reqExample} lang="javascript" />
+    
+    <h3 id="res-object">res Object</h3>
+    <p>
+      The <code>res</code> object is available <strong>only in post-request scripts</strong> and provides 
+      read-only access to the response.
+    </p>
+    
+    <div class="api-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Property/Method</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>res.status</code></td>
+            <td>HTTP status code (e.g., 200, 404)</td>
+          </tr>
+          <tr>
+            <td><code>res.statusText</code></td>
+            <td>HTTP status text (e.g., "OK", "Not Found")</td>
+          </tr>
+          <tr>
+            <td><code>res.headers</code></td>
+            <td>Response headers object</td>
+          </tr>
+          <tr>
+            <td><code>res.body</code></td>
+            <td>Response body as string</td>
+          </tr>
+          <tr>
+            <td><code>res.responseTime</code></td>
+            <td>Request duration in milliseconds</td>
+          </tr>
+          <tr>
+            <td><code>res.getStatus()</code></td>
+            <td>Get the status code</td>
+          </tr>
+          <tr>
+            <td><code>res.getStatusText()</code></td>
+            <td>Get the status text</td>
+          </tr>
+          <tr>
+            <td><code>res.getHeaders()</code></td>
+            <td>Get all headers as an object</td>
+          </tr>
+          <tr>
+            <td><code>res.getHeader(name)</code></td>
+            <td>Get a specific header (case-insensitive)</td>
+          </tr>
+          <tr>
+            <td><code>res.getBody()</code></td>
+            <td>Get the response body</td>
+          </tr>
+          <tr>
+            <td><code>res.getResponseTime()</code></td>
+            <td>Get the response time in ms</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    
+    <p>Example:</p>
+    <Code code={codeExamples.resExample} lang="javascript" />
+    
+    <h2 id="sample-scripts">Sample Scripts</h2>
+    <p>
+      Echolon includes built-in sample scripts to help you get started. Access them from the 
+      dropdown menu in the Scripts tab.
+    </p>
+    
+    <h4>Pre-request Script Examples</h4>
+    
+    <p><strong>Set Environment Variable</strong></p>
+    <Code code={codeExamples.setEnvVar} lang="javascript" />
+    
+    <p><strong>Add Authentication Header</strong></p>
+    <Code code={codeExamples.addAuthHeader} lang="javascript" />
+    
+    <p><strong>Generate Timestamp</strong></p>
+    <Code code={codeExamples.generateTimestamp} lang="javascript" />
+    
+    <p><strong>Generate UUID</strong></p>
+    <Code code={codeExamples.generateUuid} lang="javascript" />
+    
+    <h4>Post-request Script Examples</h4>
+    
+    <p><strong>Log Response</strong></p>
+    <Code code={codeExamples.logResponse} lang="javascript" />
+    
+    <p><strong>Extract Token</strong></p>
+    <Code code={codeExamples.extractTokenPost} lang="javascript" />
+    
+    <p><strong>Validate Response</strong></p>
+    <Code code={codeExamples.validateResponse} lang="javascript" />
+    
+    <h2 id="viewing-script-output">Viewing Script Output</h2>
+    <p>
+      After sending a request, script output (console logs, errors) appears in the <strong>Scripts</strong> 
+      tab in the response panel. This tab shows:
+    </p>
+    <ul class="list">
+      <li><strong>Pre-request output:</strong> Logs from the pre-request script</li>
+      <li><strong>Post-request output:</strong> Logs from the post-request script</li>
+      <li><strong>Execution time:</strong> How long each script took to run</li>
+      <li><strong>Errors:</strong> Any script errors with stack traces</li>
+    </ul>
+    
+    <div class="callout warning">
+      <strong>Debugging tip:</strong> Use <code>console.log()</code>, <code>console.warn()</code>, 
+      <code>console.error()</code>, and <code>console.info()</code> to output debug information. 
+      All console output is captured and displayed in the Scripts tab.
+    </div>
+    
+    <h2 id="available-globals">Available Globals</h2>
+    <p>
+      In addition to <code>echo</code>, <code>req</code>, and <code>res</code>, scripts have access to:
+    </p>
+    <ul class="list">
+      <li><code>console</code> — log, warn, error, info methods</li>
+      <li><code>JSON</code> — parse and stringify</li>
+      <li><code>Date</code> — date manipulation</li>
+      <li><code>Math</code> — mathematical operations</li>
+      <li><code>btoa</code> / <code>atob</code> — Base64 encoding/decoding</li>
+      <li><code>encodeURIComponent</code> / <code>decodeURIComponent</code></li>
+      <li><code>parseInt</code>, <code>parseFloat</code>, <code>isNaN</code>, <code>isFinite</code></li>
+      <li><code>Array</code>, <code>Object</code>, <code>String</code>, <code>Number</code>, <code>Boolean</code></li>
+    </ul>
+  </div>
+</DocsLayout>
+
+<style>
+  .prose {
+    color: var(--color-text-secondary);
+    line-height: var(--line-height-relaxed);
+  }
+  
+  .prose h1 {
+    font-size: var(--font-size-4xl);
+    color: var(--color-text);
+    margin-bottom: var(--spacing-4);
+  }
+  
+  .prose h2 {
+    font-size: var(--font-size-2xl);
+    color: var(--color-text);
+    margin-top: var(--spacing-10);
+    margin-bottom: var(--spacing-4);
+    padding-top: var(--spacing-4);
+    border-top: 1px solid var(--color-border-subtle);
+  }
+  
+  .prose h2:first-of-type {
+    border-top: none;
+    padding-top: 0;
+  }
+  
+  .prose h3 {
+    font-size: var(--font-size-xl);
+    color: var(--color-text);
+    margin-top: var(--spacing-8);
+    margin-bottom: var(--spacing-3);
+  }
+  
+  .prose h4 {
+    font-size: var(--font-size-lg);
+    color: var(--color-text);
+    margin-top: var(--spacing-6);
+    margin-bottom: var(--spacing-3);
+  }
+  
+  .prose p {
+    margin-bottom: var(--spacing-4);
+  }
+  
+  .prose .lead {
+    font-size: var(--font-size-lg);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-6);
+  }
+  
+  .prose code {
+    padding: var(--spacing-1) var(--spacing-2);
+    font-size: var(--font-size-sm);
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+  }
+  
+  .prose .list {
+    margin: var(--spacing-4) 0;
+    padding-left: var(--spacing-6);
+  }
+  
+  .prose .list li {
+    margin-bottom: var(--spacing-2);
+    list-style: disc;
+  }
+  
+  .prose strong {
+    color: var(--color-text);
+    font-weight: 600;
+  }
+  
+  .prose a {
+    color: var(--color-primary);
+    text-decoration: underline;
+    text-decoration-color: var(--color-primary-glow);
+    text-underline-offset: 2px;
+  }
+  
+  .prose a:hover {
+    text-decoration-color: var(--color-primary);
+  }
+  
+  /* Callouts */
+  .callout {
+    padding: var(--spacing-4);
+    margin: var(--spacing-6) 0;
+    border-radius: var(--radius-md);
+    border-left: 4px solid;
+  }
+  
+  .callout.info {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: #3b82f6;
+  }
+  
+  .callout.warning {
+    background: rgba(245, 158, 11, 0.1);
+    border-color: #f59e0b;
+  }
+  
+  .callout strong {
+    display: block;
+    margin-bottom: var(--spacing-2);
+  }
+  
+  /* API Tables */
+  .api-table {
+    margin: var(--spacing-4) 0;
+    overflow-x: auto;
+  }
+  
+  .api-table table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-sm);
+  }
+  
+  .api-table th,
+  .api-table td {
+    padding: var(--spacing-3);
+    text-align: left;
+    border: 1px solid var(--color-border);
+  }
+  
+  .api-table th {
+    background: var(--color-bg-tertiary);
+    color: var(--color-text);
+    font-weight: 600;
+  }
+  
+  .api-table td {
+    background: var(--color-bg-secondary);
+  }
+  
+  .api-table td:first-child {
+    white-space: nowrap;
+  }
+  
+  .api-table code {
+    font-size: var(--font-size-xs);
+    padding: 2px 6px;
+  }
+</style>

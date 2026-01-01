@@ -467,6 +467,33 @@
   flex: 1;
 }
 
+.center-panel__script-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
+.center-panel__script-header label {
+  font-size: var(--font-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.center-panel__script-samples {
+  flex-shrink: 0;
+}
+
+.center-panel__script-samples .dropdown__trigger {
+  min-width: 180px;
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+}
+
+.center-panel__script-samples .dropdown__menu {
+  min-width: 200px;
+}
+
 .center-panel__script label {
   font-size: var(--font-sm);
   font-weight: 500;

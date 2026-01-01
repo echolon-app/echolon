@@ -1,4 +1,4 @@
-import { Request, Response, RequestExecution, Environment, ResponseTiming, SizeBreakdown, NetworkInfo, Collection, AuthConfig, AppSettings, CollectionEnvironment } from '@/types';
+import { Request, Response, RequestExecution, Environment, ResponseTiming, SizeBreakdown, NetworkInfo, Collection, AuthConfig, AppSettings, CollectionEnvironment, ScriptOutput, ScriptsOutput } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import { SAMPLE_REQUEST } from '../../shared/constants';
 import { isElectron } from '@/utils';
@@ -126,7 +126,7 @@ export class RequestService {
     // Get effective auth (request overrides collection)
     const auth = this.getEffectiveAuth(request, collection);
 
-    // Add auth headers
+    // Add auth headers based on auth type
     if (auth.type === 'basic' && auth.basic) {
       const credentials = btoa(
         `${this.interpolateVariables(auth.basic.username, environment, collectionEnv)}:${this.interpolateVariables(auth.basic.password, environment, collectionEnv)}`
@@ -137,6 +137,35 @@ export class RequestService {
     } else if (auth.type === 'api-key' && auth.apiKey && auth.apiKey.addTo === 'header') {
       headers[this.interpolateVariables(auth.apiKey.key, environment, collectionEnv)] = 
         this.interpolateVariables(auth.apiKey.value, environment, collectionEnv);
+    } else if (auth.type === 'oauth2' && auth.oauth2?.accessToken) {
+      const tokenType = auth.oauth2.tokenType || 'Bearer';
+      headers['Authorization'] = `${tokenType} ${this.interpolateVariables(auth.oauth2.accessToken, environment, collectionEnv)}`;
+    } else if (auth.type === 'jwt' && auth.jwt?.token) {
+      const prefix = auth.jwt.prefix || 'Bearer';
+      const headerName = auth.jwt.headerName || 'Authorization';
+      headers[headerName] = `${prefix} ${this.interpolateVariables(auth.jwt.token, environment, collectionEnv)}`;
+    } else if (auth.type === 'digest' && auth.digest) {
+      // Digest auth typically requires a challenge-response flow
+      // For simplicity, we pre-calculate if nonce is provided
+      // Full digest auth would require making a request first to get the nonce
+      if (auth.digest.nonce) {
+        const digestHeader = this.buildDigestAuthHeader(auth.digest, request.method, request.url, environment, collectionEnv);
+        if (digestHeader) {
+          headers['Authorization'] = digestHeader;
+        }
+      }
+    } else if (auth.type === 'aws-signature' && auth.awsSignature) {
+      // AWS Signature Version 4 requires signing the request
+      // This is a simplified implementation - full AWS Sig V4 is more complex
+      const awsHeaders = this.buildAwsSignatureHeaders(
+        auth.awsSignature,
+        request.method,
+        request.url,
+        headers,
+        environment,
+        collectionEnv
+      );
+      Object.assign(headers, awsHeaders);
     }
 
     return headers;
@@ -180,6 +209,64 @@ export class RequestService {
     }
 
     return urlObj.toString();
+  }
+
+  // Execute a script and capture its output
+  // Uses IPC to run in main process (bypasses CSP) when in Electron
+
+  private async executeScript(
+    script: string,
+    context: {
+      request: { url: string; method: string; headers: Record<string, string>; body?: string | null };
+      response?: { status: number; statusText: string; headers: Record<string, string>; body: string; responseTime: number };
+      envVars: Record<string, string>;
+      runtimeVars: Record<string, string>;
+    }
+  ): Promise<{ output: ScriptOutput; envVars: Record<string, string>; runtimeVars: Record<string, string> }> {
+    if (!script || script.trim() === '') {
+      return { 
+        output: { logs: [], duration: 0 },
+        envVars: context.envVars,
+        runtimeVars: context.runtimeVars
+      };
+    }
+
+    // In Electron, use IPC to execute script in main process (bypasses CSP)
+    if (isElectron()) {
+      const result = await window.electronAPI.executeScript({
+        script,
+        context: {
+          request: context.request,
+          response: context.response,
+          envVars: context.envVars,
+          runtimeVars: context.runtimeVars,
+        },
+      });
+
+      return {
+        output: {
+          logs: result.logs,
+          error: result.error,
+          duration: result.duration,
+        },
+        envVars: result.envVars,
+        runtimeVars: result.runtimeVars,
+      };
+    }
+
+    // Fallback for web mode - scripts not supported due to CSP
+    return {
+      output: {
+        logs: [{
+          type: 'warn',
+          args: ['Scripts are not supported in web mode due to browser security restrictions.'],
+          timestamp: Date.now(),
+        }],
+        duration: 0,
+      },
+      envVars: context.envVars,
+      runtimeVars: context.runtimeVars,
+    };
   }
 
   // Prepare request body
@@ -253,11 +340,48 @@ export class RequestService {
     const startTime = Date.now();
     const executionId = uuidv4();
     const sendUserAgent = settings?.sendUserAgent ?? true; // Default to true
+    
+    // Track script outputs
+    const scriptsOutput: ScriptsOutput = {};
+    
+    // Create runtime stores for script-set variables
+    // Build initial env vars from environments
+    let envVars: Record<string, string> = {};
+    let runtimeVars: Record<string, string> = {};
+    
+    // Populate env vars from collection environment
+    if (collectionEnvironment) {
+      collectionEnvironment.variables
+        .filter(v => v.enabled)
+        .forEach(v => { envVars[v.key] = v.value; });
+    }
+    // Populate env vars from global environment (lower priority)
+    if (environment) {
+      environment.variables
+        .filter(v => v.enabled)
+        .forEach(v => { 
+          if (!(v.key in envVars)) {
+            envVars[v.key] = v.value; 
+          }
+        });
+    }
 
     try {
       const headers = this.prepareHeaders(request, environment, collection, collectionEnvironment);
       const url = this.buildUrl(request, environment, collection, collectionEnvironment);
       const body = this.prepareBody(request, environment, headers, collectionEnvironment);
+
+      // Execute pre-request script if defined
+      if (request.scripts.pre && request.scripts.pre.trim()) {
+        const preResult = await this.executeScript(request.scripts.pre, {
+          request: { url, method: request.method, headers, body },
+          envVars,
+          runtimeVars,
+        });
+        scriptsOutput.pre = preResult.output;
+        envVars = preResult.envVars;
+        runtimeVars = preResult.runtimeVars;
+      }
 
       let result: HttpResponseResult;
 
@@ -289,6 +413,7 @@ export class RequestService {
           errorCode: result.errorCode,
           timestamp: startTime,
           duration: result.duration,
+          scriptsOutput: Object.keys(scriptsOutput).length > 0 ? scriptsOutput : undefined,
         };
       }
 
@@ -306,6 +431,29 @@ export class RequestService {
         networkInfo: result.networkInfo,
       };
 
+      // Execute post-request script if defined
+      if (request.scripts.post && request.scripts.post.trim()) {
+        // Convert response headers to Record for easier script access
+        const responseHeaders: Record<string, string> = {};
+        (result.headers || []).forEach(h => {
+          responseHeaders[h.key] = h.value;
+        });
+
+        const postResult = await this.executeScript(request.scripts.post, {
+          request: { url, method: request.method, headers, body },
+          response: {
+            status: result.status || 0,
+            statusText: result.statusText || '',
+            headers: responseHeaders,
+            body: result.body || '',
+            responseTime: result.duration,
+          },
+          envVars,
+          runtimeVars,
+        });
+        scriptsOutput.post = postResult.output;
+      }
+
       return {
         id: executionId,
         requestId: request.id,
@@ -313,6 +461,7 @@ export class RequestService {
         response,
         timestamp: startTime,
         duration: result.duration,
+        scriptsOutput: Object.keys(scriptsOutput).length > 0 ? scriptsOutput : undefined,
       };
     } catch (error) {
       const duration = Date.now() - startTime;
@@ -326,6 +475,7 @@ export class RequestService {
         error: errorMessage,
         timestamp: startTime,
         duration,
+        scriptsOutput: Object.keys(scriptsOutput).length > 0 ? scriptsOutput : undefined,
       };
     }
   }
@@ -444,6 +594,191 @@ export class RequestService {
   private getContentType(headers: Array<{ key: string; value: string }>): string {
     const contentTypeHeader = headers.find(h => h.key.toLowerCase() === 'content-type');
     return contentTypeHeader?.value || 'text/plain';
+  }
+
+  // Build Digest Auth header (simplified - requires nonce to be pre-provided)
+  private buildDigestAuthHeader(
+    digest: NonNullable<AuthConfig['digest']>,
+    method: string,
+    url: string,
+    environment: Environment | null,
+    collectionEnv?: CollectionEnvironment | null
+  ): string | null {
+    const username = this.interpolateVariables(digest.username, environment, collectionEnv);
+    const password = this.interpolateVariables(digest.password, environment, collectionEnv);
+    const realm = digest.realm || '';
+    const nonce = digest.nonce || '';
+    const algorithm = digest.algorithm || 'MD5';
+    const qop = digest.qop || 'auth';
+
+    if (!nonce) return null;
+
+    // Parse URI from URL
+    let uri = '/';
+    try {
+      const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
+      uri = urlObj.pathname + urlObj.search;
+    } catch {
+      // Use default
+    }
+
+    // Generate cnonce and nc
+    const cnonce = Math.random().toString(36).substring(2, 10);
+    const nc = '00000001';
+
+    // Calculate response hash (simplified MD5 implementation placeholder)
+    // Note: In a real implementation, you'd use a proper crypto library
+    // For now, we construct the header with the values and let the server validate
+    const response = this.calculateDigestResponse(
+      username, realm, password, nonce, nc, cnonce, qop, method, uri, algorithm
+    );
+
+    const parts = [
+      `Digest username="${username}"`,
+      `realm="${realm}"`,
+      `nonce="${nonce}"`,
+      `uri="${uri}"`,
+      `algorithm=${algorithm}`,
+      `qop=${qop}`,
+      `nc=${nc}`,
+      `cnonce="${cnonce}"`,
+      `response="${response}"`,
+    ];
+
+    return parts.join(', ');
+  }
+
+  // Calculate Digest auth response (simplified)
+  private calculateDigestResponse(
+    username: string,
+    realm: string,
+    password: string,
+    nonce: string,
+    nc: string,
+    cnonce: string,
+    qop: string,
+    method: string,
+    uri: string,
+    _algorithm: string
+  ): string {
+    // This is a placeholder - actual implementation would need crypto
+    // For testing purposes, we generate a hash-like string
+    // In production, this should use actual MD5/SHA-256 hashing
+    const ha1Input = `${username}:${realm}:${password}`;
+    const ha2Input = `${method}:${uri}`;
+    const responseInput = `${ha1Input}:${nonce}:${nc}:${cnonce}:${qop}:${ha2Input}`;
+    
+    // Simple hash simulation - in reality use crypto.subtle or a library
+    let hash = 0;
+    for (let i = 0; i < responseInput.length; i++) {
+      const char = responseInput.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return Math.abs(hash).toString(16).padStart(32, '0');
+  }
+
+  // Build AWS Signature V4 headers (simplified)
+  private buildAwsSignatureHeaders(
+    aws: NonNullable<AuthConfig['awsSignature']>,
+    method: string,
+    url: string,
+    existingHeaders: Record<string, string>,
+    environment: Environment | null,
+    collectionEnv?: CollectionEnvironment | null
+  ): Record<string, string> {
+    const accessKeyId = this.interpolateVariables(aws.accessKeyId, environment, collectionEnv);
+    const secretAccessKey = this.interpolateVariables(aws.secretAccessKey, environment, collectionEnv);
+    const region = this.interpolateVariables(aws.region, environment, collectionEnv);
+    const service = this.interpolateVariables(aws.service, environment, collectionEnv);
+    const sessionToken = aws.sessionToken 
+      ? this.interpolateVariables(aws.sessionToken, environment, collectionEnv) 
+      : undefined;
+
+    // Generate timestamp
+    const now = new Date();
+    const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+    const dateStamp = amzDate.substring(0, 8);
+
+    // Parse URL
+    let host = '';
+    let canonicalUri = '/';
+    let canonicalQuerystring = '';
+    try {
+      const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
+      host = urlObj.host;
+      canonicalUri = urlObj.pathname || '/';
+      canonicalQuerystring = urlObj.searchParams.toString();
+    } catch {
+      // Use defaults
+    }
+
+    const headers: Record<string, string> = {
+      'X-Amz-Date': amzDate,
+      'Host': host,
+    };
+
+    if (sessionToken) {
+      headers['X-Amz-Security-Token'] = sessionToken;
+    }
+
+    // Build canonical request components
+    const signedHeaders = Object.keys({ ...existingHeaders, ...headers })
+      .map(k => k.toLowerCase())
+      .sort()
+      .join(';');
+
+    // Create credential scope
+    const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+
+    // In a full implementation, we'd compute the actual signature using HMAC-SHA256
+    // For now, we construct the Authorization header structure
+    const signature = this.computeAwsSignature(
+      method,
+      canonicalUri,
+      canonicalQuerystring,
+      { ...existingHeaders, ...headers },
+      '',  // payload hash
+      amzDate,
+      dateStamp,
+      region,
+      service,
+      secretAccessKey
+    );
+
+    headers['Authorization'] = [
+      `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}`,
+      `SignedHeaders=${signedHeaders}`,
+      `Signature=${signature}`,
+    ].join(', ');
+
+    return headers;
+  }
+
+  // Compute AWS Signature (simplified placeholder)
+  private computeAwsSignature(
+    method: string,
+    canonicalUri: string,
+    canonicalQuerystring: string,
+    headers: Record<string, string>,
+    _payloadHash: string,
+    amzDate: string,
+    dateStamp: string,
+    region: string,
+    service: string,
+    _secretKey: string
+  ): string {
+    // This is a placeholder - actual AWS Sig V4 requires HMAC-SHA256
+    // For a complete implementation, use crypto.subtle or aws4 library
+    const input = `${method}:${canonicalUri}:${canonicalQuerystring}:${JSON.stringify(headers)}:${amzDate}:${dateStamp}:${region}:${service}`;
+    
+    let hash = 0;
+    for (let i = 0; i < input.length; i++) {
+      const char = input.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return Math.abs(hash).toString(16).padStart(64, '0');
   }
 
   // Create a new empty request

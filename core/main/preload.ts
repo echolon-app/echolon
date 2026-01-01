@@ -10,6 +10,7 @@ const IPC_CHANNELS = {
   INSTALL_UPDATE: 'install-update',
   GET_APP_VERSION: 'get-app-version',
   MAKE_HTTP_REQUEST: 'make-http-request',
+  EXECUTE_SCRIPT: 'execute-script',
   START_MOCK_SERVER: 'start-mock-server',
   STOP_MOCK_SERVER: 'stop-mock-server',
   GET_MOCK_SERVER_STATUS: 'get-mock-server-status',
@@ -427,6 +428,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   makeHttpRequest: (options: HttpRequestOptions): Promise<HttpResponseResult> => 
     ipcRenderer.invoke(IPC_CHANNELS.MAKE_HTTP_REQUEST, options),
 
+  // Execute script - runs in main process to bypass CSP
+  executeScript: (options: {
+    script: string;
+    context: {
+      request: { url: string; method: string; headers: Record<string, string>; body?: string | null };
+      response?: { status: number; statusText: string; headers: Record<string, string>; body: string; responseTime: number };
+      envVars: Record<string, string>;
+      runtimeVars: Record<string, string>;
+    };
+  }): Promise<{
+    logs: Array<{ type: 'log' | 'warn' | 'error' | 'info'; args: string[]; timestamp: number }>;
+    error?: string;
+    duration: number;
+    envVars: Record<string, string>;
+    runtimeVars: Record<string, string>;
+  }> => ipcRenderer.invoke(IPC_CHANNELS.EXECUTE_SCRIPT, options),
+
   // Update functions
   checkForUpdates: () => ipcRenderer.invoke(IPC_CHANNELS.CHECK_FOR_UPDATES),
   downloadUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.DOWNLOAD_UPDATE),
@@ -716,6 +734,21 @@ declare global {
     electronAPI: {
       getAppVersion: () => Promise<string>;
       makeHttpRequest: (options: HttpRequestOptions) => Promise<HttpResponseResult>;
+      executeScript: (options: {
+        script: string;
+        context: {
+          request: { url: string; method: string; headers: Record<string, string>; body?: string | null };
+          response?: { status: number; statusText: string; headers: Record<string, string>; body: string; responseTime: number };
+          envVars: Record<string, string>;
+          runtimeVars: Record<string, string>;
+        };
+      }) => Promise<{
+        logs: Array<{ type: 'log' | 'warn' | 'error' | 'info'; args: string[]; timestamp: number }>;
+        error?: string;
+        duration: number;
+        envVars: Record<string, string>;
+        runtimeVars: Record<string, string>;
+      }>;
       checkForUpdates: () => Promise<unknown>;
       downloadUpdate: () => Promise<void>;
       installUpdate: () => void;

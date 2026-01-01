@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/icons';
 import { CapturedRequest, MockedResponse, KeyValuePair, MockMode } from '@/types';
 import { METHOD_COLORS } from '../../../../shared/constants';
+import { formatLogTime, formatDateTime } from '@/utils';
 import './MockingPanel.css';
 
 // Default cloud server URL
@@ -1285,13 +1286,7 @@ export const MockingPanel: React.FC = () => {
                         </span>
                       </td>
                       <td className="time-cell">
-                        {new Date(request.timestamp).toLocaleTimeString('en-US', { 
-                          hour12: false, 
-                          hour: '2-digit', 
-                          minute: '2-digit', 
-                          second: '2-digit',
-                          fractionalSecondDigits: 3
-                        })}
+                        {formatLogTime(request.timestamp)}
                       </td>
                       <td className="mocked-cell">
                         {request.isMocked && (
@@ -1482,7 +1477,7 @@ export const MockingPanel: React.FC = () => {
                             <tr>
                               <td className="key">Timestamp</td>
                               <td className="value">
-                                {new Date(selectedRequest.timestamp).toLocaleString()}
+                                {formatDateTime(selectedRequest.timestamp)}
                               </td>
                             </tr>
                             <tr>

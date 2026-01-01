@@ -1,0 +1,47 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+
+const headings = [
+  { depth: 2, slug: 'importing', text: 'Importing' },
+  { depth: 2, slug: 'exporting', text: 'Exporting' },
+  { depth: 2, slug: 'supported-versions', text: 'Supported Versions' },
+];
+---
+
+<DocsLayout title="OpenAPI / Swagger" headings={headings}>
+  <div class="prose">
+    <h1>OpenAPI / Swagger</h1>
+    <p class="lead">
+      Import and export OpenAPI (Swagger) specifications.
+    </p>
+    
+    <h2 id="importing">Importing</h2>
+    <p>
+      Import OpenAPI specs to automatically create collections with all defined endpoints. Echolon parses the spec and generates requests with proper parameters, headers, and body schemas.
+    </p>
+    
+    <h2 id="exporting">Exporting</h2>
+    <p>
+      Export your collections as OpenAPI specifications to share with your team or generate documentation.
+    </p>
+    
+    <h2 id="supported-versions">Supported Versions</h2>
+    <ul class="list">
+      <li>OpenAPI 3.0.x</li>
+      <li>OpenAPI 3.1.x</li>
+      <li>Swagger 2.0</li>
+    </ul>
+  </div>
+</DocsLayout>
+
+<style>
+  .prose { color: var(--color-text-secondary); line-height: var(--line-height-relaxed); }
+  .prose h1 { font-size: var(--font-size-4xl); color: var(--color-text); margin-bottom: var(--spacing-4); }
+  .prose h2 { font-size: var(--font-size-2xl); color: var(--color-text); margin-top: var(--spacing-10); margin-bottom: var(--spacing-4); padding-top: var(--spacing-4); border-top: 1px solid var(--color-border-subtle); }
+  .prose h2:first-of-type { border-top: none; padding-top: 0; }
+  .prose p { margin-bottom: var(--spacing-4); }
+  .prose .lead { font-size: var(--font-size-lg); margin-bottom: var(--spacing-6); }
+  .prose .list { margin: var(--spacing-4) 0; padding-left: var(--spacing-6); }
+  .prose .list li { margin-bottom: var(--spacing-2); list-style: disc; }
+</style>
+

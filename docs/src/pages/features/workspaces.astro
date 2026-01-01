@@ -1,0 +1,65 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+
+const headings = [
+  { depth: 2, slug: 'what-are-workspaces', text: 'What are Workspaces?' },
+  { depth: 2, slug: 'creating-workspaces', text: 'Creating Workspaces' },
+  { depth: 2, slug: 'switching-workspaces', text: 'Switching Workspaces' },
+  { depth: 2, slug: 'workspace-settings', text: 'Workspace Settings' },
+];
+---
+
+<DocsLayout title="Workspaces" headings={headings}>
+  <div class="prose">
+    <h1>Workspaces</h1>
+    <p class="lead">
+      Organize your API projects into separate workspaces.
+    </p>
+    
+    <h2 id="what-are-workspaces">What are Workspaces?</h2>
+    <p>
+      Workspaces are the top-level organizational unit in Echolon. Each workspace contains its own collections, environments, and settings — perfect for separating different projects or clients.
+    </p>
+    
+    <h2 id="creating-workspaces">Creating Workspaces</h2>
+    <p>
+      To create a new workspace:
+    </p>
+    <ol class="list numbered">
+      <li>Click the workspace dropdown in the top-left corner</li>
+      <li>Select "New Workspace"</li>
+      <li>Enter a name and optional description</li>
+      <li>Click "Create"</li>
+    </ol>
+    
+    <h2 id="switching-workspaces">Switching Workspaces</h2>
+    <p>
+      Use the workspace dropdown to quickly switch between your workspaces. All your collections and environments will update to show the selected workspace's content.
+    </p>
+    
+    <h2 id="workspace-settings">Workspace Settings</h2>
+    <p>
+      Each workspace has its own settings including:
+    </p>
+    <ul class="list">
+      <li>Default environment</li>
+      <li>Git repository configuration</li>
+      <li>Proxy settings</li>
+      <li>Auth configurations</li>
+    </ul>
+  </div>
+</DocsLayout>
+
+<style>
+  .prose { color: var(--color-text-secondary); line-height: var(--line-height-relaxed); }
+  .prose h1 { font-size: var(--font-size-4xl); color: var(--color-text); margin-bottom: var(--spacing-4); }
+  .prose h2 { font-size: var(--font-size-2xl); color: var(--color-text); margin-top: var(--spacing-10); margin-bottom: var(--spacing-4); padding-top: var(--spacing-4); border-top: 1px solid var(--color-border-subtle); }
+  .prose h2:first-of-type { border-top: none; padding-top: 0; }
+  .prose p { margin-bottom: var(--spacing-4); }
+  .prose .lead { font-size: var(--font-size-lg); margin-bottom: var(--spacing-6); }
+  .prose .list { margin: var(--spacing-4) 0; padding-left: var(--spacing-6); }
+  .prose .list li { margin-bottom: var(--spacing-2); list-style: disc; }
+  .prose .list.numbered li { list-style: decimal; }
+  .prose a { color: var(--color-primary); text-decoration: underline; text-underline-offset: 2px; }
+</style>
+

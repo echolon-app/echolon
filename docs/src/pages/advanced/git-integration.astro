@@ -1,0 +1,48 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+
+const headings = [
+  { depth: 2, slug: 'overview', text: 'Overview' },
+  { depth: 2, slug: 'setup', text: 'Setup' },
+  { depth: 2, slug: 'workflow', text: 'Workflow' },
+];
+---
+
+<DocsLayout title="Git Integration" headings={headings}>
+  <div class="prose">
+    <h1>Git Integration</h1>
+    <p class="lead">
+      Version control your API collections with Git.
+    </p>
+    
+    <h2 id="overview">Overview</h2>
+    <p>
+      Echolon stores collections as plain-text files, making them perfect for version control with Git. Track changes, collaborate with your team, and maintain a history of your API definitions.
+    </p>
+    
+    <h2 id="setup">Setup</h2>
+    <p>
+      Point Echolon to an existing Git repository or initialize a new one. Your collections and environments will be saved as structured files that Git can track.
+    </p>
+    
+    <h2 id="workflow">Workflow</h2>
+    <ul class="list">
+      <li>Make changes to your collections in Echolon</li>
+      <li>Commit changes using your preferred Git client</li>
+      <li>Pull changes from teammates</li>
+      <li>Resolve conflicts using standard Git tools</li>
+    </ul>
+  </div>
+</DocsLayout>
+
+<style>
+  .prose { color: var(--color-text-secondary); line-height: var(--line-height-relaxed); }
+  .prose h1 { font-size: var(--font-size-4xl); color: var(--color-text); margin-bottom: var(--spacing-4); }
+  .prose h2 { font-size: var(--font-size-2xl); color: var(--color-text); margin-top: var(--spacing-10); margin-bottom: var(--spacing-4); padding-top: var(--spacing-4); border-top: 1px solid var(--color-border-subtle); }
+  .prose h2:first-of-type { border-top: none; padding-top: 0; }
+  .prose p { margin-bottom: var(--spacing-4); }
+  .prose .lead { font-size: var(--font-size-lg); margin-bottom: var(--spacing-6); }
+  .prose .list { margin: var(--spacing-4) 0; padding-left: var(--spacing-6); }
+  .prose .list li { margin-bottom: var(--spacing-2); list-style: disc; }
+</style>
+

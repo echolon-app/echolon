@@ -16,6 +16,16 @@
   color: var(--text-secondary);
 }
 
+.new-environment-modal__name-row {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+}
+
+.new-environment-modal__name-row input {
+  flex: 1;
+}
+
 .new-environment-modal__hint {
   font-size: var(--font-xs);
   color: var(--text-tertiary);

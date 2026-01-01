@@ -138,8 +138,39 @@ export interface AuthConfig {
     addTo: 'header' | 'query';
   };
   oauth2?: {
+    grantType: 'authorization_code' | 'client_credentials' | 'password' | 'implicit';
     accessToken: string;
+    refreshToken?: string;
     tokenType: string;
+    clientId: string;
+    clientSecret?: string;
+    authorizationUrl?: string;
+    tokenUrl?: string;
+    scope?: string;
+    state?: string;
+    // For password grant
+    username?: string;
+    password?: string;
+  };
+  jwt?: {
+    token: string;
+    prefix?: string; // Default: "Bearer"
+    headerName?: string; // Default: "Authorization"
+  };
+  digest?: {
+    username: string;
+    password: string;
+    realm?: string;
+    nonce?: string;
+    algorithm?: 'MD5' | 'MD5-sess' | 'SHA-256' | 'SHA-256-sess';
+    qop?: 'auth' | 'auth-int';
+  };
+  awsSignature?: {
+    accessKeyId: string;
+    secretAccessKey: string;
+    region: string;
+    service: string;
+    sessionToken?: string;
   };
 }
 
@@ -221,6 +252,24 @@ export interface Response {
   networkInfo?: NetworkInfo;
 }
 
+// Script execution output
+export interface ScriptLogEntry {
+  type: 'log' | 'warn' | 'error' | 'info';
+  args: string[];
+  timestamp: number;
+}
+
+export interface ScriptOutput {
+  logs: ScriptLogEntry[];
+  error?: string;
+  duration: number;
+}
+
+export interface ScriptsOutput {
+  pre?: ScriptOutput;
+  post?: ScriptOutput;
+}
+
 export interface RequestExecution {
   id: string;
   requestId: string;
@@ -230,6 +279,7 @@ export interface RequestExecution {
   errorCode?: string;
   timestamp: number;
   duration: number;
+  scriptsOutput?: ScriptsOutput;
 }
 
 export interface Environment {

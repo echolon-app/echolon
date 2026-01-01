@@ -1,0 +1,50 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+
+const headings = [
+  { depth: 2, slug: 'overview', text: 'Overview' },
+  { depth: 2, slug: 'configuration', text: 'Configuration' },
+  { depth: 2, slug: 'cors-proxy', text: 'CORS Proxy' },
+];
+---
+
+<DocsLayout title="Proxy Settings" headings={headings}>
+  <div class="prose">
+    <h1>Proxy Settings</h1>
+    <p class="lead">
+      Configure proxy settings for your API requests.
+    </p>
+    
+    <h2 id="overview">Overview</h2>
+    <p>
+      Route your requests through a proxy server for debugging, testing, or bypassing network restrictions.
+    </p>
+    
+    <h2 id="configuration">Configuration</h2>
+    <p>
+      Configure proxy settings in Settings → Proxy. You can set:
+    </p>
+    <ul class="list">
+      <li>HTTP/HTTPS proxy URL</li>
+      <li>Proxy authentication</li>
+      <li>Bypass rules for specific hosts</li>
+    </ul>
+    
+    <h2 id="cors-proxy">CORS Proxy</h2>
+    <p>
+      The web version includes a built-in CORS proxy to help with browser security restrictions. Enable it for requests that would otherwise be blocked by CORS policies.
+    </p>
+  </div>
+</DocsLayout>
+
+<style>
+  .prose { color: var(--color-text-secondary); line-height: var(--line-height-relaxed); }
+  .prose h1 { font-size: var(--font-size-4xl); color: var(--color-text); margin-bottom: var(--spacing-4); }
+  .prose h2 { font-size: var(--font-size-2xl); color: var(--color-text); margin-top: var(--spacing-10); margin-bottom: var(--spacing-4); padding-top: var(--spacing-4); border-top: 1px solid var(--color-border-subtle); }
+  .prose h2:first-of-type { border-top: none; padding-top: 0; }
+  .prose p { margin-bottom: var(--spacing-4); }
+  .prose .lead { font-size: var(--font-size-lg); margin-bottom: var(--spacing-6); }
+  .prose .list { margin: var(--spacing-4) 0; padding-left: var(--spacing-6); }
+  .prose .list li { margin-bottom: var(--spacing-2); list-style: disc; }
+</style>
+

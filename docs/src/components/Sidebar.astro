@@ -1,0 +1,196 @@
+---
+const navigation = [
+  {
+    title: 'Getting Started',
+    links: [
+      { title: 'Introduction', href: '/' },
+      { title: 'Quick Start', href: '/getting-started/quick-start' },
+      { title: 'Installation', href: '/getting-started/installation' },
+    ],
+  },
+  {
+    title: 'Clients',
+    links: [
+      { title: 'Desktop App', href: '/clients/desktop' },
+      { title: 'Web App', href: '/clients/web' },
+    ],
+  },
+  {
+    title: 'Features',
+    links: [
+      { title: 'Workspaces', href: '/features/workspaces' },
+      { title: 'Collections', href: '/features/collections' },
+      { title: 'Environments', href: '/features/environments' },
+      { title: 'Variables', href: '/features/variables' },
+      { title: 'Scripts', href: '/features/scripts' },
+      { title: 'History', href: '/features/history' },
+      { title: 'Shortcuts', href: '/features/shortcuts' },
+    ],
+  },
+  {
+    title: 'Protocols',
+    links: [
+      { title: 'REST API', href: '/protocols/rest' },
+     // { title: 'GraphQL', href: '/protocols/graphql' },
+      { title: 'WebSocket', href: '/protocols/websocket' },
+     // { title: 'gRPC', href: '/protocols/grpc' },
+    ],
+  },
+  {
+    title: 'Import & Export',
+    links: [
+      { title: 'OpenAPI / Swagger', href: '/import-export/openapi' },
+      { title: 'Postman', href: '/import-export/postman' },
+   
+    ],
+  },
+  {
+    title: 'Advanced',
+    links: [
+      { title: 'Git Integration', href: '/advanced/git-integration' },
+      { title: 'Proxy Settings', href: '/advanced/proxy' },
+    ],
+  },
+];
+
+const currentPath = Astro.url.pathname;
+---
+
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar__overlay" id="sidebar-overlay"></div>
+  <nav class="sidebar__nav">
+    {navigation.map((section) => (
+      <div class="sidebar__section">
+        <h3 class="sidebar__title">{section.title}</h3>
+        <ul class="sidebar__list">
+          {section.links.map((link) => (
+            <li>
+              <a 
+                href={link.href} 
+                class:list={["sidebar__link", { "is-active": currentPath === link.href }]}
+              >
+                {link.title}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ))}
+  </nav>
+</aside>
+
+<style>
+  .sidebar {
+    position: fixed;
+    top: var(--header-height);
+    left: 0;
+    bottom: 0;
+    width: var(--sidebar-width);
+    background: var(--color-bg);
+    border-right: 1px solid var(--color-border-subtle);
+    overflow-y: auto;
+    z-index: calc(var(--z-sticky) - 1);
+    transform: translateX(-100%);
+    transition: transform var(--transition-base);
+  }
+  
+  @media (min-width: 1024px) {
+    .sidebar {
+      transform: translateX(0);
+    }
+  }
+  
+  .sidebar.is-open {
+    transform: translateX(0);
+  }
+  
+  .sidebar__overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: -1;
+  }
+  
+  .sidebar.is-open .sidebar__overlay {
+    display: block;
+  }
+  
+  @media (min-width: 1024px) {
+    .sidebar__overlay {
+      display: none !important;
+    }
+  }
+  
+  .sidebar__nav {
+    padding: var(--spacing-6) var(--spacing-4);
+  }
+  
+  .sidebar__section {
+    margin-bottom: var(--spacing-6);
+  }
+  
+  .sidebar__title {
+    padding: var(--spacing-2) var(--spacing-3);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--color-text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  
+  .sidebar__list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-1);
+  }
+  
+  .sidebar__link {
+    display: block;
+    padding: var(--spacing-2) var(--spacing-3);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    border-radius: var(--radius-md);
+    transition: all var(--transition-fast);
+  }
+  
+  .sidebar__link:hover {
+    color: var(--color-text);
+    background: var(--color-bg-card);
+  }
+  
+  .sidebar__link.is-active {
+    color: var(--color-primary);
+    background: var(--color-primary-glow);
+    font-weight: 500;
+  }
+</style>
+
+<script>
+  function initSidebar() {
+    const overlay = document.getElementById('sidebar-overlay');
+    const sidebar = document.getElementById('sidebar');
+    
+    if (overlay && sidebar) {
+      overlay.addEventListener('click', () => {
+        sidebar.classList.remove('is-open');
+        document.body.style.overflow = '';
+      });
+    }
+    
+    // Close sidebar on link click (mobile)
+    const links = document.querySelectorAll('.sidebar__link');
+    links.forEach(link => {
+      link.addEventListener('click', () => {
+        if (window.innerWidth < 1024) {
+          sidebar?.classList.remove('is-open');
+          document.body.style.overflow = '';
+        }
+      });
+    });
+  }
+  
+  initSidebar();
+  document.addEventListener('astro:after-swap', initSidebar);
+</script>
+

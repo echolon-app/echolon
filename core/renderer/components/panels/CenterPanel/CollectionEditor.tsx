@@ -6,9 +6,10 @@ import {
   RefreshIcon, LinkIcon, SendIcon, ChevronDownIcon, ChevronRightIcon,
   ExpandAllIcon, CollapseAllIcon 
 } from '@/components/ui/icons';
-import { KeyValuePair, AuthConfig, SpecChange, PendingSpecChanges, Folder, CollectionEnvironment, Request, RequestExecution, HttpMethod } from '@/types';
+import { KeyValuePair, AuthConfig, AuthType, SpecChange, PendingSpecChanges, Folder, CollectionEnvironment, Request, RequestExecution, HttpMethod } from '@/types';
 import { specDiffer, requestService, storageManager } from '@/services';
 import { SYNC_FREQUENCY_OPTIONS, HTTP_METHODS, METHOD_COLORS, DEFAULT_HEADERS } from '../../../../shared/constants';
+import { formatDate, formatDateTime, formatDateOr } from '@/utils';
 import { v4 as uuidv4 } from 'uuid';
 
 import { ResponseViewer } from './ResponseViewer';
@@ -379,11 +380,15 @@ const RequestItem: React.FC<RequestItemProps> = ({ request, collection, onUpdate
                       { value: 'basic', label: 'Basic Auth' },
                       { value: 'bearer', label: 'Bearer Token' },
                       { value: 'api-key', label: 'API Key' },
+                      { value: 'oauth2', label: 'OAuth 2.0' },
+                      { value: 'jwt', label: 'JWT Bearer' },
+                      { value: 'digest', label: 'Digest Auth' },
+                      { value: 'aws-signature', label: 'AWS Signature' },
                     ]}
                     value={request.auth.type}
                     onChange={(type) => {
                       onUpdateRequest(request.id, { 
-                        auth: { ...request.auth, type: type as 'none' | 'basic' | 'bearer' | 'api-key' } 
+                        auth: { ...request.auth, type: type as AuthType } 
                       });
                     }}
                   />
@@ -1257,9 +1262,8 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
 
   const someExpanded = checkAnyFolderExpanded();
 
-  const formatDate = (timestamp?: number) => {
-    if (!timestamp) return 'Never';
-    return new Date(timestamp).toLocaleString();
+  const formatLastSync = (timestamp?: number) => {
+    return formatDateOr(timestamp, 'Never', formatDateTime);
   };
 
   // Reference: Get folder structure with requests for operations summary view (excludes root-level requests)
@@ -1596,20 +1600,20 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
               <div className="collection-editor__info-item">
                 <span className="collection-editor__info-label">Created</span>
                 <span className="collection-editor__info-value">
-                  {new Date(collection.createdAt).toLocaleDateString()}
+                  {formatDate(collection.createdAt)}
                 </span>
               </div>
               <div className="collection-editor__info-item">
                 <span className="collection-editor__info-label">Last Modified</span>
                 <span className="collection-editor__info-value">
-                  {new Date(collection.updatedAt).toLocaleDateString()}
+                  {formatDate(collection.updatedAt)}
                 </span>
               </div>
               {collection.importedAt && (
                 <div className="collection-editor__info-item">
                   <span className="collection-editor__info-label">Imported</span>
                   <span className="collection-editor__info-value">
-                    {new Date(collection.importedAt).toLocaleDateString()}
+                    {formatDate(collection.importedAt)}
                   </span>
                 </div>
               )}
@@ -1756,6 +1760,10 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
                   { value: 'basic', label: 'Basic Auth' },
                   { value: 'bearer', label: 'Bearer Token' },
                   { value: 'api-key', label: 'API Key' },
+                  { value: 'oauth2', label: 'OAuth 2.0' },
+                  { value: 'jwt', label: 'JWT Bearer' },
+                  { value: 'digest', label: 'Digest Auth' },
+                  { value: 'aws-signature', label: 'AWS Signature' },
                 ]}
                 value={auth.type}
                 onChange={handleAuthTypeChange}
@@ -1863,6 +1871,307 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
                 </div>
               </div>
             )}
+
+            {auth.type === 'oauth2' && (
+              <div className="collection-editor__auth-fields">
+                <div className="collection-editor__auth-field">
+                  <label>Grant Type</label>
+                  <Dropdown
+                    options={[
+                      { value: 'authorization_code', label: 'Authorization Code' },
+                      { value: 'client_credentials', label: 'Client Credentials' },
+                      { value: 'password', label: 'Password' },
+                      { value: 'implicit', label: 'Implicit' },
+                    ]}
+                    value={auth.oauth2?.grantType || 'authorization_code'}
+                    onChange={(grantType) => handleAuthUpdate({
+                      oauth2: { 
+                        ...auth.oauth2,
+                        grantType: grantType as 'authorization_code' | 'client_credentials' | 'password' | 'implicit',
+                        accessToken: auth.oauth2?.accessToken || '',
+                        tokenType: auth.oauth2?.tokenType || 'Bearer',
+                        clientId: auth.oauth2?.clientId || '',
+                      }
+                    })}
+                  />
+                </div>
+                <div className="collection-editor__auth-field">
+                  <label>Access Token</label>
+                  <Input
+                    value={auth.oauth2?.accessToken || ''}
+                    onChange={(e) => handleAuthUpdate({
+                      oauth2: { 
+                        ...auth.oauth2,
+                        grantType: auth.oauth2?.grantType || 'authorization_code',
+                        accessToken: e.target.value,
+                        tokenType: auth.oauth2?.tokenType || 'Bearer',
+                        clientId: auth.oauth2?.clientId || '',
+                      }
+                    })}
+                    placeholder="Access token"
+                    supportVariables
+                  />
+                </div>
+                <div className="collection-editor__auth-field">
+                  <label>Client ID</label>
+                  <Input
+                    value={auth.oauth2?.clientId || ''}
+                    onChange={(e) => handleAuthUpdate({
+                      oauth2: { 
+                        ...auth.oauth2,
+                        grantType: auth.oauth2?.grantType || 'authorization_code',
+                        accessToken: auth.oauth2?.accessToken || '',
+                        tokenType: auth.oauth2?.tokenType || 'Bearer',
+                        clientId: e.target.value,
+                      }
+                    })}
+                    placeholder="Client ID"
+                    supportVariables
+                  />
+                </div>
+                <div className="collection-editor__auth-field">
+                  <label>Client Secret</label>
+                  <Input
+                    type="password"
+                    value={auth.oauth2?.clientSecret || ''}
+                    onChange={(e) => handleAuthUpdate({
+                      oauth2: { 
+                        ...auth.oauth2,
+                        grantType: auth.oauth2?.grantType || 'authorization_code',
+                        accessToken: auth.oauth2?.accessToken || '',
+                        tokenType: auth.oauth2?.tokenType || 'Bearer',
+                        clientId: auth.oauth2?.clientId || '',
+                        clientSecret: e.target.value,
+                      }
+                    })}
+                    placeholder="Client secret"
+                    supportVariables
+                  />
+                </div>
+                <div className="collection-editor__auth-field">
+                  <label>Token URL</label>
+                  <Input
+                    value={auth.oauth2?.tokenUrl || ''}
+                    onChange={(e) => handleAuthUpdate({
+                      oauth2: { 
+                        ...auth.oauth2,
+                        grantType: auth.oauth2?.grantType || 'authorization_code',
+                        accessToken: auth.oauth2?.accessToken || '',
+                        tokenType: auth.oauth2?.tokenType || 'Bearer',
+                        clientId: auth.oauth2?.clientId || '',
+                        tokenUrl: e.target.value,
+                      }
+                    })}
+                    placeholder="https://oauth.example.com/token"
+                    supportVariables
+                  />
+                </div>
+                <div className="collection-editor__auth-field">
+                  <label>Scope</label>
+                  <Input
+                    value={auth.oauth2?.scope || ''}
+                    onChange={(e) => handleAuthUpdate({
+                      oauth2: { 
+                        ...auth.oauth2,
+                        grantType: auth.oauth2?.grantType || 'authorization_code',
+                        accessToken: auth.oauth2?.accessToken || '',
+                        tokenType: auth.oauth2?.tokenType || 'Bearer',
+                        clientId: auth.oauth2?.clientId || '',
+                        scope: e.target.value,
+                      }
+                    })}
+                    placeholder="read write profile"
+                    supportVariables
+                  />
+                </div>
+              </div>
+            )}
+
+            {auth.type === 'jwt' && (
+              <div className="collection-editor__auth-fields">
+                <div className="collection-editor__auth-field">
+                  <label>JWT Token</label>
+                  <Input
+                    value={auth.jwt?.token || ''}
+                    onChange={(e) => handleAuthUpdate({
+                      jwt: { ...auth.jwt, token: e.target.value }
+                    })}
+                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    supportVariables
+                  />
+                </div>
+                <div className="collection-editor__auth-field">
+                  <label>Prefix</label>
+                  <Input
+                    value={auth.jwt?.prefix || 'Bearer'}
+                    onChange={(e) => handleAuthUpdate({
+                      jwt: { ...auth.jwt, token: auth.jwt?.token || '', prefix: e.target.value }
+                    })}
+                    placeholder="Bearer"
+                    supportVariables
+                  />
+                </div>
+                <div className="collection-editor__auth-field">
+                  <label>Header Name</label>
+                  <Input
+                    value={auth.jwt?.headerName || 'Authorization'}
+                    onChange={(e) => handleAuthUpdate({
+                      jwt: { ...auth.jwt, token: auth.jwt?.token || '', headerName: e.target.value }
+                    })}
+                    placeholder="Authorization"
+                    supportVariables
+                  />
+                </div>
+              </div>
+            )}
+
+            {auth.type === 'digest' && (
+              <div className="collection-editor__auth-fields">
+                <div className="collection-editor__auth-field">
+                  <label>Username</label>
+                  <Input
+                    value={auth.digest?.username || ''}
+                    onChange={(e) => handleAuthUpdate({
+                      digest: { 
+                        ...auth.digest,
+                        username: e.target.value,
+                        password: auth.digest?.password || '',
+                      }
+                    })}
+                    placeholder="Username"
+                    supportVariables
+                  />
+                </div>
+                <div className="collection-editor__auth-field">
+                  <label>Password</label>
+                  <Input
+                    type="password"
+                    value={auth.digest?.password || ''}
+                    onChange={(e) => handleAuthUpdate({
+                      digest: { 
+                        ...auth.digest,
+                        username: auth.digest?.username || '',
+                        password: e.target.value,
+                      }
+                    })}
+                    placeholder="Password"
+                    supportVariables
+                  />
+                </div>
+                <div className="collection-editor__auth-field">
+                  <label>Algorithm</label>
+                  <Dropdown
+                    options={[
+                      { value: 'MD5', label: 'MD5' },
+                      { value: 'MD5-sess', label: 'MD5-sess' },
+                      { value: 'SHA-256', label: 'SHA-256' },
+                      { value: 'SHA-256-sess', label: 'SHA-256-sess' },
+                    ]}
+                    value={auth.digest?.algorithm || 'MD5'}
+                    onChange={(algorithm) => handleAuthUpdate({
+                      digest: { 
+                        ...auth.digest,
+                        username: auth.digest?.username || '',
+                        password: auth.digest?.password || '',
+                        algorithm: algorithm as 'MD5' | 'MD5-sess' | 'SHA-256' | 'SHA-256-sess',
+                      }
+                    })}
+                  />
+                </div>
+              </div>
+            )}
+
+            {auth.type === 'aws-signature' && (
+              <div className="collection-editor__auth-fields">
+                <div className="collection-editor__auth-field">
+                  <label>Access Key ID</label>
+                  <Input
+                    value={auth.awsSignature?.accessKeyId || ''}
+                    onChange={(e) => handleAuthUpdate({
+                      awsSignature: { 
+                        ...auth.awsSignature,
+                        accessKeyId: e.target.value,
+                        secretAccessKey: auth.awsSignature?.secretAccessKey || '',
+                        region: auth.awsSignature?.region || '',
+                        service: auth.awsSignature?.service || '',
+                      }
+                    })}
+                    placeholder="AKIAIOSFODNN7EXAMPLE"
+                    supportVariables
+                  />
+                </div>
+                <div className="collection-editor__auth-field">
+                  <label>Secret Access Key</label>
+                  <Input
+                    type="password"
+                    value={auth.awsSignature?.secretAccessKey || ''}
+                    onChange={(e) => handleAuthUpdate({
+                      awsSignature: { 
+                        ...auth.awsSignature,
+                        accessKeyId: auth.awsSignature?.accessKeyId || '',
+                        secretAccessKey: e.target.value,
+                        region: auth.awsSignature?.region || '',
+                        service: auth.awsSignature?.service || '',
+                      }
+                    })}
+                    placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+                    supportVariables
+                  />
+                </div>
+                <div className="collection-editor__auth-field">
+                  <label>Region</label>
+                  <Input
+                    value={auth.awsSignature?.region || ''}
+                    onChange={(e) => handleAuthUpdate({
+                      awsSignature: { 
+                        ...auth.awsSignature,
+                        accessKeyId: auth.awsSignature?.accessKeyId || '',
+                        secretAccessKey: auth.awsSignature?.secretAccessKey || '',
+                        region: e.target.value,
+                        service: auth.awsSignature?.service || '',
+                      }
+                    })}
+                    placeholder="us-east-1"
+                    supportVariables
+                  />
+                </div>
+                <div className="collection-editor__auth-field">
+                  <label>Service</label>
+                  <Input
+                    value={auth.awsSignature?.service || ''}
+                    onChange={(e) => handleAuthUpdate({
+                      awsSignature: { 
+                        ...auth.awsSignature,
+                        accessKeyId: auth.awsSignature?.accessKeyId || '',
+                        secretAccessKey: auth.awsSignature?.secretAccessKey || '',
+                        region: auth.awsSignature?.region || '',
+                        service: e.target.value,
+                      }
+                    })}
+                    placeholder="s3, execute-api, etc."
+                    supportVariables
+                  />
+                </div>
+                <div className="collection-editor__auth-field">
+                  <label>Session Token (optional)</label>
+                  <Input
+                    value={auth.awsSignature?.sessionToken || ''}
+                    onChange={(e) => handleAuthUpdate({
+                      awsSignature: { 
+                        ...auth.awsSignature,
+                        accessKeyId: auth.awsSignature?.accessKeyId || '',
+                        secretAccessKey: auth.awsSignature?.secretAccessKey || '',
+                        region: auth.awsSignature?.region || '',
+                        service: auth.awsSignature?.service || '',
+                        sessionToken: e.target.value,
+                      }
+                    })}
+                    placeholder="Session token"
+                    supportVariables
+                  />
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1912,13 +2221,13 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
               <div className="collection-editor__info-item">
                 <span className="collection-editor__info-label">Last Synced</span>
                 <span className="collection-editor__info-value">
-                  {formatDate(collection.specSource?.lastSyncedAt)}
+                  {formatLastSync(collection.specSource?.lastSyncedAt)}
                 </span>
               </div>
               <div className="collection-editor__info-item">
                 <span className="collection-editor__info-label">Imported</span>
                 <span className="collection-editor__info-value">
-                  {formatDate(collection.importedAt)}
+                  {formatLastSync(collection.importedAt)}
                 </span>
               </div>
               <div className="collection-editor__info-item">

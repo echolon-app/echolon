@@ -1,0 +1,44 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+
+const headings = [
+  { depth: 2, slug: 'importing', text: 'Importing from Postman' },
+  { depth: 2, slug: 'whats-imported', text: "What's Imported" },
+];
+---
+
+<DocsLayout title="Postman" headings={headings}>
+  <div class="prose">
+    <h1>Postman Import</h1>
+    <p class="lead">
+      Import your Postman collections and environments.
+    </p>
+    
+    <h2 id="importing">Importing from Postman</h2>
+    <p>
+      Export your Postman collection as JSON, then import it into Echolon via File → Import. Your requests, folders, and variables will be preserved.
+    </p>
+    
+    <h2 id="whats-imported">What's Imported</h2>
+    <ul class="list">
+      <li>Requests (all methods)</li>
+      <li>Folder structure</li>
+      <li>Headers and body</li>
+      <li>Collection variables</li>
+      <li>Environments</li>
+      <li>Pre-request and test scripts (basic support)</li>
+    </ul>
+  </div>
+</DocsLayout>
+
+<style>
+  .prose { color: var(--color-text-secondary); line-height: var(--line-height-relaxed); }
+  .prose h1 { font-size: var(--font-size-4xl); color: var(--color-text); margin-bottom: var(--spacing-4); }
+  .prose h2 { font-size: var(--font-size-2xl); color: var(--color-text); margin-top: var(--spacing-10); margin-bottom: var(--spacing-4); padding-top: var(--spacing-4); border-top: 1px solid var(--color-border-subtle); }
+  .prose h2:first-of-type { border-top: none; padding-top: 0; }
+  .prose p { margin-bottom: var(--spacing-4); }
+  .prose .lead { font-size: var(--font-size-lg); margin-bottom: var(--spacing-6); }
+  .prose .list { margin: var(--spacing-4) 0; padding-left: var(--spacing-6); }
+  .prose .list li { margin-bottom: var(--spacing-2); list-style: disc; }
+</style>
+

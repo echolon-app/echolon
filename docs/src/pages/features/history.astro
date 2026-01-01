@@ -1,0 +1,43 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+
+const headings = [
+  { depth: 2, slug: 'overview', text: 'Overview' },
+  { depth: 2, slug: 'viewing-history', text: 'Viewing History' },
+  { depth: 2, slug: 'restoring-requests', text: 'Restoring Requests' },
+];
+---
+
+<DocsLayout title="History" headings={headings}>
+  <div class="prose">
+    <h1>History</h1>
+    <p class="lead">
+      Access your recent requests and responses.
+    </p>
+    
+    <h2 id="overview">Overview</h2>
+    <p>
+      Echolon automatically saves your request history, making it easy to review past API calls and their responses.
+    </p>
+    
+    <h2 id="viewing-history">Viewing History</h2>
+    <p>
+      Open the History panel from the sidebar to see your recent requests. Each entry shows the method, URL, status code, and timestamp.
+    </p>
+    
+    <h2 id="restoring-requests">Restoring Requests</h2>
+    <p>
+      Click any history entry to restore it as your current request. You can also save history items to a collection for future use.
+    </p>
+  </div>
+</DocsLayout>
+
+<style>
+  .prose { color: var(--color-text-secondary); line-height: var(--line-height-relaxed); }
+  .prose h1 { font-size: var(--font-size-4xl); color: var(--color-text); margin-bottom: var(--spacing-4); }
+  .prose h2 { font-size: var(--font-size-2xl); color: var(--color-text); margin-top: var(--spacing-10); margin-bottom: var(--spacing-4); padding-top: var(--spacing-4); border-top: 1px solid var(--color-border-subtle); }
+  .prose h2:first-of-type { border-top: none; padding-top: 0; }
+  .prose p { margin-bottom: var(--spacing-4); }
+  .prose .lead { font-size: var(--font-size-lg); margin-bottom: var(--spacing-6); }
+</style>
+

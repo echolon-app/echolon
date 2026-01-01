@@ -87,6 +87,13 @@ function buildHeaders(
     headers['Authorization'] = `Bearer ${interpolate(auth.bearer.token)}`;
   } else if (auth.type === 'api-key' && auth.apiKey && auth.apiKey.addTo === 'header') {
     headers[interpolate(auth.apiKey.key)] = interpolate(auth.apiKey.value);
+  } else if (auth.type === 'oauth2' && auth.oauth2?.accessToken) {
+    const tokenType = auth.oauth2.tokenType || 'Bearer';
+    headers['Authorization'] = `${tokenType} ${interpolate(auth.oauth2.accessToken)}`;
+  } else if (auth.type === 'jwt' && auth.jwt?.token) {
+    const prefix = auth.jwt.prefix || 'Bearer';
+    const headerName = auth.jwt.headerName || 'Authorization';
+    headers[headerName] = `${prefix} ${interpolate(auth.jwt.token)}`;
   }
 
   // Content-Type for body

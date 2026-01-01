@@ -1,0 +1,174 @@
+---
+interface Props {
+  headings: { depth: number; slug: string; text: string }[];
+}
+
+const { headings } = Astro.props;
+const filteredHeadings = headings.filter(h => h.depth >= 2 && h.depth <= 3);
+---
+
+{filteredHeadings.length > 0 && (
+  <aside class="toc">
+    <div class="toc__container">
+      <h4 class="toc__title">On this page</h4>
+      <nav class="toc__nav">
+        <ul class="toc__list">
+          {filteredHeadings.map((heading) => (
+            <li class:list={["toc__item", `toc__item--${heading.depth}`]}>
+              <a href={`#${heading.slug}`} class="toc__link" data-slug={heading.slug}>
+                {heading.text}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    </div>
+  </aside>
+)}
+
+<style>
+  .toc {
+    display: none;
+    position: fixed;
+    top: var(--header-height);
+    right: 0;
+    width: var(--toc-width);
+    height: calc(100vh - var(--header-height));
+    padding: var(--spacing-8) var(--spacing-4);
+    overflow-y: auto;
+  }
+  
+  @media (min-width: 1280px) {
+    .toc {
+      display: block;
+    }
+  }
+  
+  .toc__container {
+    position: sticky;
+    top: var(--spacing-8);
+  }
+  
+  .toc__title {
+    padding: var(--spacing-2) 0;
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--color-text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--spacing-3);
+  }
+  
+  .toc__list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-1);
+    border-left: 1px solid var(--color-border-subtle);
+  }
+  
+  .toc__item {
+    padding-left: var(--spacing-4);
+    margin-left: -1px;
+    border-left: 2px solid transparent;
+    transition: border-color var(--transition-fast);
+  }
+  
+  .toc__item--3 {
+    padding-left: var(--spacing-6);
+  }
+  
+  .toc__item.is-active {
+    border-left-color: var(--color-primary);
+  }
+  
+  .toc__link {
+    display: block;
+    padding: var(--spacing-1) 0;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-tertiary);
+    line-height: var(--line-height-snug);
+    transition: color var(--transition-fast);
+  }
+  
+  .toc__link:hover {
+    color: var(--color-text);
+  }
+  
+  .toc__item.is-active .toc__link {
+    color: var(--color-primary);
+    font-weight: 500;
+  }
+</style>
+
+<script>
+  function initTocHighlighting() {
+    const tocLinks = document.querySelectorAll('.toc__link');
+    const tocItems = document.querySelectorAll('.toc__item');
+    
+    if (tocLinks.length === 0) return;
+    
+    // Get all headings that are in the TOC
+    const headingSlugs = Array.from(tocLinks).map(link => link.getAttribute('data-slug'));
+    const headings = headingSlugs
+      .map(slug => document.getElementById(slug!))
+      .filter((el): el is HTMLElement => el !== null);
+    
+    if (headings.length === 0) return;
+    
+    function getActiveHeading() {
+      const scrollY = window.scrollY;
+      const offset = 100; // Offset from top to trigger active state
+      
+      // Find the heading that's currently in view
+      let activeIndex = 0;
+      
+      for (let i = headings.length - 1; i >= 0; i--) {
+        const heading = headings[i];
+        const rect = heading.getBoundingClientRect();
+        const top = rect.top + scrollY - offset;
+        
+        if (scrollY >= top) {
+          activeIndex = i;
+          break;
+        }
+      }
+      
+      return headingSlugs[activeIndex];
+    }
+    
+    function updateActiveLink() {
+      const activeSlug = getActiveHeading();
+      
+      tocItems.forEach((item, index) => {
+        const link = item.querySelector('.toc__link');
+        const slug = link?.getAttribute('data-slug');
+        
+        if (slug === activeSlug) {
+          item.classList.add('is-active');
+        } else {
+          item.classList.remove('is-active');
+        }
+      });
+    }
+    
+    // Update on scroll with throttling
+    let ticking = false;
+    window.addEventListener('scroll', () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          updateActiveLink();
+          ticking = false;
+        });
+        ticking = true;
+      }
+    });
+    
+    // Initial update
+    updateActiveLink();
+  }
+  
+  // Run on page load
+  document.addEventListener('DOMContentLoaded', initTocHighlighting);
+  // Also run on Astro page transitions
+  document.addEventListener('astro:page-load', initTocHighlighting);
+</script>

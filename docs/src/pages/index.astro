@@ -1,0 +1,131 @@
+---
+import DocsLayout from '../layouts/DocsLayout.astro';
+import { Card } from '../components/ui/Card';
+import { Callout } from '../components/ui/Callout';
+
+const headings = [
+  { depth: 2, slug: 'what-is-echolon', text: 'What is Echolon?' },
+  { depth: 2, slug: 'key-features', text: 'Key Features' },
+  { depth: 2, slug: 'getting-started', text: 'Getting Started' },
+];
+---
+
+<DocsLayout title="Introduction" headings={headings}>
+  <div class="prose">
+    <h1>Introduction</h1>
+    <p class="lead">
+      Echolon is a powerful, local-first API client built for modern developers. 
+      It's an open source alternative to Postman with Git integration, offline support, 
+      and multi-protocol capabilities.
+    </p>
+    
+    <h2 id="what-is-echolon">What is Echolon?</h2>
+    <p>
+      Echolon is designed to help developers build, test, and document APIs efficiently. 
+      Unlike cloud-based alternatives, Echolon stores all your data locally, giving you 
+      complete control over your API collections, environments, and secrets.
+    </p>
+    
+    <Callout type="tip" title="Privacy First" client:load>
+      Your data never leaves your machine. Echolon is built with privacy at its core, 
+      storing everything locally in plain-text files that you can version control with Git.
+    </Callout>
+    
+    <h2 id="key-features">Key Features</h2>
+    
+    <div class="features-grid">
+      <Card 
+        title="Multi-Protocol Support"
+        description="REST, GraphQL, WebSocket, and gRPC - all in one tool."
+        client:load
+      />
+      <Card 
+        title="Git Integration"
+        description="Sync your collections and environments with Git for version control and team collaboration."
+        client:load
+      />
+      <Card 
+        title="Offline First"
+        description="Work without an internet connection. Your data is stored locally and always accessible."
+        client:load
+      />
+      <Card 
+        title="Import & Export"
+        description="Import from Postman, Insomnia, OpenAPI, and more. Export to share with your team."
+        client:load
+      />
+    </div>
+    
+    <h2 id="getting-started">Getting Started</h2>
+    <p>
+      Ready to get started with Echolon? Choose your preferred client:
+    </p>
+    
+    <div class="cards-grid">
+      <Card 
+        title="Desktop App" 
+        description="Full-featured desktop application for macOS, Windows, and Linux."
+        href="/clients/desktop"
+        client:load
+      />
+      <Card 
+        title="Web App" 
+        description="Use Echolon directly in your browser. No installation required."
+        href="/clients/web"
+        client:load
+      />
+    </div>
+  </div>
+</DocsLayout>
+
+<style>
+  .prose {
+    color: var(--color-text-secondary);
+    line-height: var(--line-height-relaxed);
+  }
+  
+  .prose h1 {
+    font-size: var(--font-size-4xl);
+    color: var(--color-text);
+    margin-bottom: var(--spacing-4);
+  }
+  
+  .prose h2 {
+    font-size: var(--font-size-2xl);
+    color: var(--color-text);
+    margin-top: var(--spacing-10);
+    margin-bottom: var(--spacing-4);
+    padding-top: var(--spacing-4);
+    border-top: 1px solid var(--color-border-subtle);
+  }
+  
+  .prose h2:first-of-type {
+    border-top: none;
+    padding-top: 0;
+  }
+  
+  .prose p {
+    margin-bottom: var(--spacing-4);
+  }
+  
+  .prose .lead {
+    font-size: var(--font-size-lg);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-8);
+  }
+  
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--spacing-4);
+    margin: var(--spacing-6) 0;
+  }
+  
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--spacing-4);
+    margin: var(--spacing-6) 0;
+  }
+</style>
+

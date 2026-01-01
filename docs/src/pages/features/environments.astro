@@ -1,0 +1,48 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+
+const headings = [
+  { depth: 2, slug: 'overview', text: 'Overview' },
+  { depth: 2, slug: 'creating-environments', text: 'Creating Environments' },
+  { depth: 2, slug: 'using-variables', text: 'Using Variables' },
+];
+---
+
+<DocsLayout title="Environments" headings={headings}>
+  <div class="prose">
+    <h1>Environments</h1>
+    <p class="lead">
+      Switch between development, staging, and production configurations effortlessly.
+    </p>
+    
+    <h2 id="overview">Overview</h2>
+    <p>
+      Environments let you define sets of variables that change based on your context. Switch between local development and production without modifying your requests.
+    </p>
+    
+    <h2 id="creating-environments">Creating Environments</h2>
+    <p>
+      Create environments from the Environments panel in the sidebar. Define variables like <code>baseUrl</code>, <code>apiKey</code>, or any custom values.
+    </p>
+    
+    <h2 id="using-variables">Using Variables</h2>
+    <p>
+      Reference environment variables in your requests using double curly braces:
+    </p>
+    <pre><code>GET &#123;&#123;baseUrl&#125;&#125;/api/users</code></pre>
+  </div>
+</DocsLayout>
+
+<style>
+  .prose { color: var(--color-text-secondary); line-height: var(--line-height-relaxed); }
+  .prose h1 { font-size: var(--font-size-4xl); color: var(--color-text); margin-bottom: var(--spacing-4); }
+  .prose h2 { font-size: var(--font-size-2xl); color: var(--color-text); margin-top: var(--spacing-10); margin-bottom: var(--spacing-4); padding-top: var(--spacing-4); border-top: 1px solid var(--color-border-subtle); }
+  .prose h2:first-of-type { border-top: none; padding-top: 0; }
+  .prose p { margin-bottom: var(--spacing-4); }
+  .prose .lead { font-size: var(--font-size-lg); margin-bottom: var(--spacing-6); }
+  .prose code { padding: var(--spacing-1) var(--spacing-2); font-size: var(--font-size-sm); background: var(--color-bg-tertiary); border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
+  .prose pre { margin: var(--spacing-4) 0; padding: var(--spacing-4); background: var(--color-bg-tertiary); border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow-x: auto; }
+  .prose pre code { padding: 0; background: none; border: none; }
+  .prose a { color: var(--color-primary); text-decoration: underline; text-underline-offset: 2px; }
+</style>
+

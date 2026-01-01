@@ -34,9 +34,11 @@ coverage/
 *.temp
 
 
-docs/
+secrets/
 landing/
 sample-api/
 proxy-server/
 
 TODO.md
+
+.env*

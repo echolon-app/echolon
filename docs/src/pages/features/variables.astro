@@ -1,0 +1,52 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+
+const headings = [
+  { depth: 2, slug: 'overview', text: 'Overview' },
+  { depth: 2, slug: 'variable-types', text: 'Variable Types' },
+  { depth: 2, slug: 'syntax', text: 'Syntax' },
+];
+---
+
+<DocsLayout title="Variables" headings={headings}>
+  <div class="prose">
+    <h1>Variables</h1>
+    <p class="lead">
+      Use variables to make your requests dynamic and reusable.
+    </p>
+    
+    <h2 id="overview">Overview</h2>
+    <p>
+      Variables allow you to store and reuse values across your requests. They can be defined at different scopes and referenced using the <code>&#123;&#123;variableName&#125;&#125;</code> syntax.
+    </p>
+    
+    <h2 id="variable-types">Variable Types</h2>
+    <ul class="list">
+      <li><strong>Environment Variables:</strong> Scoped to the selected environment</li>
+      <li><strong>Collection Variables:</strong> Scoped to a specific collection</li>
+      <li><strong>Global Variables:</strong> Available everywhere</li>
+    </ul>
+    
+    <h2 id="syntax">Syntax</h2>
+    <p>
+      Reference variables anywhere in your requests:
+    </p>
+    <pre><code>&#123;&#123;baseUrl&#125;&#125;/users/&#123;&#123;userId&#125;&#125;</code></pre>
+  </div>
+</DocsLayout>
+
+<style>
+  .prose { color: var(--color-text-secondary); line-height: var(--line-height-relaxed); }
+  .prose h1 { font-size: var(--font-size-4xl); color: var(--color-text); margin-bottom: var(--spacing-4); }
+  .prose h2 { font-size: var(--font-size-2xl); color: var(--color-text); margin-top: var(--spacing-10); margin-bottom: var(--spacing-4); padding-top: var(--spacing-4); border-top: 1px solid var(--color-border-subtle); }
+  .prose h2:first-of-type { border-top: none; padding-top: 0; }
+  .prose p { margin-bottom: var(--spacing-4); }
+  .prose .lead { font-size: var(--font-size-lg); margin-bottom: var(--spacing-6); }
+  .prose .list { margin: var(--spacing-4) 0; padding-left: var(--spacing-6); }
+  .prose .list li { margin-bottom: var(--spacing-2); list-style: disc; }
+  .prose strong { color: var(--color-text); font-weight: 600; }
+  .prose code { padding: var(--spacing-1) var(--spacing-2); font-size: var(--font-size-sm); background: var(--color-bg-tertiary); border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
+  .prose pre { margin: var(--spacing-4) 0; padding: var(--spacing-4); background: var(--color-bg-tertiary); border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow-x: auto; }
+  .prose pre code { padding: 0; background: none; border: none; }
+</style>
+

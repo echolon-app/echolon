@@ -1,0 +1,50 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+
+const headings = [
+  { depth: 2, slug: 'overview', text: 'Overview' },
+  { depth: 2, slug: 'features', text: 'Features' },
+  { depth: 2, slug: 'download', text: 'Download' },
+];
+---
+
+<DocsLayout title="Desktop App" headings={headings}>
+  <div class="prose">
+    <h1>Desktop App</h1>
+    <p class="lead">
+      The full-featured Echolon desktop application for macOS, Windows, and Linux.
+    </p>
+    
+    <h2 id="overview">Overview</h2>
+    <p>
+      The Echolon desktop app provides the complete API development experience with native performance and offline support.
+    </p>
+    
+    <h2 id="features">Features</h2>
+    <ul class="list">
+      <li>Native performance on all platforms</li>
+      <li>Full offline support</li>
+      <li>Local file system access for Git integration</li>
+      <li>System-level proxy configuration</li>
+      <li>Native keyboard shortcuts</li>
+    </ul>
+    
+    <h2 id="download">Download</h2>
+    <p>
+      Download the latest version from the <a href="https://echolon.app/download">download page</a>.
+    </p>
+  </div>
+</DocsLayout>
+
+<style>
+  .prose { color: var(--color-text-secondary); line-height: var(--line-height-relaxed); }
+  .prose h1 { font-size: var(--font-size-4xl); color: var(--color-text); margin-bottom: var(--spacing-4); }
+  .prose h2 { font-size: var(--font-size-2xl); color: var(--color-text); margin-top: var(--spacing-10); margin-bottom: var(--spacing-4); padding-top: var(--spacing-4); border-top: 1px solid var(--color-border-subtle); }
+  .prose h2:first-of-type { border-top: none; padding-top: 0; }
+  .prose p { margin-bottom: var(--spacing-4); }
+  .prose .lead { font-size: var(--font-size-lg); margin-bottom: var(--spacing-6); }
+  .prose .list { margin: var(--spacing-4) 0; padding-left: var(--spacing-6); }
+  .prose .list li { margin-bottom: var(--spacing-2); list-style: disc; }
+  .prose a { color: var(--color-primary); text-decoration: underline; text-underline-offset: 2px; }
+</style>
+

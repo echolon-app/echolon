@@ -1,6 +1,6 @@
 # Echolon
 
-A powerful, local-first API client - a Postman alternative built with Electron and React.
+A powerful, git-native and local-first API client built with Electron and React.
 
 ## Features
 

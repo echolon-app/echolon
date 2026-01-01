@@ -4,6 +4,7 @@ import { useRequest, useTheme } from '@/contexts';
 import { HistoryEntry, Request } from '@/types';
 import { METHOD_COLORS } from '../../../../shared/constants';
 import { generateCurl } from '@/utils/codeGenerators';
+import { formatRelativeDate } from '@/utils';
 import './RequestHistoryModal.css';
 
 const getMethodColor = (method: string): string => {
@@ -56,27 +57,6 @@ export const RequestHistoryModal: React.FC<RequestHistoryModalProps> = ({
     }
   }, [isOpen, requestHistory]);
 
-  const formatDate = (timestamp: number) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const isToday = date.toDateString() === now.toDateString();
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const isYesterday = date.toDateString() === yesterday.toDateString();
-
-    if (isToday) {
-      return `Today at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    }
-    if (isYesterday) {
-      return `Yesterday at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    }
-    return date.toLocaleDateString([], { 
-      month: 'short', 
-      day: 'numeric',
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
-  };
 
   const formatDuration = (ms: number) => {
     if (ms < 1000) return `${ms}ms`;
@@ -170,7 +150,7 @@ export const RequestHistoryModal: React.FC<RequestHistoryModalProps> = ({
                     <div className="request-history-modal__item-meta">
                       <span className="request-history-modal__item-time">
                         <ClockIcon />
-                        {formatDate(entry.timestamp)}
+                        {formatRelativeDate(entry.timestamp)}
                       </span>
                       <span className="request-history-modal__item-duration">
                         {formatDuration(entry.duration)}

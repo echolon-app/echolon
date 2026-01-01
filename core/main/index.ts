@@ -1,5 +1,6 @@
 import { app, BrowserWindow, shell, ipcMain } from 'electron';
 import path from 'path';
+import crypto from 'crypto';
 import { setupMenu } from './menu';
 import { setupUpdater } from './updater';
 import { makeHttpRequest, HttpRequestOptions, HttpResponseResult } from './httpRequest';
@@ -19,6 +20,7 @@ const IPC_CHANNELS = {
   UPDATE_MOCK_ROUTES: 'update-mock-routes',
   GET_LOCAL_HOSTNAME: 'get-local-hostname',
   FETCH_URL_CONTENT: 'fetch-url-content',
+  EXECUTE_SCRIPT: 'execute-script',
 } as const;
 
 // File Storage IPC channels
@@ -209,6 +211,153 @@ function setupIpcHandlers(): void {
   // Get app version
   ipcMain.handle(IPC_CHANNELS.GET_APP_VERSION, () => {
     return app.getVersion();
+  });
+
+  // Execute script - runs in main process to bypass CSP restrictions
+  ipcMain.handle(IPC_CHANNELS.EXECUTE_SCRIPT, async (_event, options: {
+    script: string;
+    context: {
+      request: { url: string; method: string; headers: Record<string, string>; body?: string | null };
+      response?: { status: number; statusText: string; headers: Record<string, string>; body: string; responseTime: number };
+      envVars: Record<string, string>;
+      runtimeVars: Record<string, string>;
+    };
+  }) => {
+    const { script, context } = options;
+    const startTime = Date.now();
+    const logs: Array<{ type: 'log' | 'warn' | 'error' | 'info'; args: string[]; timestamp: number }> = [];
+    
+    // Store for variables set during script execution
+    const updatedEnvVars: Record<string, string> = { ...context.envVars };
+    const updatedRuntimeVars: Record<string, string> = { ...context.runtimeVars };
+
+    if (!script || script.trim() === '') {
+      return { logs, duration: 0, envVars: updatedEnvVars, runtimeVars: updatedRuntimeVars };
+    }
+
+    // Create log capture
+    const createLogCapture = (type: 'log' | 'warn' | 'error' | 'info') => {
+      return (...args: unknown[]) => {
+        logs.push({
+          type,
+          args: args.map(arg => {
+            if (typeof arg === 'string') return arg;
+            try {
+              return JSON.stringify(arg, null, 2);
+            } catch {
+              return String(arg);
+            }
+          }),
+          timestamp: Date.now(),
+        });
+      };
+    };
+
+    const customConsole = {
+      log: createLogCapture('log'),
+      warn: createLogCapture('warn'),
+      error: createLogCapture('error'),
+      info: createLogCapture('info'),
+    };
+
+    // Create the `echo` API object
+    const echo = {
+      getEnvVar: (name: string) => updatedEnvVars[name],
+      setEnvVar: (name: string, value: string) => { updatedEnvVars[name] = value; },
+      getVar: (name: string) => updatedRuntimeVars[name],
+      setVar: (name: string, value: string) => { updatedRuntimeVars[name] = value; },
+      sleep: (ms: number) => new Promise(resolve => setTimeout(resolve, ms)),
+    };
+
+    // Create the `req` request object
+    const reqData = { ...context.request };
+    const req = {
+      url: reqData.url,
+      method: reqData.method,
+      headers: { ...reqData.headers },
+      body: reqData.body || null,
+      getUrl: () => reqData.url,
+      getMethod: () => reqData.method,
+      getHeaders: () => ({ ...reqData.headers }),
+      getHeader: (name: string) => {
+        const lowerName = name.toLowerCase();
+        const key = Object.keys(reqData.headers).find(k => k.toLowerCase() === lowerName);
+        return key ? reqData.headers[key] : undefined;
+      },
+      getBody: () => reqData.body,
+      setUrl: (url: string) => { reqData.url = url; req.url = url; },
+      setMethod: (method: string) => { reqData.method = method; req.method = method; },
+      setHeaders: (headers: Record<string, string>) => { reqData.headers = { ...headers }; req.headers = { ...headers }; },
+      setHeader: (name: string, value: string) => { reqData.headers[name] = value; req.headers[name] = value; },
+      setBody: (body: string) => { reqData.body = body; req.body = body; },
+    };
+
+    // Create the `res` response object (only for post-request scripts)
+    const res = context.response ? {
+      status: context.response.status,
+      statusText: context.response.statusText,
+      headers: { ...context.response.headers },
+      body: context.response.body,
+      responseTime: context.response.responseTime,
+      getStatus: () => context.response!.status,
+      getStatusText: () => context.response!.statusText,
+      getHeaders: () => ({ ...context.response!.headers }),
+      getHeader: (name: string) => {
+        const lowerName = name.toLowerCase();
+        const key = Object.keys(context.response!.headers).find(k => k.toLowerCase() === lowerName);
+        return key ? context.response!.headers[key] : undefined;
+      },
+      getBody: () => context.response!.body,
+      getResponseTime: () => context.response!.responseTime,
+    } : null;
+
+    try {
+      // Create sandboxed function - this works in Node.js (main process) without CSP
+      const scriptFunction = new Function(
+        'console', 'echo', 'req', 'res',
+        'crypto', 'btoa', 'atob', 'Date', 'Math', 'JSON',
+        'Array', 'Object', 'String', 'Number', 'Boolean',
+        'parseInt', 'parseFloat', 'isNaN', 'isFinite',
+        'encodeURIComponent', 'decodeURIComponent', 'encodeURI', 'decodeURI',
+        script
+      );
+
+      // Node.js doesn't have btoa/atob natively, so we provide them
+      const btoa = (str: string) => Buffer.from(str, 'binary').toString('base64');
+      const atob = (str: string) => Buffer.from(str, 'base64').toString('binary');
+
+      scriptFunction(
+        customConsole, echo, req, res,
+        crypto, btoa, atob, Date, Math, JSON,
+        Array, Object, String, Number, Boolean,
+        parseInt, parseFloat, isNaN, isFinite,
+        encodeURIComponent, decodeURIComponent, encodeURI, decodeURI
+      );
+
+      return {
+        logs,
+        duration: Date.now() - startTime,
+        envVars: updatedEnvVars,
+        runtimeVars: updatedRuntimeVars,
+      };
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      const errorStack = err instanceof Error ? err.stack : undefined;
+      
+      logs.push({
+        type: 'error',
+        args: [`Script Error: ${errorMessage}${errorStack ? `\n${errorStack}` : ''}`],
+        timestamp: Date.now(),
+      });
+
+      return {
+        logs,
+        error: errorMessage,
+        duration: Date.now() - startTime,
+        envVars: updatedEnvVars,
+        runtimeVars: updatedRuntimeVars,
+      };
+    }
   });
 
   // Fetch URL content - for spec import, bypasses CORS

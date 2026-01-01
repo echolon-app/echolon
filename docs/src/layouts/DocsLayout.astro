@@ -1,0 +1,118 @@
+---
+import Navbar from '../components/Navbar.astro';
+import Sidebar from '../components/Sidebar.astro';
+import TableOfContents from '../components/TableOfContents.astro';
+import ArticleNav from '../components/ArticleNav.astro';
+
+interface Props {
+  title: string;
+  description?: string;
+  headings?: { depth: number; slug: string; text: string }[];
+}
+
+const { 
+  title, 
+  description = "Echolon Documentation - Learn how to use Echolon, a powerful local-first API client.",
+  headings = []
+} = Astro.props;
+
+const siteUrl = Astro.site || new URL('http://localhost:4321');
+const canonicalURL = new URL(Astro.url.pathname, siteUrl);
+---
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content={Astro.generator} />
+    
+    <title>{title} - Echolon Docs</title>
+    <meta name="title" content={`${title} - Echolon Docs`} />
+    <meta name="description" content={description} />
+    
+    <link rel="canonical" href={canonicalURL} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonicalURL} />
+    <meta property="og:title" content={`${title} - Echolon Docs`} />
+    <meta property="og:description" content={description} />
+    
+    <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    
+    <script is:inline>
+      (function() {
+        const stored = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const theme = stored || (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
+  </head>
+  <body>
+    <Navbar />
+    
+    <div class="docs-layout">
+      <Sidebar />
+      
+      <main class="docs-main">
+        <article class="docs-content">
+          <slot />
+          <ArticleNav />
+        </article>
+        
+        {headings.length > 0 && (
+          <TableOfContents headings={headings} />
+        )}
+      </main>
+    </div>
+    
+    <style is:global>
+      @import '../styles/global.css';
+    </style>
+    
+    <style>
+      .docs-layout {
+        display: flex;
+        min-height: calc(100vh - var(--header-height));
+        padding-top: var(--header-height);
+      }
+      
+      .docs-main {
+        flex: 1;
+        display: flex;
+        max-width: 100%;
+        overflow-x: hidden;
+      }
+      
+      .docs-content {
+        flex: 1;
+        max-width: var(--content-width);
+        padding: var(--spacing-8) var(--spacing-6);
+        margin: 0 auto;
+      }
+      
+      @media (min-width: 1024px) {
+        .docs-main {
+          margin-left: var(--sidebar-width);
+        }
+        
+        .docs-content {
+          padding: var(--spacing-10) var(--spacing-8);
+        }
+      }
+      
+      @media (min-width: 1280px) {
+        .docs-content {
+          margin-right: var(--toc-width);
+        }
+      }
+    </style>
+  </body>
+</html>
+

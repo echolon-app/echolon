@@ -1,0 +1,68 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+
+const headings = [
+  { depth: 2, slug: 'overview', text: 'Overview' },
+  { depth: 2, slug: 'methods', text: 'HTTP Methods' },
+  { depth: 2, slug: 'headers', text: 'Headers' },
+  { depth: 2, slug: 'body', text: 'Request Body' },
+];
+---
+
+<DocsLayout title="REST API" headings={headings}>
+  <div class="prose">
+    <h1>REST API</h1>
+    <p class="lead">
+      Make HTTP requests to REST APIs with full control over every aspect of the request.
+    </p>
+    
+    <h2 id="overview">Overview</h2>
+    <p>
+      Echolon supports all standard HTTP methods and provides a clean interface for building REST API requests.
+    </p>
+    
+    <h2 id="methods">HTTP Methods</h2>
+    <ul class="list">
+      <li><strong>GET</strong> — Retrieve data</li>
+      <li><strong>POST</strong> — Create new resources</li>
+      <li><strong>PUT</strong> — Update existing resources</li>
+      <li><strong>PATCH</strong> — Partial updates</li>
+      <li><strong>DELETE</strong> — Remove resources</li>
+      <li><strong>HEAD, OPTIONS</strong> — Metadata requests</li>
+      <li><strong>Custom</strong> — Add custom HTTP methods</li>
+    </ul>
+    
+    <h2 id="headers">Headers</h2>
+    <p>
+      Add custom headers to your requests. Common headers like <code>Content-Type</code> and <code>Authorization</code> are easily configured.
+    </p>
+    
+    <h2 id="body">Request Body</h2>
+    <p>
+      Echolon supports multiple body formats:
+    </p>
+    <ul class="list">
+      <li>JSON</li>
+      <li>XML</li>
+      <li>Form data (URL encoded)</li>
+      <li>Multipart form data</li>
+      <li>Raw text/XML/HTML</li>
+      <li>Base64 encoded</li>
+      <li>Binary files</li>
+    </ul>
+  </div>
+</DocsLayout>
+
+<style>
+  .prose { color: var(--color-text-secondary); line-height: var(--line-height-relaxed); }
+  .prose h1 { font-size: var(--font-size-4xl); color: var(--color-text); margin-bottom: var(--spacing-4); }
+  .prose h2 { font-size: var(--font-size-2xl); color: var(--color-text); margin-top: var(--spacing-10); margin-bottom: var(--spacing-4); padding-top: var(--spacing-4); border-top: 1px solid var(--color-border-subtle); }
+  .prose h2:first-of-type { border-top: none; padding-top: 0; }
+  .prose p { margin-bottom: var(--spacing-4); }
+  .prose .lead { font-size: var(--font-size-lg); margin-bottom: var(--spacing-6); }
+  .prose .list { margin: var(--spacing-4) 0; padding-left: var(--spacing-6); }
+  .prose .list li { margin-bottom: var(--spacing-2); list-style: disc; }
+  .prose strong { color: var(--color-text); font-weight: 600; }
+  .prose code { padding: var(--spacing-1) var(--spacing-2); font-size: var(--font-size-sm); background: var(--color-bg-tertiary); border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
+</style>
+

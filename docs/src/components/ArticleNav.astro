@@ -1,0 +1,111 @@
+---
+// Navigation links for bottom of articles
+const allPages = [
+  { title: 'Introduction', href: '/' },
+  { title: 'Quick Start', href: '/getting-started/quick-start' },
+  { title: 'Installation', href: '/getting-started/installation' },
+  { title: 'Desktop App', href: '/clients/desktop' },
+  { title: 'Web App', href: '/clients/web' },
+  { title: 'Workspaces', href: '/features/workspaces' },
+  { title: 'Collections', href: '/features/collections' },
+  { title: 'Environments', href: '/features/environments' },
+  { title: 'Variables', href: '/features/variables' },
+  { title: 'Scripts', href: '/features/scripts' },
+  { title: 'History', href: '/features/history' },
+  { title: 'Shortcuts', href: '/features/shortcuts' },
+  { title: 'REST API', href: '/protocols/rest' },
+  { title: 'GraphQL', href: '/protocols/graphql' },
+  { title: 'WebSocket', href: '/protocols/websocket' },
+  { title: 'gRPC', href: '/protocols/grpc' },
+  { title: 'OpenAPI / Swagger', href: '/import-export/openapi' },
+  { title: 'Postman', href: '/import-export/postman' },
+  { title: 'Insomnia', href: '/import-export/insomnia' },
+  { title: 'Git Integration', href: '/advanced/git-integration' },
+  { title: 'Proxy Settings', href: '/advanced/proxy' },
+];
+
+const currentPath = Astro.url.pathname;
+const currentIndex = allPages.findIndex(page => page.href === currentPath);
+
+const prevPage = currentIndex > 0 ? allPages[currentIndex - 1] : null;
+const nextPage = currentIndex < allPages.length - 1 ? allPages[currentIndex + 1] : null;
+---
+
+{(prevPage || nextPage) && (
+  <nav class="article-nav" aria-label="Page navigation">
+    <div class="article-nav__prev">
+      {prevPage && (
+        <a href={prevPage.href} class="article-nav__link">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+          <span>{prevPage.title}</span>
+        </a>
+      )}
+    </div>
+    <div class="article-nav__next">
+      {nextPage && (
+        <a href={nextPage.href} class="article-nav__link">
+          <span>{nextPage.title}</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </a>
+      )}
+    </div>
+  </nav>
+)}
+
+<style>
+  .article-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: var(--spacing-12);
+    padding-top: var(--spacing-8);
+    border-top: 1px solid var(--color-border-subtle);
+  }
+  
+  .article-nav__prev,
+  .article-nav__next {
+    flex: 1;
+  }
+  
+  .article-nav__next {
+    text-align: right;
+  }
+  
+  .article-nav__link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    padding: var(--spacing-3) var(--spacing-4);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    transition: all var(--transition-fast);
+  }
+  
+  .article-nav__link:hover {
+    color: var(--color-text);
+    border-color: var(--color-text-muted);
+    background: var(--color-bg-tertiary);
+  }
+  
+  .article-nav__link svg {
+    opacity: 0.6;
+    transition: transform var(--transition-fast);
+  }
+  
+  .article-nav__prev .article-nav__link:hover svg {
+    transform: translateX(-2px);
+  }
+  
+  .article-nav__next .article-nav__link:hover svg {
+    transform: translateX(2px);
+  }
+</style>
+

@@ -1,0 +1,168 @@
+---
+import ThemeToggle from './ThemeToggle.astro';
+import SearchButton from './SearchButton.astro';
+---
+
+<header class="navbar">
+  <div class="navbar__container">
+    <div class="navbar__left">
+      <button class="navbar__menu-btn hide-desktop" id="sidebar-toggle" aria-label="Toggle menu">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+      
+      <a href="/" class="navbar__logo">
+        <img src="/logo.svg" alt="Echolon" width="28" height="28" />
+        <span class="navbar__logo-text">Echolon</span>
+        <span class="navbar__logo-badge">Docs</span>
+      </a>
+    </div>
+    
+    <div class="navbar__center hide-mobile">
+      <SearchButton />
+    </div>
+    
+    <div class="navbar__right">
+      <a href="https://echolon.app" class="navbar__link hide-mobile">
+        Home
+      </a>
+      <a href="https://github.com/echolon-app/echolon" target="_blank" rel="noopener noreferrer" class="navbar__icon-link" aria-label="GitHub">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+        </svg>
+      </a>
+      <ThemeToggle />
+    </div>
+  </div>
+</header>
+
+<style>
+  .navbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: var(--z-sticky);
+    height: var(--header-height);
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border-subtle);
+    backdrop-filter: blur(12px);
+  }
+  
+  .navbar__container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 100%;
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: 0 var(--spacing-4);
+  }
+  
+  .navbar__left {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-3);
+  }
+  
+  .navbar__menu-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    color: var(--color-text-secondary);
+    border-radius: var(--radius-md);
+    transition: all var(--transition-fast);
+  }
+  
+  .navbar__menu-btn:hover {
+    color: var(--color-text);
+    background: var(--color-bg-card);
+  }
+  
+  .navbar__logo {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    font-weight: 700;
+    font-size: var(--font-size-lg);
+    color: var(--color-text);
+  }
+  
+  .navbar__logo:hover {
+    color: var(--color-text);
+  }
+  
+  .navbar__logo-badge {
+    padding: var(--spacing-1) var(--spacing-2);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--color-primary);
+    background: var(--color-primary-glow);
+    border-radius: var(--radius-md);
+  }
+  
+  .navbar__center {
+    flex: 1;
+    max-width: 400px;
+    margin: 0 var(--spacing-6);
+  }
+  
+  .navbar__right {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+  }
+  
+  .navbar__link {
+    padding: var(--spacing-2) var(--spacing-3);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    border-radius: var(--radius-md);
+    transition: all var(--transition-fast);
+  }
+  
+  .navbar__link:hover {
+    color: var(--color-text);
+    background: var(--color-bg-card);
+  }
+  
+  .navbar__icon-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    color: var(--color-text-secondary);
+    border-radius: var(--radius-md);
+    transition: all var(--transition-fast);
+  }
+  
+  .navbar__icon-link:hover {
+    color: var(--color-text);
+    background: var(--color-bg-card);
+  }
+</style>
+
+<script>
+  function initSidebarToggle() {
+    const toggle = document.getElementById('sidebar-toggle');
+    const sidebar = document.querySelector('.sidebar');
+    
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => {
+        sidebar.classList.toggle('is-open');
+        document.body.style.overflow = sidebar.classList.contains('is-open') ? 'hidden' : '';
+      });
+    }
+  }
+  
+  initSidebarToggle();
+  document.addEventListener('astro:after-swap', initSidebarToggle);
+</script>
+

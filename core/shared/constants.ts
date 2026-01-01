@@ -139,6 +139,9 @@ export const AUTH_TYPES = [
   'bearer',
   'api-key',
   'oauth2',
+  'jwt',
+  'digest',
+  'aws-signature',
 ] as const;
 
 export const IPC_CHANNELS = {

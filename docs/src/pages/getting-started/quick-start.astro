@@ -1,0 +1,356 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+import { Callout } from '../../components/ui/Callout';
+
+const headings = [
+  { depth: 2, slug: 'download-and-install', text: 'Download and Install' },
+  { depth: 2, slug: 'create-your-first-request', text: 'Create Your First Request' },
+  { depth: 2, slug: 'organize-with-collections', text: 'Organize with Collections' },
+  { depth: 2, slug: 'use-environments', text: 'Use Environments' },
+  { depth: 2, slug: 'next-steps', text: 'Next Steps' },
+];
+---
+
+<DocsLayout title="Quick Start" headings={headings}>
+  <div class="prose">
+    <h1>Quick Start</h1>
+    <p class="lead">
+      Get up and running with Echolon in under 5 minutes.
+    </p>
+    
+    <h2 id="download-and-install">Download and Install</h2>
+    
+    <div class="download-tabs">
+      <div class="tabs-header">
+        <button class="tab-btn active" data-tab="macos">macOS</button>
+        <button class="tab-btn" data-tab="windows">Windows</button>
+        <button class="tab-btn" data-tab="linux">Linux</button>
+        <button class="tab-btn" data-tab="web">Web</button>
+      </div>
+      <div class="tabs-content">
+        <div class="tab-panel active" id="macos">
+          <p>Download the latest version for macOS:</p>
+          <ul class="list">
+            <li><strong>Apple Silicon</strong> — For M1/M2/M3 Macs</li>
+            <li><strong>Intel</strong> — For older Intel-based Macs</li>
+          </ul>
+          <p>Open the .dmg file and drag Echolon to your Applications folder.</p>
+        </div>
+        <div class="tab-panel" id="windows">
+          <p>Download the latest version for Windows:</p>
+          <ul class="list">
+            <li><strong>64-bit</strong> — For modern Windows 10/11</li>
+          </ul>
+          <p>Run the installer and follow the on-screen instructions.</p>
+        </div>
+        <div class="tab-panel" id="linux">
+          <p>Download the latest version for Linux:</p>
+          <ul class="list">
+            <li><strong>.deb</strong> — For Ubuntu/Debian</li>
+            <li><strong>.rpm</strong> — For Fedora/RHEL</li>
+            <li><strong>AppImage</strong> — Universal format</li>
+          </ul>
+        </div>
+        <div class="tab-panel" id="web">
+          <p>Use Echolon directly in your browser — no installation required!</p>
+          <p><a href="https://app.echolon.app" class="btn">Open Web App →</a></p>
+        </div>
+      </div>
+    </div>
+    
+    <h2 id="create-your-first-request">Create Your First Request</h2>
+    
+    <ol class="steps">
+      <li>
+        <strong>Open Echolon</strong>
+        <p>Launch Echolon from your Applications folder or Start menu.</p>
+      </li>
+      <li>
+        <strong>Enter a URL</strong>
+        <p>Type or paste an API endpoint URL in the address bar:</p>
+        <pre><code>https://api.github.com/users/octocat</code></pre>
+      </li>
+      <li>
+        <strong>Send the request</strong>
+        <p>Click the "Send" button or press <code>Ctrl/Cmd + Enter</code>.</p>
+      </li>
+      <li>
+        <strong>View the response</strong>
+        <p>The response will appear in the panel below with body, headers, and details.</p>
+      </li>
+    </ol>
+    
+    <h2 id="organize-with-collections">Organize with Collections</h2>
+    <p>
+      Collections help you organize related requests together. To create a collection:
+    </p>
+    
+    <ol class="list numbered">
+      <li>Click the <strong>Collections</strong> tab in the sidebar</li>
+      <li>Click <strong>New Collection</strong></li>
+      <li>Give your collection a name</li>
+      <li>Save requests to your collection using <code>Ctrl/Cmd + S</code></li>
+    </ol>
+    
+    <h2 id="use-environments">Use Environments</h2>
+    <p>
+      Environments let you switch between different configurations (development, 
+      staging, production) without changing your requests.
+    </p>
+    
+    <pre class="code-block"><code>// Example: Using environment variables
+GET &#123;&#123;baseUrl&#125;&#125;/users/&#123;&#123;userId&#125;&#125;
+
+// Development environment
+baseUrl = http://localhost:3000
+userId = 1
+
+// Production environment  
+baseUrl = https://api.example.com
+userId = 12345</code></pre>
+    
+    <h2 id="next-steps">Next Steps</h2>
+    <p>
+      Now that you've made your first request, explore more features:
+    </p>
+    
+    <ul class="list">
+      <li><a href="/features/collections">Learn more about Collections</a></li>
+      <li><a href="/features/environments">Configure Environments</a></li>
+      <li><a href="/features/variables">Use Variables</a></li>
+      <li><a href="/protocols/graphql">Try GraphQL requests</a></li>
+    </ul>
+  </div>
+</DocsLayout>
+
+<style>
+  .prose {
+    color: var(--color-text-secondary);
+    line-height: var(--line-height-relaxed);
+  }
+  
+  .prose h1 {
+    font-size: var(--font-size-4xl);
+    color: var(--color-text);
+    margin-bottom: var(--spacing-4);
+  }
+  
+  .prose h2 {
+    font-size: var(--font-size-2xl);
+    color: var(--color-text);
+    margin-top: var(--spacing-10);
+    margin-bottom: var(--spacing-4);
+    padding-top: var(--spacing-4);
+    border-top: 1px solid var(--color-border-subtle);
+  }
+  
+  .prose h2:first-of-type {
+    border-top: none;
+    padding-top: 0;
+  }
+  
+  .prose p {
+    margin-bottom: var(--spacing-4);
+  }
+  
+  .prose .lead {
+    font-size: var(--font-size-lg);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-6);
+  }
+  
+  .prose code {
+    padding: var(--spacing-1) var(--spacing-2);
+    font-size: var(--font-size-sm);
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+  }
+  
+  .prose pre {
+    margin: var(--spacing-4) 0;
+    padding: var(--spacing-4);
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow-x: auto;
+  }
+  
+  .prose pre code {
+    padding: 0;
+    background: none;
+    border: none;
+    font-size: var(--font-size-sm);
+  }
+  
+  .prose .list {
+    margin: var(--spacing-4) 0;
+    padding-left: var(--spacing-6);
+  }
+  
+  .prose .list li {
+    margin-bottom: var(--spacing-2);
+    list-style: disc;
+  }
+  
+  .prose .list.numbered li {
+    list-style: decimal;
+  }
+  
+  .prose strong {
+    color: var(--color-text);
+    font-weight: 600;
+  }
+  
+  .prose a {
+    color: var(--color-primary);
+    text-decoration: underline;
+    text-decoration-color: var(--color-primary-glow);
+    text-underline-offset: 2px;
+  }
+  
+  .prose a:hover {
+    text-decoration-color: var(--color-primary);
+  }
+  
+  /* Tabs */
+  .download-tabs {
+    margin: var(--spacing-6) 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+  
+  .tabs-header {
+    display: flex;
+    background: var(--color-bg-tertiary);
+    border-bottom: 1px solid var(--color-border);
+  }
+  
+  .tab-btn {
+    flex: 1;
+    padding: var(--spacing-3) var(--spacing-4);
+    background: none;
+    border: none;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-bottom: 2px solid transparent;
+  }
+  
+  .tab-btn:hover {
+    color: var(--color-text);
+    background: var(--color-bg-secondary);
+  }
+  
+  .tab-btn.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+    background: var(--color-bg-secondary);
+  }
+  
+  .tabs-content {
+    padding: var(--spacing-4);
+  }
+  
+  .tab-panel {
+    display: none;
+  }
+  
+  .tab-panel.active {
+    display: block;
+  }
+  
+  .tab-panel p:last-child {
+    margin-bottom: 0;
+  }
+  
+  .btn {
+    display: inline-block;
+    padding: var(--spacing-2) var(--spacing-4);
+    background: var(--color-primary);
+    color: var(--color-bg) !important;
+    text-decoration: none !important;
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    transition: opacity 0.2s;
+  }
+  
+  .btn:hover {
+    opacity: 0.9;
+  }
+  
+  /* Steps */
+  .steps {
+    counter-reset: step;
+    list-style: none;
+    padding: 0;
+    margin: var(--spacing-6) 0;
+  }
+  
+  .steps li {
+    position: relative;
+    padding-left: var(--spacing-10);
+    padding-bottom: var(--spacing-6);
+    border-left: 2px solid var(--color-border);
+    margin-left: var(--spacing-3);
+  }
+  
+  .steps li:last-child {
+    border-left-color: transparent;
+    padding-bottom: 0;
+  }
+  
+  .steps li::before {
+    counter-increment: step;
+    content: counter(step);
+    position: absolute;
+    left: calc(-1 * var(--spacing-3) - 1px);
+    top: 0;
+    width: var(--spacing-6);
+    height: var(--spacing-6);
+    background: var(--color-primary);
+    color: var(--color-bg);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+  }
+  
+  .steps li strong {
+    display: block;
+    color: var(--color-text);
+    margin-bottom: var(--spacing-2);
+  }
+  
+  .steps li p {
+    margin-bottom: var(--spacing-2);
+  }
+  
+  .steps li p:last-child {
+    margin-bottom: 0;
+  }
+</style>
+
+<script>
+  // Tabs functionality
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tabId = btn.dataset.tab;
+      const container = btn.closest('.download-tabs');
+      
+      // Update buttons
+      container?.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      
+      // Update panels
+      container?.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      container?.querySelector(`#${tabId}`)?.classList.add('active');
+    });
+  });
+</script>
+

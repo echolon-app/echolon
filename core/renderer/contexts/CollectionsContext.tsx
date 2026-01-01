@@ -100,16 +100,29 @@ const createSampleCollection = (workspaceId?: string): Collection => {
     folders: [
       {
         id: uuidv4(),
-        name: 'Comments',
+        name: 'Tasks',
         requests: [
           {
             id: uuidv4(),
-            name: 'Get Comments',
+            name: 'Get Tasks',
             method: 'GET',
-            url: 'https://jsonplaceholder.typicode.com/comments',
+            url: 'https://sample-api.echolon.app/tasks',
             headers: [],
             queryParams: [
-              { id: uuidv4(), key: 'postId', value: '1', description: 'Filter by post ID', enabled: true }
+           
+            ],
+            body: { type: 'none', content: '' },
+            auth: { type: 'none' },
+            scripts: { pre: '', post: '' },
+          },
+          {
+            id: uuidv4(),
+            name: 'Create Task',
+            method: 'POST',
+            url: 'https://sample-api.echolon.app/task',
+            headers: [],
+            queryParams: [
+           
             ],
             body: { type: 'none', content: '' },
             auth: { type: 'none' },
@@ -119,6 +132,7 @@ const createSampleCollection = (workspaceId?: string): Collection => {
         folders: [],
       }
     ],
+    
     workspaceId,
     createdAt: Date.now(),
     updatedAt: Date.now(),

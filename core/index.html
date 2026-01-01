@@ -231,14 +231,48 @@
     <!-- Loading screen - hidden once React is ready -->
     <div id="app-loader">
       <div class="loader-content">
-        <svg class="loader-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <!-- Echolon logo - terminal bracket style -->
-          <rect x="10" y="10" width="80" height="80" rx="12" fill="var(--bg-secondary)" stroke="var(--border-primary)" stroke-width="2"/>
-          <path d="M30 35 L20 50 L30 65" stroke="var(--color-primary)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-          <path d="M70 35 L80 50 L70 65" stroke="var(--color-primary)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-          <circle cx="40" cy="50" r="4" fill="var(--color-primary)"/>
-          <circle cx="50" cy="50" r="4" fill="var(--color-primary)" opacity="0.7"/>
-          <circle cx="60" cy="50" r="4" fill="var(--color-primary)" opacity="0.4"/>
+        <svg class="loader-logo" viewBox="0 0 797 795" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="bg" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse"
+              gradientTransform="translate(399.80 375.46) rotate(90) scale(597.75)">
+              <stop offset="0" stop-color="#0A1A0B"/>
+              <stop offset="0.55" stop-color="#061006"/>
+              <stop offset="1" stop-color="#020603"/>
+            </radialGradient>
+            <linearGradient id="prompt" x1="260" y1="290" x2="560" y2="520" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#77F08B"/>
+              <stop offset="1" stop-color="#4FE06C"/>
+            </linearGradient>
+            <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="1.8" result="b"/>
+              <feMerge>
+                <feMergeNode in="b"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+            <filter id="ringBlur" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="1.2"/>
+            </filter>
+          </defs>
+          <rect x="0" y="0" width="797" height="795" rx="160" ry="160" fill="url(#bg)"/>
+          <g stroke="#7FEA92" stroke-linecap="round" filter="url(#ringBlur)">
+            <path d="M 292.36 189.37 A 214.88 214.88 0 0 1 507.24 189.37" stroke-width="10" opacity="0.18"/>
+            <path d="M 507.24 561.56 A 214.88 214.88 0 0 1 292.36 561.56" stroke-width="10" opacity="0.18"/>
+            <path d="M 213.71 482.90 A 214.88 214.88 0 0 1 213.71 268.02" stroke-width="10" opacity="0.18"/>
+            <path d="M 585.89 268.02 A 214.88 214.88 0 0 1 585.89 482.90" stroke-width="10" opacity="0.18"/>
+            <path d="M 266.10 143.90 A 267.39 267.39 0 0 1 533.49 143.90" stroke-width="9" opacity="0.16"/>
+            <path d="M 533.49 607.03 A 267.39 267.39 0 0 1 266.10 607.03" stroke-width="9" opacity="0.16"/>
+            <path d="M 168.23 509.16 A 267.39 267.39 0 0 1 168.23 241.77" stroke-width="9" opacity="0.16"/>
+            <path d="M 631.36 241.77 A 267.39 267.39 0 0 1 631.36 509.16" stroke-width="9" opacity="0.16"/>
+            <path d="M 238.74 96.51 A 322.11 322.11 0 0 1 560.85 96.51" stroke-width="8" opacity="0.14"/>
+            <path d="M 560.85 654.42 A 322.11 322.11 0 0 1 238.74 654.42" stroke-width="8" opacity="0.14"/>
+            <path d="M 120.84 536.52 A 322.11 322.11 0 0 1 120.84 214.41" stroke-width="8" opacity="0.14"/>
+            <path d="M 678.75 214.41 A 322.11 322.11 0 0 1 678.75 536.52" stroke-width="8" opacity="0.14"/>
+          </g>
+          <g transform="translate(0.0 -35.0)" filter="url(#softGlow)" stroke="url(#prompt)" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M 302 330 L 378 401 L 302 472" stroke-width="28"/>
+            <path d="M 412 487 L 523 487" stroke-width="26"/>
+          </g>
         </svg>
         <div class="loader-spinner"></div>
         <div class="loader-text">Loading Echolon...</div>

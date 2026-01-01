@@ -4,7 +4,7 @@ import { SendIcon, ChevronDownIcon, ChevronUpIcon } from '@/components/ui/icons'
 import { useEnvironments, useTheme, useCollections } from '@/contexts';
 import { requestService, storageManager } from '@/services';
 import { HTTP_METHODS, METHOD_COLORS, DEFAULT_HEADERS } from '../../../../shared/constants';
-import { Request, Collection, KeyValuePair, HttpMethod, RequestExecution, CollectionEnvironment } from '@/types';
+import { Request, Collection, KeyValuePair, HttpMethod, RequestExecution, CollectionEnvironment, AuthType } from '@/types';
 import { ResponseViewer } from '../CenterPanel/ResponseViewer';
 import { extractSpecResponseInfo } from '@/utils';
 
@@ -344,11 +344,15 @@ export const RequestCard: React.FC<RequestCardProps> = ({ request: initialReques
                         { value: 'basic', label: 'Basic Auth' },
                         { value: 'bearer', label: 'Bearer Token' },
                         { value: 'api-key', label: 'API Key' },
+                        { value: 'oauth2', label: 'OAuth 2.0' },
+                        { value: 'jwt', label: 'JWT Bearer' },
+                        { value: 'digest', label: 'Digest Auth' },
+                        { value: 'aws-signature', label: 'AWS Signature' },
                       ]}
                       value={request.auth.type}
                       onChange={(type) => {
                         updateLocalRequest({ 
-                          auth: { ...request.auth, type: type as 'none' | 'basic' | 'bearer' | 'api-key' } 
+                          auth: { ...request.auth, type: type as AuthType } 
                         });
                       }}
                     />
@@ -449,6 +453,190 @@ export const RequestCard: React.FC<RequestCardProps> = ({ request: initialReques
                               },
                             });
                           }}
+                          supportVariables
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {request.auth.type === 'oauth2' && (
+                    <div className="request-card__auth-fields">
+                      <div className="request-card__auth-field">
+                        <label>Access Token</label>
+                        <Input
+                          value={request.auth.oauth2?.accessToken || ''}
+                          onChange={(e) => {
+                            updateLocalRequest({
+                              auth: {
+                                ...request.auth,
+                                oauth2: { 
+                                  ...request.auth.oauth2,
+                                  grantType: request.auth.oauth2?.grantType || 'authorization_code',
+                                  accessToken: e.target.value,
+                                  tokenType: request.auth.oauth2?.tokenType || 'Bearer',
+                                  clientId: request.auth.oauth2?.clientId || '',
+                                },
+                              },
+                            });
+                          }}
+                          placeholder="Access token"
+                          supportVariables
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {request.auth.type === 'jwt' && (
+                    <div className="request-card__auth-fields">
+                      <div className="request-card__auth-field">
+                        <label>JWT Token</label>
+                        <Input
+                          value={request.auth.jwt?.token || ''}
+                          onChange={(e) => {
+                            updateLocalRequest({
+                              auth: {
+                                ...request.auth,
+                                jwt: { ...request.auth.jwt, token: e.target.value },
+                              },
+                            });
+                          }}
+                          placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                          supportVariables
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {request.auth.type === 'digest' && (
+                    <div className="request-card__auth-fields">
+                      <div className="request-card__auth-field">
+                        <label>Username</label>
+                        <Input
+                          value={request.auth.digest?.username || ''}
+                          onChange={(e) => {
+                            updateLocalRequest({
+                              auth: {
+                                ...request.auth,
+                                digest: { 
+                                  ...request.auth.digest,
+                                  username: e.target.value,
+                                  password: request.auth.digest?.password || '',
+                                },
+                              },
+                            });
+                          }}
+                          supportVariables
+                        />
+                      </div>
+                      <div className="request-card__auth-field">
+                        <label>Password</label>
+                        <Input
+                          type="password"
+                          value={request.auth.digest?.password || ''}
+                          onChange={(e) => {
+                            updateLocalRequest({
+                              auth: {
+                                ...request.auth,
+                                digest: { 
+                                  ...request.auth.digest,
+                                  username: request.auth.digest?.username || '',
+                                  password: e.target.value,
+                                },
+                              },
+                            });
+                          }}
+                          supportVariables
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {request.auth.type === 'aws-signature' && (
+                    <div className="request-card__auth-fields">
+                      <div className="request-card__auth-field">
+                        <label>Access Key ID</label>
+                        <Input
+                          value={request.auth.awsSignature?.accessKeyId || ''}
+                          onChange={(e) => {
+                            updateLocalRequest({
+                              auth: {
+                                ...request.auth,
+                                awsSignature: { 
+                                  ...request.auth.awsSignature,
+                                  accessKeyId: e.target.value,
+                                  secretAccessKey: request.auth.awsSignature?.secretAccessKey || '',
+                                  region: request.auth.awsSignature?.region || '',
+                                  service: request.auth.awsSignature?.service || '',
+                                },
+                              },
+                            });
+                          }}
+                          supportVariables
+                        />
+                      </div>
+                      <div className="request-card__auth-field">
+                        <label>Secret Access Key</label>
+                        <Input
+                          type="password"
+                          value={request.auth.awsSignature?.secretAccessKey || ''}
+                          onChange={(e) => {
+                            updateLocalRequest({
+                              auth: {
+                                ...request.auth,
+                                awsSignature: { 
+                                  ...request.auth.awsSignature,
+                                  accessKeyId: request.auth.awsSignature?.accessKeyId || '',
+                                  secretAccessKey: e.target.value,
+                                  region: request.auth.awsSignature?.region || '',
+                                  service: request.auth.awsSignature?.service || '',
+                                },
+                              },
+                            });
+                          }}
+                          supportVariables
+                        />
+                      </div>
+                      <div className="request-card__auth-field">
+                        <label>Region</label>
+                        <Input
+                          value={request.auth.awsSignature?.region || ''}
+                          onChange={(e) => {
+                            updateLocalRequest({
+                              auth: {
+                                ...request.auth,
+                                awsSignature: { 
+                                  ...request.auth.awsSignature,
+                                  accessKeyId: request.auth.awsSignature?.accessKeyId || '',
+                                  secretAccessKey: request.auth.awsSignature?.secretAccessKey || '',
+                                  region: e.target.value,
+                                  service: request.auth.awsSignature?.service || '',
+                                },
+                              },
+                            });
+                          }}
+                          placeholder="us-east-1"
+                          supportVariables
+                        />
+                      </div>
+                      <div className="request-card__auth-field">
+                        <label>Service</label>
+                        <Input
+                          value={request.auth.awsSignature?.service || ''}
+                          onChange={(e) => {
+                            updateLocalRequest({
+                              auth: {
+                                ...request.auth,
+                                awsSignature: { 
+                                  ...request.auth.awsSignature,
+                                  accessKeyId: request.auth.awsSignature?.accessKeyId || '',
+                                  secretAccessKey: request.auth.awsSignature?.secretAccessKey || '',
+                                  region: request.auth.awsSignature?.region || '',
+                                  service: e.target.value,
+                                },
+                              },
+                            });
+                          }}
+                          placeholder="s3, execute-api, etc."
                           supportVariables
                         />
                       </div>

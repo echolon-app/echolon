@@ -1,0 +1,52 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+
+const headings = [
+  { depth: 2, slug: 'system-requirements', text: 'System Requirements' },
+  { depth: 2, slug: 'download', text: 'Download' },
+  { depth: 2, slug: 'install', text: 'Install' },
+];
+---
+
+<DocsLayout title="Installation" headings={headings}>
+  <div class="prose">
+    <h1>Installation</h1>
+    <p class="lead">
+      Download and install Echolon on your preferred platform.
+    </p>
+    
+    <h2 id="system-requirements">System Requirements</h2>
+    <p>
+      Echolon runs on modern operating systems with minimal requirements:
+    </p>
+    <ul class="list">
+      <li><strong>macOS:</strong> 10.15 (Catalina) or later</li>
+      <li><strong>Windows:</strong> Windows 10 or later (64-bit)</li>
+      <li><strong>Linux:</strong> Ubuntu 18.04+, Fedora 32+, or equivalent</li>
+    </ul>
+    
+    <h2 id="download">Download</h2>
+    <p>
+      Visit the <a href="https://echolon.app/download">download page</a> to get the latest version for your platform.
+    </p>
+    
+    <h2 id="install">Install</h2>
+    <p>
+      Follow the platform-specific installation instructions on the <a href="/getting-started/quick-start">Quick Start</a> page.
+    </p>
+  </div>
+</DocsLayout>
+
+<style>
+  .prose { color: var(--color-text-secondary); line-height: var(--line-height-relaxed); }
+  .prose h1 { font-size: var(--font-size-4xl); color: var(--color-text); margin-bottom: var(--spacing-4); }
+  .prose h2 { font-size: var(--font-size-2xl); color: var(--color-text); margin-top: var(--spacing-10); margin-bottom: var(--spacing-4); padding-top: var(--spacing-4); border-top: 1px solid var(--color-border-subtle); }
+  .prose h2:first-of-type { border-top: none; padding-top: 0; }
+  .prose p { margin-bottom: var(--spacing-4); }
+  .prose .lead { font-size: var(--font-size-lg); margin-bottom: var(--spacing-6); }
+  .prose .list { margin: var(--spacing-4) 0; padding-left: var(--spacing-6); }
+  .prose .list li { margin-bottom: var(--spacing-2); list-style: disc; }
+  .prose strong { color: var(--color-text); font-weight: 600; }
+  .prose a { color: var(--color-primary); text-decoration: underline; text-underline-offset: 2px; }
+</style>
+

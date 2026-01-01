@@ -73,6 +73,25 @@ export function generateCurlCommand(
         )}'`
       );
     }
+  } else if (request.auth.type === 'oauth2' && request.auth.oauth2?.accessToken) {
+    const tokenType = request.auth.oauth2.tokenType || 'Bearer';
+    parts.push(
+      `-H 'Authorization: ${tokenType} ${interpolate(request.auth.oauth2.accessToken)}'`
+    );
+  } else if (request.auth.type === 'jwt' && request.auth.jwt?.token) {
+    const prefix = request.auth.jwt.prefix || 'Bearer';
+    const headerName = request.auth.jwt.headerName || 'Authorization';
+    parts.push(
+      `-H '${headerName}: ${prefix} ${interpolate(request.auth.jwt.token)}'`
+    );
+  } else if (request.auth.type === 'digest' && request.auth.digest) {
+    // Digest auth in curl uses --digest flag
+    parts.push('--digest');
+    parts.push(
+      `-u '${interpolate(request.auth.digest.username)}:${interpolate(
+        request.auth.digest.password
+      )}'`
+    );
   }
 
   // Body
@@ -146,6 +165,13 @@ export function generateFetchCode(
     headers['Authorization'] = `Bearer ${interpolate(request.auth.bearer.token)}`;
   } else if (request.auth.type === 'api-key' && request.auth.apiKey && request.auth.apiKey.addTo === 'header') {
     headers[interpolate(request.auth.apiKey.key)] = interpolate(request.auth.apiKey.value);
+  } else if (request.auth.type === 'oauth2' && request.auth.oauth2?.accessToken) {
+    const tokenType = request.auth.oauth2.tokenType || 'Bearer';
+    headers['Authorization'] = `${tokenType} ${interpolate(request.auth.oauth2.accessToken)}`;
+  } else if (request.auth.type === 'jwt' && request.auth.jwt?.token) {
+    const prefix = request.auth.jwt.prefix || 'Bearer';
+    const headerName = request.auth.jwt.headerName || 'Authorization';
+    headers[headerName] = `${prefix} ${interpolate(request.auth.jwt.token)}`;
   }
 
   // Build body

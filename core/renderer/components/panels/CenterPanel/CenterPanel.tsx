@@ -4,7 +4,7 @@ import { SendIcon, CodeIcon, HistoryIcon } from '@/components/ui/icons';
 import { useRequest, useEnvironments, useTheme, useCollections, useApp } from '@/contexts';
 import { storageManager } from '@/services';
 import { HTTP_METHODS, METHOD_COLORS, DEFAULT_HEADERS } from '../../../../shared/constants';
-import { HttpMethod, KeyValuePair, Collection } from '@/types';
+import { HttpMethod, KeyValuePair, Collection, AuthType } from '@/types';
 import { extractSpecResponseInfo } from '@/utils';
 import { APP_VERSION } from '@/utils/environment';
 import { ResponseViewer } from './ResponseViewer';
@@ -18,6 +18,212 @@ const CUSTOM_METHOD_COLOR = '#9ca3af';
 const getMethodColor = (method: string): string => {
   return METHOD_COLORS[method] || CUSTOM_METHOD_COLOR;
 };
+
+// Sample script type
+interface SampleScript {
+  value: string;
+  label: string;
+  code?: string;
+}
+
+// Sample scripts for pre-request
+
+const PRE_REQUEST_SAMPLES: SampleScript[] = [
+  { value: '', label: 'Insert sample script...' },
+  {
+    value: 'set-env-var',
+    label: 'Set Environment Variable',
+    code: `// Set an environment variable (available across requests)
+echo.setEnvVar('myVariable', 'myValue');
+
+// Get an environment variable
+const value = echo.getEnvVar('myVariable');
+console.log('Variable value:', value);`,
+  },
+  {
+    value: 'set-var',
+    label: 'Set Runtime Variable',
+    code: `// Set a runtime variable (request-scoped)
+echo.setVar('tempValue', 'some data');
+
+// Get a runtime variable
+const temp = echo.getVar('tempValue');
+console.log('Runtime var:', temp);`,
+  },
+  {
+    value: 'timestamp',
+    label: 'Generate Timestamp',
+    code: `// Generate current timestamp
+const timestamp = Date.now();
+echo.setEnvVar('timestamp', timestamp.toString());
+
+// Or use ISO format
+const isoDate = new Date().toISOString();
+echo.setEnvVar('isoTimestamp', isoDate);
+console.log('Timestamp set:', isoDate);`,
+  },
+  {
+    value: 'random-data',
+    label: 'Generate Random Data',
+    code: `// Generate random ID
+const randomId = Math.random().toString(36).substring(2, 15);
+echo.setEnvVar('randomId', randomId);
+
+// Generate random number between 1-100
+const randomNum = Math.floor(Math.random() * 100) + 1;
+echo.setEnvVar('randomNumber', randomNum.toString());
+console.log('Random ID:', randomId);`,
+  },
+  {
+    value: 'uuid',
+    label: 'Generate UUID',
+    code: `// Generate a UUID v4
+const uuid = crypto.randomUUID();
+echo.setEnvVar('uuid', uuid);
+console.log('Generated UUID:', uuid);`,
+  },
+  {
+    value: 'basic-auth-header',
+    label: 'Encode Basic Auth',
+    code: `// Encode credentials for Basic Auth header
+const username = echo.getEnvVar('username') || 'user';
+const password = echo.getEnvVar('password') || 'pass';
+const encoded = btoa(\`\${username}:\${password}\`);
+echo.setEnvVar('basicAuth', \`Basic \${encoded}\`);
+console.log('Basic Auth header encoded');`,
+  },
+  {
+    value: 'modify-request',
+    label: 'Modify Request',
+    code: `// Modify request before sending
+// Add or modify headers
+req.setHeader('X-Custom-Header', 'custom-value');
+req.setHeader('X-Timestamp', Date.now().toString());
+
+// Log current request details
+console.log('Request URL:', req.getUrl());
+console.log('Request Method:', req.getMethod());
+console.log('Request Headers:', req.getHeaders());`,
+  },
+  {
+    value: 'log-request',
+    label: 'Log Request Details',
+    code: `// Log request details for debugging
+console.log('URL:', req.url);
+console.log('Method:', req.method);
+console.log('Headers:', req.headers);
+if (req.body) {
+  console.log('Body:', req.body);
+}`,
+  },
+];
+
+// Sample scripts for post-request
+
+const POST_REQUEST_SAMPLES: SampleScript[] = [
+  { value: '', label: 'Insert sample script...' },
+  {
+    value: 'check-status',
+    label: 'Check Status Code',
+    code: `// Check if response status is successful
+if (res.status >= 200 && res.status < 300) {
+  console.log('✓ Request successful:', res.status, res.statusText);
+} else {
+  console.error('✗ Request failed:', res.status, res.statusText);
+}`,
+  },
+  {
+    value: 'parse-json',
+    label: 'Parse JSON Response',
+    code: `// Parse JSON response body
+try {
+  const data = JSON.parse(res.getBody());
+  console.log('Response data:', data);
+} catch (e) {
+  console.error('Failed to parse JSON:', e.message);
+}`,
+  },
+  {
+    value: 'extract-token',
+    label: 'Extract & Save Token',
+    code: `// Extract token from response and save to environment
+try {
+  const data = JSON.parse(res.body);
+  const token = data.token || data.access_token;
+  if (token) {
+    echo.setEnvVar('authToken', token);
+    console.log('✓ Token saved to environment variable "authToken"');
+  } else {
+    console.warn('No token found in response');
+  }
+} catch (e) {
+  console.error('Failed to extract token:', e.message);
+}`,
+  },
+  {
+    value: 'extract-id',
+    label: 'Extract & Save ID',
+    code: `// Extract ID from response and save to environment
+try {
+  const data = JSON.parse(res.body);
+  if (data.id) {
+    echo.setEnvVar('lastId', data.id.toString());
+    console.log('✓ ID saved:', data.id);
+  } else {
+    console.warn('No ID found in response');
+  }
+} catch (e) {
+  console.error('Failed to extract ID:', e.message);
+}`,
+  },
+  {
+    value: 'assert-contains',
+    label: 'Assert Response Contains',
+    code: `// Assert response body contains expected value
+const expectedValue = 'success';
+if (res.body.includes(expectedValue)) {
+  console.log('✓ Response contains expected value');
+} else {
+  console.error('✗ Response does not contain:', expectedValue);
+}`,
+  },
+  {
+    value: 'measure-time',
+    label: 'Log Response Time',
+    code: `// Log response time
+console.log('Response time:', res.responseTime, 'ms');
+if (res.responseTime > 1000) {
+  console.warn('⚠ Slow response (> 1s)');
+} else if (res.responseTime < 100) {
+  console.log('✓ Fast response');
+}`,
+  },
+  {
+    value: 'check-headers',
+    label: 'Check Response Headers',
+    code: `// Check specific response headers
+const contentType = res.getHeader('content-type');
+console.log('Content-Type:', contentType);
+
+// Check for caching headers
+const cacheControl = res.getHeader('cache-control');
+if (cacheControl) {
+  console.log('Cache-Control:', cacheControl);
+}
+
+// Log all headers
+console.log('All headers:', res.getHeaders());`,
+  },
+  {
+    value: 'log-response',
+    label: 'Log Response Details',
+    code: `// Log response details for debugging
+console.log('Status:', res.status, res.statusText);
+console.log('Response Time:', res.responseTime, 'ms');
+console.log('Headers:', res.headers);
+console.log('Body preview:', res.body.substring(0, 500));`,
+  },
+];
 
 type RequestTab = 'params' | 'auth' | 'headers' | 'body' | 'scripts' | 'settings';
 
@@ -55,7 +261,21 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
   const { activeEnvironment, environments } = useEnvironments();
   const { collections, updateRequest: updateCollectionRequest } = useCollections();
   const { customHttpMethods, addCustomHttpMethod, settings, updateSettings } = useApp();
-  const [activeRequestTab, setActiveRequestTab] = useState<RequestTab>('params');
+  const [activeRequestTab, setActiveRequestTabState] = useState<RequestTab>(() => {
+    // Restore active request tab from localStorage
+    const saved = localStorage.getItem('echolon_active_request_tab');
+    if (saved && ['params', 'auth', 'headers', 'body', 'scripts', 'settings'].includes(saved)) {
+      return saved as RequestTab;
+    }
+    return 'params';
+  });
+  
+  // Wrapper to persist active request tab
+  const setActiveRequestTab = useCallback((tab: RequestTab) => {
+    setActiveRequestTabState(tab);
+    localStorage.setItem('echolon_active_request_tab', tab);
+  }, []);
+  
   const [responseHeight, setResponseHeight] = useState(() => {
     return storageManager.getPanelSizes().responseHeight;
   });
@@ -584,12 +804,16 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                         { value: 'basic', label: 'Basic Auth' },
                         { value: 'bearer', label: 'Bearer Token' },
                         { value: 'api-key', label: 'API Key' },
+                        { value: 'oauth2', label: 'OAuth 2.0' },
+                        { value: 'jwt', label: 'JWT Bearer' },
+                        { value: 'digest', label: 'Digest Auth' },
+                        { value: 'aws-signature', label: 'AWS Signature' },
                       ]}
                       value={request.auth.type}
                       onChange={(type) => {
                         if (activeTabId) {
                           updateRequest(activeTabId, { 
-                            auth: { ...request.auth, type: type as 'none' | 'basic' | 'bearer' | 'api-key' } 
+                            auth: { ...request.auth, type: type as AuthType } 
                           });
                         }
                       }}
@@ -731,6 +955,475 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                       </div>
                     </div>
                   )}
+
+                  {request.auth.type === 'oauth2' && (
+                    <div className="center-panel__auth-fields">
+                      <div className="center-panel__auth-field">
+                        <label>Grant Type</label>
+                        <Dropdown
+                          options={[
+                            { value: 'authorization_code', label: 'Authorization Code' },
+                            { value: 'client_credentials', label: 'Client Credentials' },
+                            { value: 'password', label: 'Password' },
+                            { value: 'implicit', label: 'Implicit' },
+                          ]}
+                          value={request.auth.oauth2?.grantType || 'authorization_code'}
+                          onChange={(grantType) => {
+                            if (activeTabId) {
+                              updateRequest(activeTabId, {
+                                auth: {
+                                  ...request.auth,
+                                  oauth2: { 
+                                    ...request.auth.oauth2,
+                                    grantType: grantType as 'authorization_code' | 'client_credentials' | 'password' | 'implicit',
+                                    accessToken: request.auth.oauth2?.accessToken || '',
+                                    tokenType: request.auth.oauth2?.tokenType || 'Bearer',
+                                    clientId: request.auth.oauth2?.clientId || '',
+                                  },
+                                },
+                              });
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="center-panel__auth-field">
+                        <label>Access Token</label>
+                        <Input
+                          value={request.auth.oauth2?.accessToken || ''}
+                          onChange={(e) => {
+                            if (activeTabId) {
+                              updateRequest(activeTabId, {
+                                auth: {
+                                  ...request.auth,
+                                  oauth2: { 
+                                    ...request.auth.oauth2,
+                                    grantType: request.auth.oauth2?.grantType || 'authorization_code',
+                                    accessToken: e.target.value,
+                                    tokenType: request.auth.oauth2?.tokenType || 'Bearer',
+                                    clientId: request.auth.oauth2?.clientId || '',
+                                  },
+                                },
+                              });
+                            }
+                          }}
+                          placeholder="Enter access token or use token URL to fetch"
+                          supportVariables
+                        />
+                      </div>
+                      <div className="center-panel__auth-field">
+                        <label>Token Type</label>
+                        <Input
+                          value={request.auth.oauth2?.tokenType || 'Bearer'}
+                          onChange={(e) => {
+                            if (activeTabId) {
+                              updateRequest(activeTabId, {
+                                auth: {
+                                  ...request.auth,
+                                  oauth2: { 
+                                    ...request.auth.oauth2,
+                                    grantType: request.auth.oauth2?.grantType || 'authorization_code',
+                                    accessToken: request.auth.oauth2?.accessToken || '',
+                                    tokenType: e.target.value,
+                                    clientId: request.auth.oauth2?.clientId || '',
+                                  },
+                                },
+                              });
+                            }
+                          }}
+                          supportVariables
+                        />
+                      </div>
+                      <div className="center-panel__auth-field">
+                        <label>Client ID</label>
+                        <Input
+                          value={request.auth.oauth2?.clientId || ''}
+                          onChange={(e) => {
+                            if (activeTabId) {
+                              updateRequest(activeTabId, {
+                                auth: {
+                                  ...request.auth,
+                                  oauth2: { 
+                                    ...request.auth.oauth2,
+                                    grantType: request.auth.oauth2?.grantType || 'authorization_code',
+                                    accessToken: request.auth.oauth2?.accessToken || '',
+                                    tokenType: request.auth.oauth2?.tokenType || 'Bearer',
+                                    clientId: e.target.value,
+                                  },
+                                },
+                              });
+                            }
+                          }}
+                          supportVariables
+                        />
+                      </div>
+                      <div className="center-panel__auth-field">
+                        <label>Client Secret</label>
+                        <Input
+                          type="password"
+                          value={request.auth.oauth2?.clientSecret || ''}
+                          onChange={(e) => {
+                            if (activeTabId) {
+                              updateRequest(activeTabId, {
+                                auth: {
+                                  ...request.auth,
+                                  oauth2: { 
+                                    ...request.auth.oauth2,
+                                    grantType: request.auth.oauth2?.grantType || 'authorization_code',
+                                    accessToken: request.auth.oauth2?.accessToken || '',
+                                    tokenType: request.auth.oauth2?.tokenType || 'Bearer',
+                                    clientId: request.auth.oauth2?.clientId || '',
+                                    clientSecret: e.target.value,
+                                  },
+                                },
+                              });
+                            }
+                          }}
+                          supportVariables
+                        />
+                      </div>
+                      <div className="center-panel__auth-field">
+                        <label>Token URL</label>
+                        <Input
+                          value={request.auth.oauth2?.tokenUrl || ''}
+                          onChange={(e) => {
+                            if (activeTabId) {
+                              updateRequest(activeTabId, {
+                                auth: {
+                                  ...request.auth,
+                                  oauth2: { 
+                                    ...request.auth.oauth2,
+                                    grantType: request.auth.oauth2?.grantType || 'authorization_code',
+                                    accessToken: request.auth.oauth2?.accessToken || '',
+                                    tokenType: request.auth.oauth2?.tokenType || 'Bearer',
+                                    clientId: request.auth.oauth2?.clientId || '',
+                                    tokenUrl: e.target.value,
+                                  },
+                                },
+                              });
+                            }
+                          }}
+                          placeholder="https://oauth.example.com/token"
+                          supportVariables
+                        />
+                      </div>
+                      <div className="center-panel__auth-field">
+                        <label>Scope</label>
+                        <Input
+                          value={request.auth.oauth2?.scope || ''}
+                          onChange={(e) => {
+                            if (activeTabId) {
+                              updateRequest(activeTabId, {
+                                auth: {
+                                  ...request.auth,
+                                  oauth2: { 
+                                    ...request.auth.oauth2,
+                                    grantType: request.auth.oauth2?.grantType || 'authorization_code',
+                                    accessToken: request.auth.oauth2?.accessToken || '',
+                                    tokenType: request.auth.oauth2?.tokenType || 'Bearer',
+                                    clientId: request.auth.oauth2?.clientId || '',
+                                    scope: e.target.value,
+                                  },
+                                },
+                              });
+                            }
+                          }}
+                          placeholder="read write profile"
+                          supportVariables
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {request.auth.type === 'jwt' && (
+                    <div className="center-panel__auth-fields">
+                      <div className="center-panel__auth-field">
+                        <label>JWT Token</label>
+                        <Input
+                          value={request.auth.jwt?.token || ''}
+                          onChange={(e) => {
+                            if (activeTabId) {
+                              updateRequest(activeTabId, {
+                                auth: {
+                                  ...request.auth,
+                                  jwt: { 
+                                    ...request.auth.jwt,
+                                    token: e.target.value,
+                                  },
+                                },
+                              });
+                            }
+                          }}
+                          placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                          supportVariables
+                        />
+                      </div>
+                      <div className="center-panel__auth-field">
+                        <label>Prefix</label>
+                        <Input
+                          value={request.auth.jwt?.prefix || 'Bearer'}
+                          onChange={(e) => {
+                            if (activeTabId) {
+                              updateRequest(activeTabId, {
+                                auth: {
+                                  ...request.auth,
+                                  jwt: { 
+                                    ...request.auth.jwt,
+                                    token: request.auth.jwt?.token || '',
+                                    prefix: e.target.value,
+                                  },
+                                },
+                              });
+                            }
+                          }}
+                          placeholder="Bearer"
+                          supportVariables
+                        />
+                      </div>
+                      <div className="center-panel__auth-field">
+                        <label>Header Name</label>
+                        <Input
+                          value={request.auth.jwt?.headerName || 'Authorization'}
+                          onChange={(e) => {
+                            if (activeTabId) {
+                              updateRequest(activeTabId, {
+                                auth: {
+                                  ...request.auth,
+                                  jwt: { 
+                                    ...request.auth.jwt,
+                                    token: request.auth.jwt?.token || '',
+                                    headerName: e.target.value,
+                                  },
+                                },
+                              });
+                            }
+                          }}
+                          placeholder="Authorization"
+                          supportVariables
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {request.auth.type === 'digest' && (
+                    <div className="center-panel__auth-fields">
+                      <div className="center-panel__auth-field">
+                        <label>Username</label>
+                        <Input
+                          value={request.auth.digest?.username || ''}
+                          onChange={(e) => {
+                            if (activeTabId) {
+                              updateRequest(activeTabId, {
+                                auth: {
+                                  ...request.auth,
+                                  digest: { 
+                                    ...request.auth.digest,
+                                    username: e.target.value,
+                                    password: request.auth.digest?.password || '',
+                                  },
+                                },
+                              });
+                            }
+                          }}
+                          supportVariables
+                        />
+                      </div>
+                      <div className="center-panel__auth-field">
+                        <label>Password</label>
+                        <Input
+                          type="password"
+                          value={request.auth.digest?.password || ''}
+                          onChange={(e) => {
+                            if (activeTabId) {
+                              updateRequest(activeTabId, {
+                                auth: {
+                                  ...request.auth,
+                                  digest: { 
+                                    ...request.auth.digest,
+                                    username: request.auth.digest?.username || '',
+                                    password: e.target.value,
+                                  },
+                                },
+                              });
+                            }
+                          }}
+                          supportVariables
+                        />
+                      </div>
+                      <div className="center-panel__auth-field">
+                        <label>Realm (optional)</label>
+                        <Input
+                          value={request.auth.digest?.realm || ''}
+                          onChange={(e) => {
+                            if (activeTabId) {
+                              updateRequest(activeTabId, {
+                                auth: {
+                                  ...request.auth,
+                                  digest: { 
+                                    ...request.auth.digest,
+                                    username: request.auth.digest?.username || '',
+                                    password: request.auth.digest?.password || '',
+                                    realm: e.target.value,
+                                  },
+                                },
+                              });
+                            }
+                          }}
+                          supportVariables
+                        />
+                      </div>
+                      <div className="center-panel__auth-field">
+                        <label>Algorithm</label>
+                        <Dropdown
+                          options={[
+                            { value: 'MD5', label: 'MD5' },
+                            { value: 'MD5-sess', label: 'MD5-sess' },
+                            { value: 'SHA-256', label: 'SHA-256' },
+                            { value: 'SHA-256-sess', label: 'SHA-256-sess' },
+                          ]}
+                          value={request.auth.digest?.algorithm || 'MD5'}
+                          onChange={(algorithm) => {
+                            if (activeTabId) {
+                              updateRequest(activeTabId, {
+                                auth: {
+                                  ...request.auth,
+                                  digest: { 
+                                    ...request.auth.digest,
+                                    username: request.auth.digest?.username || '',
+                                    password: request.auth.digest?.password || '',
+                                    algorithm: algorithm as 'MD5' | 'MD5-sess' | 'SHA-256' | 'SHA-256-sess',
+                                  },
+                                },
+                              });
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {request.auth.type === 'aws-signature' && (
+                    <div className="center-panel__auth-fields">
+                      <div className="center-panel__auth-field">
+                        <label>Access Key ID</label>
+                        <Input
+                          value={request.auth.awsSignature?.accessKeyId || ''}
+                          onChange={(e) => {
+                            if (activeTabId) {
+                              updateRequest(activeTabId, {
+                                auth: {
+                                  ...request.auth,
+                                  awsSignature: { 
+                                    ...request.auth.awsSignature,
+                                    accessKeyId: e.target.value,
+                                    secretAccessKey: request.auth.awsSignature?.secretAccessKey || '',
+                                    region: request.auth.awsSignature?.region || '',
+                                    service: request.auth.awsSignature?.service || '',
+                                  },
+                                },
+                              });
+                            }
+                          }}
+                          supportVariables
+                        />
+                      </div>
+                      <div className="center-panel__auth-field">
+                        <label>Secret Access Key</label>
+                        <Input
+                          type="password"
+                          value={request.auth.awsSignature?.secretAccessKey || ''}
+                          onChange={(e) => {
+                            if (activeTabId) {
+                              updateRequest(activeTabId, {
+                                auth: {
+                                  ...request.auth,
+                                  awsSignature: { 
+                                    ...request.auth.awsSignature,
+                                    accessKeyId: request.auth.awsSignature?.accessKeyId || '',
+                                    secretAccessKey: e.target.value,
+                                    region: request.auth.awsSignature?.region || '',
+                                    service: request.auth.awsSignature?.service || '',
+                                  },
+                                },
+                              });
+                            }
+                          }}
+                          supportVariables
+                        />
+                      </div>
+                      <div className="center-panel__auth-field">
+                        <label>Region</label>
+                        <Input
+                          value={request.auth.awsSignature?.region || ''}
+                          onChange={(e) => {
+                            if (activeTabId) {
+                              updateRequest(activeTabId, {
+                                auth: {
+                                  ...request.auth,
+                                  awsSignature: { 
+                                    ...request.auth.awsSignature,
+                                    accessKeyId: request.auth.awsSignature?.accessKeyId || '',
+                                    secretAccessKey: request.auth.awsSignature?.secretAccessKey || '',
+                                    region: e.target.value,
+                                    service: request.auth.awsSignature?.service || '',
+                                  },
+                                },
+                              });
+                            }
+                          }}
+                          placeholder="us-east-1"
+                          supportVariables
+                        />
+                      </div>
+                      <div className="center-panel__auth-field">
+                        <label>Service</label>
+                        <Input
+                          value={request.auth.awsSignature?.service || ''}
+                          onChange={(e) => {
+                            if (activeTabId) {
+                              updateRequest(activeTabId, {
+                                auth: {
+                                  ...request.auth,
+                                  awsSignature: { 
+                                    ...request.auth.awsSignature,
+                                    accessKeyId: request.auth.awsSignature?.accessKeyId || '',
+                                    secretAccessKey: request.auth.awsSignature?.secretAccessKey || '',
+                                    region: request.auth.awsSignature?.region || '',
+                                    service: e.target.value,
+                                  },
+                                },
+                              });
+                            }
+                          }}
+                          placeholder="s3, execute-api, etc."
+                          supportVariables
+                        />
+                      </div>
+                      <div className="center-panel__auth-field">
+                        <label>Session Token (optional)</label>
+                        <Input
+                          value={request.auth.awsSignature?.sessionToken || ''}
+                          onChange={(e) => {
+                            if (activeTabId) {
+                              updateRequest(activeTabId, {
+                                auth: {
+                                  ...request.auth,
+                                  awsSignature: { 
+                                    ...request.auth.awsSignature,
+                                    accessKeyId: request.auth.awsSignature?.accessKeyId || '',
+                                    secretAccessKey: request.auth.awsSignature?.secretAccessKey || '',
+                                    region: request.auth.awsSignature?.region || '',
+                                    service: request.auth.awsSignature?.service || '',
+                                    sessionToken: e.target.value,
+                                  },
+                                },
+                              });
+                            }
+                          }}
+                          supportVariables
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -811,7 +1504,27 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
               {activeRequestTab === 'scripts' && (
                 <div className="center-panel__scripts">
                   <div className="center-panel__script">
-                    <label>Pre-request Script</label>
+                    <div className="center-panel__script-header">
+                      <label>Pre-request Script</label>
+                      <Dropdown
+                        options={PRE_REQUEST_SAMPLES.map(s => ({ value: s.value, label: s.label }))}
+                        value=""
+                        onChange={(value) => {
+                          const sample = PRE_REQUEST_SAMPLES.find(s => s.value === value);
+                          if (sample?.code && activeTabId) {
+                            const currentScript = request.scripts.pre;
+                            const newScript = currentScript
+                              ? `${currentScript}\n\n${sample.code}`
+                              : sample.code;
+                            updateRequest(activeTabId, {
+                              scripts: { ...request.scripts, pre: newScript },
+                            });
+                          }
+                        }}
+                        size="sm"
+                        className="center-panel__script-samples"
+                      />
+                    </div>
                     <div className="center-panel__script-editor">
                       <CodeEditor
                         mode="javascript"
@@ -831,7 +1544,27 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                     </div>
                   </div>
                   <div className="center-panel__script">
-                    <label>Post-request Script</label>
+                    <div className="center-panel__script-header">
+                      <label>Post-request Script</label>
+                      <Dropdown
+                        options={POST_REQUEST_SAMPLES.map(s => ({ value: s.value, label: s.label }))}
+                        value=""
+                        onChange={(value) => {
+                          const sample = POST_REQUEST_SAMPLES.find(s => s.value === value);
+                          if (sample?.code && activeTabId) {
+                            const currentScript = request.scripts.post;
+                            const newScript = currentScript
+                              ? `${currentScript}\n\n${sample.code}`
+                              : sample.code;
+                            updateRequest(activeTabId, {
+                              scripts: { ...request.scripts, post: newScript },
+                            });
+                          }
+                        }}
+                        size="sm"
+                        className="center-panel__script-samples"
+                      />
+                    </div>
                     <div className="center-panel__script-editor">
                       <CodeEditor
                         mode="javascript"

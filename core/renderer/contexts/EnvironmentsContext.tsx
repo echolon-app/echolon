@@ -20,7 +20,7 @@ interface EnvironmentsContextValue {
   activeEnvironments: Environment[];
   selectedEnvironment: Environment | null;
   isLoading: boolean;
-  addEnvironment: (name: string) => Promise<Environment>;
+  addEnvironment: (name: string, options?: { color?: string; emoji?: string }) => Promise<Environment>;
   importEnvironment: (env: Environment, checkDuplicate?: boolean) => Promise<Environment | null>;
   // Web mode only - add environment directly to state without file storage
   addWebModeEnvironment: (env: Environment) => void;
@@ -100,12 +100,14 @@ export const EnvironmentsProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // Legacy alias
   const activeEnvironment = selectedEnvironment;
 
-  const addEnvironment = useCallback(async (name: string): Promise<Environment> => {
+  const addEnvironment = useCallback(async (name: string, options?: { color?: string; emoji?: string }): Promise<Environment> => {
     const newEnvironment: Environment = {
       id: uuidv4(),
       name,
       variables: [],
       isActive: true,
+      color: options?.color,
+      emoji: options?.emoji,
     };
     
     const newEnvs = [...environments, newEnvironment];

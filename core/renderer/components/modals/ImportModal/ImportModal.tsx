@@ -513,7 +513,7 @@ https://api.example.com/openapi.json`}
                 {isDragging ? 'Drop your file here' : 'Drag & drop a file or click to browse'}
               </span>
               <span className="import-modal__dropzone-hint">
-                Supports OpenAPI, Postman Collection, and Insomnia formats (.json, .yaml, .yml)
+                Supports OpenAPI and Postman format
               </span>
               </div>
             )}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Modal, Button, Input } from '@/components/ui';
+import { Modal, Button, Input, ColorEmojiPicker } from '@/components/ui';
 import { useEnvironments, useApp, useRequest } from '@/contexts';
 import './NewEnvironmentModal.css';
 
@@ -8,19 +8,28 @@ export const NewEnvironmentModal: React.FC = () => {
   const { addEnvironment } = useEnvironments();
   const { addEnvironmentTab } = useRequest();
   const [name, setName] = useState('');
+  const [color, setColor] = useState<string | undefined>();
+  const [emoji, setEmoji] = useState<string | undefined>();
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (newEnvironmentModalOpen) {
       setName('');
+      setColor(undefined);
+      setEmoji(undefined);
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [newEnvironmentModalOpen]);
 
+  const handleColorEmojiChange = (updates: { color?: string; emoji?: string }) => {
+    setColor(updates.color);
+    setEmoji(updates.emoji);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (name.trim()) {
-      const newEnvironment = addEnvironment(name.trim());
+      const newEnvironment = addEnvironment(name.trim(), { color, emoji });
       addEnvironmentTab(newEnvironment);
       closeNewEnvironmentModal();
     }
@@ -43,15 +52,23 @@ export const NewEnvironmentModal: React.FC = () => {
       <form onSubmit={handleSubmit} className="new-environment-modal">
         <div className="new-environment-modal__field">
           <label htmlFor="environment-name">Name</label>
-          <Input
-            id="environment-name"
-            ref={inputRef}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Production, Staging, Local..."
-            onKeyDown={handleKeyDown}
-            autoFocus
-          />
+          <div className="new-environment-modal__name-row">
+            <ColorEmojiPicker
+              color={color}
+              emoji={emoji}
+              onChange={handleColorEmojiChange}
+              size="lg"
+            />
+            <Input
+              id="environment-name"
+              ref={inputRef}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Production, Staging, Local..."
+              onKeyDown={handleKeyDown}
+              autoFocus
+            />
+          </div>
         </div>
 
         <p className="new-environment-modal__hint">

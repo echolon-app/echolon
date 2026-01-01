@@ -12,6 +12,7 @@ import { GitHubConnectModal } from '@/components/modals/GitHubConnectModal';
 import { requestService } from '@/services';
 import { Collection, Request, Folder, MockAPI } from '@/types';
 import { METHOD_COLORS } from '../../../../shared/constants';
+import { formatTime } from '@/utils';
 import './LeftPanel.css';
 
 const getMethodColor = (method: string): string => {
@@ -803,7 +804,7 @@ export const LeftPanel: React.FC = () => {
                   <div className="history-item">
                     <span className="history-item__url">{entry.request.url || 'Untitled'}</span>
                     <span className="history-item__time">
-                      {new Date(entry.timestamp).toLocaleTimeString()}
+                      {formatTime(entry.timestamp)}
                     </span>
                   </div>
                 </CollapsibleListItem>

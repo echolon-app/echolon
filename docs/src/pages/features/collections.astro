@@ -1,0 +1,213 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+import { Callout } from '../../components/ui/Callout';
+import { Steps, Step } from '../../components/ui/Steps';
+
+const headings = [
+  { depth: 2, slug: 'creating-a-new-collection', text: 'Creating a new collection' },
+  { depth: 2, slug: 'save-requests-to-collections', text: 'Save requests to collections' },
+  { depth: 2, slug: 'organizing-collections', text: 'Organizing collections' },
+  { depth: 3, slug: 'editing-collections', text: 'Editing collections' },
+  { depth: 3, slug: 'adding-requests', text: 'Adding requests' },
+  { depth: 2, slug: 'duplicating-collections', text: 'Duplicating collections' },
+  { depth: 2, slug: 'deleting-collections', text: 'Deleting collections' },
+  { depth: 2, slug: 'importing-and-exporting', text: 'Importing and exporting' },
+  { depth: 2, slug: 'collection-properties', text: 'Collection properties' },
+];
+---
+
+<DocsLayout title="Collections" headings={headings}>
+  <div class="prose">
+    <h1>Collections</h1>
+    <p class="lead">
+      Save, organize, and share your API requests with collections.
+    </p>
+    
+    <p>
+      Echolon helps you organize your API requests with collections. You can create 
+      collections and add requests to them to share with your team or to use later. 
+      You can also import and export collections from Echolon, OpenAPI, and Postman.
+    </p>
+    
+    <p>
+      You can access the collections by clicking the "<strong>Collections</strong>" 
+      icon on the side panel.
+    </p>
+    
+    <h2 id="creating-a-new-collection">Creating a new collection</h2>
+    <p>
+      To create a new collection, click on the "<strong>Add new</strong>" button on 
+      the collections section and enter the name of the collection. You can also 
+      create a sub-collection by clicking on the "<strong>Add new</strong>" button 
+      on the desired collection and entering the name of the sub-collection.
+    </p>
+    
+    <h2 id="save-requests-to-collections">Save requests to collections</h2>
+    <p>
+      To add a new request to your collection, you can click on the "<strong>Save</strong>" 
+      button on the request page and select the collection you want to add it to. 
+      Click on the drop-down menu next to the save button and click on "<strong>Save as</strong>" 
+      to save the request to a new location.
+    </p>
+    
+    <Callout type="tip" title="Keyboard Shortcut" client:load>
+      You can also use the keyboard shortcut <code>Ctrl/Cmd + S</code> to save the 
+      request to a collection.
+    </Callout>
+    
+    <h2 id="organizing-collections">Organizing collections</h2>
+    <p>
+      You can organize your collections by dragging and dropping them to the desired 
+      location. You can also create sub-collections by dragging and dropping a collection 
+      into another collection.
+    </p>
+    
+    <h3 id="editing-collections">Editing collections</h3>
+    <p>
+      To edit a collection, click on the "<strong>Edit</strong>" button on the 
+      collection's options menu.
+    </p>
+    
+    <h3 id="adding-requests">Adding requests to collections</h3>
+    <p>
+      To add a request to a collection, click on the "<strong>New request</strong>" 
+      button on the collection's options to save the current request to the collection.
+    </p>
+    
+    <h2 id="duplicating-collections">Duplicating collections</h2>
+    <p>
+      To duplicate a collection, click on the "<strong>Duplicate</strong>" button 
+      on the collection's options menu.
+    </p>
+    
+    <h2 id="deleting-collections">Deleting collections</h2>
+    <p>
+      To delete a collection, click on the "<strong>Delete</strong>" button on the 
+      collection's options menu.
+    </p>
+    
+    <Callout type="warning" title="Warning" client:load>
+      Deleting a collection will also delete all requests and sub-collections within it. 
+      This action cannot be undone.
+    </Callout>
+    
+    <h2 id="importing-and-exporting">Importing and exporting collections</h2>
+    <p>
+      You can import and export collections from Echolon, OpenAPI, and Postman.
+    </p>
+    
+    <h3>Importing collections</h3>
+    <p>
+      To import a collection, click on the "<strong>Import</strong>" button in the 
+      collections section and select the collection type you want to import.
+    </p>
+    
+    <h3>Exporting collections</h3>
+    <p>
+      To export a collection, click on the "<strong>Export</strong>" button on the 
+      collection's options and select the format you want to export.
+    </p>
+    
+    <h2 id="collection-properties">Collection Properties</h2>
+    <p>
+      Collection properties enable you to define settings that universally apply to 
+      all requests within the collection. At the collection level, you can configure:
+    </p>
+    
+    <ul class="list">
+      <li><strong>Authorization</strong> - Set authentication for all requests</li>
+      <li><strong>Headers</strong> - Define common headers</li>
+      <li><strong>Variables</strong> - Create collection-scoped variables</li>
+    </ul>
+    
+    <p>
+      Subfolders and individual requests within the collection inherit these properties 
+      by default and can override them when needed.
+    </p>
+    
+    <h3>Setting collection properties</h3>
+    
+    <Steps client:load>
+      <Step number={1} title="Open collection properties" client:load>
+        Right-click on a collection or a subfolder within a collection to open its properties.
+      </Step>
+      <Step number={2} title="Configure settings" client:load>
+        Specify the authorization, headers, and variables that all nested requests or 
+        folders should adhere to.
+      </Step>
+      <Step number={3} title="Inheritance" client:load>
+        If a subfolder should inherit the properties of a parent collection, specify 
+        the authorization as "inherit" and leave headers unchanged. Variables inherit 
+        automatically—override by redefining the same variable in the child.
+      </Step>
+    </Steps>
+  </div>
+</DocsLayout>
+
+<style>
+  .prose {
+    color: var(--color-text-secondary);
+    line-height: var(--line-height-relaxed);
+  }
+  
+  .prose h1 {
+    font-size: var(--font-size-4xl);
+    color: var(--color-text);
+    margin-bottom: var(--spacing-4);
+  }
+  
+  .prose h2 {
+    font-size: var(--font-size-2xl);
+    color: var(--color-text);
+    margin-top: var(--spacing-10);
+    margin-bottom: var(--spacing-4);
+    padding-top: var(--spacing-4);
+    border-top: 1px solid var(--color-border-subtle);
+  }
+  
+  .prose h2:first-of-type {
+    border-top: none;
+    padding-top: 0;
+  }
+  
+  .prose h3 {
+    font-size: var(--font-size-xl);
+    color: var(--color-text);
+    margin-top: var(--spacing-6);
+    margin-bottom: var(--spacing-3);
+  }
+  
+  .prose p {
+    margin-bottom: var(--spacing-4);
+  }
+  
+  .prose .lead {
+    font-size: var(--font-size-lg);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-6);
+  }
+  
+  .prose code {
+    padding: var(--spacing-1) var(--spacing-2);
+    font-size: var(--font-size-sm);
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+  }
+  
+  .prose .list {
+    margin: var(--spacing-4) 0;
+    padding-left: var(--spacing-6);
+  }
+  
+  .prose .list li {
+    margin-bottom: var(--spacing-2);
+    list-style: disc;
+  }
+  
+  .prose strong {
+    color: var(--color-text);
+    font-weight: 600;
+  }
+</style>
+

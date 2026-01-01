@@ -5,6 +5,7 @@ import {
 } from '@/components/ui/icons';
 import { useApp } from '@/contexts';
 import { ConsoleEntry } from '@/types';
+import { formatTime } from '@/utils';
 import './ConsolePanel.css';
 
 const getIcon = (type: ConsoleEntry['type']) => {
@@ -28,9 +29,6 @@ export const ConsolePanel: React.FC = () => {
     }
   }, [consoleEntries.length]);
 
-  const formatTime = (timestamp: number): string => {
-    return new Date(timestamp).toLocaleTimeString();
-  };
 
   return (
     <div className="console-panel">

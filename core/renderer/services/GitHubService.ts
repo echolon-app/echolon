@@ -5,6 +5,8 @@
  * communicating with the main process via IPC.
  */
 
+import { formatDateMedium } from '@/utils';
+
 // Types from the preload script (re-exported for convenience)
 export interface GitHubUser {
   login: string;
@@ -358,14 +360,7 @@ class GitHubService {
    * Format a date string for display
    */
   formatDate(dateString: string): string {
-    const date = new Date(dateString);
-    return date.toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    return formatDateMedium(dateString);
   }
 
   /**

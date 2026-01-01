@@ -530,12 +530,16 @@ export const CURL_EXAMPLES = [
  */
 export const URL_EXAMPLES = [
   {
+    label: 'Echolon Sample API',
+    url: 'https://sample-api.echolon.app/openapi.json'
+  },
+  {
     label: 'Petstore (OpenAPI 3.0)',
     url: 'https://petstore3.swagger.io/api/v3/openapi.json'
   },
   {
     label: 'GitHub REST API',
     url: 'https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json'
-  }
+  },
 ];
 
