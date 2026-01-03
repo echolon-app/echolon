@@ -15,7 +15,6 @@ const menuItems: { id: SidebarView; icon: React.FC; label: string; electronOnly?
   { id: 'history', icon: HistoryIcon, label: 'History' },
   { id: 'mocking', icon: MockingIcon, label: 'Mocking', electronOnly: true },
   { id: 'git', icon: GitIcon, label: 'Git', electronOnly: true },
-  { id: 'socket', icon: SocketIcon, label: 'Socket' },
   { id: 'graphql', icon: GraphQLIcon, label: 'GraphQL' },
 ];
 

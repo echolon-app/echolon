@@ -93,7 +93,7 @@ export function CodeBlock({ code, language = 'javascript', filename, showLineNum
           )}
         </button>
         <pre className="cb-pre">
-          {showLineNumbers ? (
+            {showLineNumbers ? (
             <code className="cb-code">
               {lines.map((line, i) => (
                 <span key={i} className="cb-line">
@@ -102,9 +102,9 @@ export function CodeBlock({ code, language = 'javascript', filename, showLineNum
                 </span>
               ))}
             </code>
-          ) : (
+            ) : (
             <code className="cb-code" dangerouslySetInnerHTML={{ __html: highlightedCode }} />
-          )}
+            )}
         </pre>
       </div>
       <style>{`

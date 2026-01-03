@@ -9,5 +9,6 @@ export { RequestProvider, useRequest } from './RequestContext';
 export { AppProvider, useApp } from './AppContext';
 export { MockingProvider, useMocking } from './MockingContext';
 export { ToastProvider, useToast } from './ToastContext';
+export { UpdateProvider, useUpdate, useUpdateOptional, type UpdateInfo, type DownloadProgress } from './UpdateContext';
 export { WebModeProvider, useWebMode, useWebModeOptional, type ViewMode, type WebModeConfig } from './WebModeContext';
 export { Reference2Provider, useReference2, useReference2Optional } from './Reference2Context';

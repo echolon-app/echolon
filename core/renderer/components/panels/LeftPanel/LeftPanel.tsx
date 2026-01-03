@@ -1,16 +1,17 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
-  Button, SearchInput, CollapsibleList, CollapsibleListItem, ContextMenu, useContextMenu, Tooltip, Switch
+  Button, SearchInput, CollapsibleList, CollapsibleListItem, ContextMenu, useContextMenu, Tooltip, Switch,
+  type DropPosition
 } from '@/components/ui';
 import { 
   RadarIcon, PlusIcon, FolderIcon, ImportIcon, PlayIcon, StopIcon, ServerIcon, SocketIcon, GraphQLIcon, 
   MailIcon, CollapseAllIcon, ExpandAllIcon, EditIcon, CopyIcon, ExportIcon, TrashIcon, OpenIcon, NewTabIcon, MoveIcon
 } from '@/components/ui/icons';
-import { useApp, useCollections, useRequest, useEnvironments, useMocking, useWebMode } from '@/contexts';
+import { useApp, useCollections, useRequest, useEnvironments, useMocking, useWebMode, useToast } from '@/contexts';
 import { GitPanel } from '@/components/panels/GitPanel';
 import { GitHubConnectModal } from '@/components/modals/GitHubConnectModal';
 import { requestService } from '@/services';
-import { Collection, Request, Folder, MockAPI } from '@/types';
+import { Collection, Request, Folder, MockAPI, WebSocketConnection } from '@/types';
 import { METHOD_COLORS } from '../../../../shared/constants';
 import { formatTime } from '@/utils';
 import './LeftPanel.css';
@@ -21,7 +22,7 @@ const getMethodColor = (method: string): string => {
 
 export const LeftPanel: React.FC = () => {
   const { sidebarView, openImportModal, openNewCollectionModal, openNewEnvironmentModal, openMoveCollectionModal } = useApp();
-  const { collections, deleteCollection, addRequest, updateRequest, updateCollection, updateFolder, collapseAllFolders, expandAllFolders } = useCollections();
+  const { collections, deleteCollection, addRequest, updateRequest, updateCollection, updateFolder, collapseAllFolders, expandAllFolders, moveRequestToCollection, deleteRequest } = useCollections();
   const { environments, toggleEnvironmentActive } = useEnvironments();
   const { addTab, addSampleTab, addCollectionTab, addEnvironmentTab, history, closeTab, tabs, setActiveTab, renameTab, activeTabId, activeTab } = useRequest();
   const { 
@@ -35,6 +36,7 @@ export const LeftPanel: React.FC = () => {
     localHostname 
   } = useMocking();
   const { readonly, isWebMode } = useWebMode();
+  const { error: showError } = useToast();
   
   // Scroll sync state - listen for events from CollectionEditor
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
@@ -43,6 +45,9 @@ export const LeftPanel: React.FC = () => {
   
   // Flag to suppress auto-scroll when click originated from LeftPanel
   const suppressAutoScrollRef = useRef(false);
+  
+  // Flag to suppress auto-scroll during drag operations
+  const isDraggingRef = useRef(false);
   
   // Ref to the scroll container
   const leftPanelContentRef = useRef<HTMLDivElement>(null);
@@ -60,7 +65,9 @@ export const LeftPanel: React.FC = () => {
       // Only auto-scroll if:
       // 1. Not suppressed (i.e., not triggered by a LeftPanel click)
       // 2. The active item actually changed
+      // 3. Not currently dragging
       if (!suppressAutoScrollRef.current && 
+          !isDraggingRef.current &&
           (event.detail.folderId !== prevFolderId || event.detail.requestId !== prevRequestId)) {
         // Scroll to the active item
         const targetId = event.detail.requestId || event.detail.folderId;
@@ -199,6 +206,9 @@ export const LeftPanel: React.FC = () => {
     }
 
     // Scroll to the request item after a brief delay (to allow DOM to update)
+    // Skip if currently dragging to avoid jarring scroll behavior
+    if (isDraggingRef.current) return;
+    
     const scrollTimeout = setTimeout(() => {
       const element = requestItemRefs.current.get(activeRequestId);
       if (element) {
@@ -382,12 +392,46 @@ export const LeftPanel: React.FC = () => {
           if (mockApi.isRunning) {
             await stopMockServer(mockApi.id);
           } else {
-            await startMockServer(mockApi.id);
+            const result = await startMockServer(mockApi.id);
+            if (!result.success) {
+              showError('Server failed to start', result.error || 'Failed to start mock server');
+            }
           }
         }},
         { id: 'divider2', label: '', divider: true },
         { id: 'delete', label: 'Delete', icon: <TrashIcon />, danger: true, onClick: () => {
           deleteMockApi(mockApi.id);
+        }},
+      ];
+    }
+
+    if (contextTarget.type === 'standaloneRequest') {
+      const { tab } = contextTarget.item as { tab: typeof tabs[0]; request: Request };
+      return [
+        { id: 'open', label: 'Open', icon: <OpenIcon />, onClick: () => {
+          setActiveTab(tab.id);
+        }},
+        { id: 'divider1', label: '', divider: true },
+        { id: 'duplicate', label: 'Duplicate', icon: <CopyIcon />, onClick: () => {
+          const duplicated = requestService.duplicateRequest(tab.request!);
+          addTab(duplicated);
+        }},
+        { id: 'divider2', label: '', divider: true },
+        { id: 'close', label: 'Close', icon: <TrashIcon />, danger: true, onClick: () => {
+          closeTab(tab.id);
+        }},
+      ];
+    }
+
+    if (contextTarget.type === 'standaloneWebSocket') {
+      const { tab } = contextTarget.item as { tab: typeof tabs[0]; websocket: unknown };
+      return [
+        { id: 'open', label: 'Open', icon: <OpenIcon />, onClick: () => {
+          setActiveTab(tab.id);
+        }},
+        { id: 'divider1', label: '', divider: true },
+        { id: 'close', label: 'Close', icon: <TrashIcon />, danger: true, onClick: () => {
+          closeTab(tab.id);
         }},
       ];
     }
@@ -446,7 +490,126 @@ export const LeftPanel: React.FC = () => {
     setEditingCollectionName('');
   };
 
-  const renderRequestItem = (request: Request, collectionId: string, folderId?: string) => {
+  // Handle dropping a request into a collection (at end)
+  const handleDropRequestOnCollection = useCallback((data: unknown, targetCollectionId: string) => {
+    console.log('[DnD] handleDropRequestOnCollection called', { data, targetCollectionId });
+    const { request, fromCollectionId, fromFolderId, standaloneTabId } = data as { 
+      request: Request; 
+      fromCollectionId: string | null; 
+      fromFolderId?: string;
+      standaloneTabId?: string;
+    };
+    
+    console.log('[DnD] Parsed data:', { request: request?.name, fromCollectionId, standaloneTabId });
+    
+    // Don't do anything if dropping on the same collection at root level
+    if (fromCollectionId === targetCollectionId && !fromFolderId) {
+      console.log('[DnD] Skipping - same collection at root level');
+      return;
+    }
+    
+    console.log('[DnD] Calling moveRequestToCollection');
+    moveRequestToCollection(request, fromCollectionId, targetCollectionId);
+    
+    // Close the standalone tab if this was a standalone request
+    if (standaloneTabId) {
+      console.log('[DnD] Closing standalone tab:', standaloneTabId);
+      closeTab(standaloneTabId);
+    }
+  }, [moveRequestToCollection, closeTab]);
+
+  // Handle dropping a request at a specific position relative to another request
+  const handleDropRequestAtPosition = useCallback((
+    data: unknown, 
+    targetCollectionId: string,
+    targetRequestIndex: number,
+    position: DropPosition,
+    folderId?: string
+  ) => {
+    console.log('[DnD] handleDropRequestAtPosition called', { targetCollectionId, targetRequestIndex, position, folderId });
+    const { request, fromCollectionId, fromFolderId, standaloneTabId } = data as { 
+      request: Request; 
+      fromCollectionId: string | null; 
+      fromFolderId?: string;
+      standaloneTabId?: string;
+    };
+    
+    console.log('[DnD] Parsed data:', { requestName: request?.name, fromCollectionId, standaloneTabId });
+    
+    // Calculate insert index based on position
+    let insertIndex = position === 'before' ? targetRequestIndex : targetRequestIndex + 1;
+    console.log('[DnD] Calculated insertIndex:', insertIndex);
+    
+    console.log('[DnD] Calling moveRequestToCollection');
+    moveRequestToCollection(request, fromCollectionId, targetCollectionId, folderId, insertIndex);
+    
+    // Close the standalone tab if this was a standalone request
+    if (standaloneTabId) {
+      console.log('[DnD] Closing standalone tab:', standaloneTabId);
+      closeTab(standaloneTabId);
+    }
+  }, [moveRequestToCollection, closeTab]);
+
+  // Handle dropping a request to make it standalone
+  const handleDropRequestToStandalone = useCallback((data: unknown) => {
+    const { request, fromCollectionId, fromFolderId } = data as { 
+      request: Request; 
+      fromCollectionId: string | null; 
+      fromFolderId?: string;
+    };
+    
+    // Only process if the request is from a collection
+    if (!fromCollectionId) {
+      return;
+    }
+    
+    // Remove from collection
+    deleteRequest(fromCollectionId, request.id, fromFolderId);
+    
+    // Create a new standalone tab with the request
+    const standaloneRequest: Request = {
+      ...request,
+      collectionId: undefined,
+      folderId: undefined,
+    };
+    addTab(standaloneRequest);
+  }, [deleteRequest, addTab]);
+
+  // Drag over handler for standalone section
+  const [isStandaloneDragOver, setIsStandaloneDragOver] = useState(false);
+  
+  const handleStandaloneDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsStandaloneDragOver(true);
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleStandaloneDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsStandaloneDragOver(false);
+  };
+
+  const handleStandaloneDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsStandaloneDragOver(false);
+    
+    try {
+      const rawData = e.dataTransfer.getData('application/json');
+      if (rawData) {
+        const { type, data } = JSON.parse(rawData);
+        if (type === 'request') {
+          handleDropRequestToStandalone(data);
+        }
+      }
+    } catch (err) {
+      console.error('Drop error:', err);
+    }
+  };
+
+  const renderRequestItem = (request: Request, collectionId: string, folderId?: string, index?: number) => {
     const isEditing = editingRequestId === request.id;
     const isActive = activeRequestId === request.id;
     // Check if this request is highlighted from reference scroll sync
@@ -460,6 +623,22 @@ export const LeftPanel: React.FC = () => {
           onClick={() => !isEditing && handleOpenRequest(request, collectionId, folderId)}
           onContextMenu={(e) => handleRequestContextMenu(e, request)}
           onDoubleClick={() => handleStartEditing(request)}
+          draggable={!readonly && !isEditing}
+          dragType="request"
+          dragData={{ request, fromCollectionId: collectionId, fromFolderId: folderId }}
+          onDragStart={() => { isDraggingRef.current = true; }}
+          onDragEnd={() => { isDraggingRef.current = false; }}
+          droppable={!readonly}
+          dropAcceptTypes={['request']}
+          itemId={request.id}
+          onDrop={(data, type, position) => {
+            console.log('[renderRequestItem] onDrop called', { index, collectionId, position, folderId });
+            if (index !== undefined) {
+              handleDropRequestAtPosition(data, collectionId, index, position, folderId);
+            } else {
+              console.log('[renderRequestItem] index is undefined, skipping');
+            }
+          }}
         >
           {isEditing ? (
             <input
@@ -546,9 +725,16 @@ export const LeftPanel: React.FC = () => {
             updateFolder(collectionId, folder.id, { collapsed });
           }}
           className={isActiveSection ? 'reference-active-section' : undefined}
+          droppable={!readonly}
+          dropAcceptTypes={['request']}
+          onDrop={(data) => handleDropRequestOnCollection(data, collectionId)}
+          onDropOnHeader={(data) => {
+            // Drop on folder header adds at first position
+            handleDropRequestAtPosition(data, collectionId, 0, 'before', folder.id);
+          }}
         >
           {folder.folders.map(f => renderFolder(f, collectionId))}
-          {folder.requests.map(r => renderRequestItem(r, collectionId, folder.id))}
+          {folder.requests.map((r, idx) => renderRequestItem(r, collectionId, folder.id, idx))}
         </CollapsibleList>
       </div>
     );
@@ -597,6 +783,40 @@ export const LeftPanel: React.FC = () => {
 
   const filteredCollections = getFilteredCollections();
 
+  // Get standalone requests and WebSocket connections (not belonging to any collection)
+  const standaloneItems = useMemo(() => {
+    const standaloneRequests = tabs
+      .filter(tab => tab.type === 'request' && tab.request && !tab.request.collectionId)
+      .map(tab => ({ type: 'request' as const, tab, item: tab.request! }));
+    
+    const websocketConnections = tabs
+      .filter(tab => tab.type === 'websocket' && tab.websocket)
+      .map(tab => ({ type: 'websocket' as const, tab, item: tab.websocket! }));
+    
+    return [...standaloneRequests, ...websocketConnections];
+  }, [tabs]);
+
+  // Filter standalone items by search query
+  const filteredStandaloneItems = useMemo(() => {
+    if (!searchQuery) return standaloneItems;
+    
+    const lowerQuery = searchQuery.toLowerCase();
+    return standaloneItems.filter(item => {
+      if (item.type === 'request') {
+        return (
+          item.item.name.toLowerCase().includes(lowerQuery) ||
+          item.item.method.toLowerCase().includes(lowerQuery) ||
+          item.item.url.toLowerCase().includes(lowerQuery)
+        );
+      } else {
+        return (
+          item.item.name.toLowerCase().includes(lowerQuery) ||
+          item.item.url.toLowerCase().includes(lowerQuery)
+        );
+      }
+    });
+  }, [standaloneItems, searchQuery]);
+
   const filteredEnvironments = searchQuery
     ? environments.filter(e => e.name.toLowerCase().includes(searchQuery.toLowerCase()))
     : environments;
@@ -621,7 +841,10 @@ export const LeftPanel: React.FC = () => {
     if (mockApi.isRunning) {
       await stopMockServer(mockApi.id);
     } else {
-      await startMockServer(mockApi.id);
+      const result = await startMockServer(mockApi.id);
+      if (!result.success) {
+        showError('Server failed to start', result.error || 'Failed to start mock server');
+      }
     }
   };
 
@@ -644,7 +867,7 @@ export const LeftPanel: React.FC = () => {
               <div className="left-panel__actions">
                 <Button variant="ghost" size="sm" onClick={openNewCollectionModal}>
                   <PlusIcon />
-                  New Collection
+                  New
                 </Button>
                 <Button variant="ghost" size="sm" onClick={openImportModal}>
                   <ImportIcon />
@@ -654,7 +877,75 @@ export const LeftPanel: React.FC = () => {
             )}
 
             <div className="left-panel__list">
-              {filteredCollections.length === 0 ? (
+              {/* Drop zone for making requests standalone */}
+              {!readonly && (
+                <div 
+                  className={`left-panel__standalone-dropzone ${isStandaloneDragOver ? 'left-panel__standalone-dropzone--drag-over' : ''}`}
+                  onDragOver={handleStandaloneDragOver}
+                  onDragLeave={handleStandaloneDragLeave}
+                  onDrop={handleStandaloneDrop}
+                >
+                  <span>Drop here to remove from collection</span>
+                </div>
+              )}
+              
+              {/* Standalone items (requests & websockets not in collections) */}
+              {filteredStandaloneItems.length > 0 && (
+                <div className="left-panel__standalone-section">
+                  {filteredStandaloneItems.map((standaloneItem) => {
+                    const { type, tab, item } = standaloneItem;
+                    if (type === 'request') {
+                      const request = item as Request;
+                      return (
+                        <CollapsibleListItem
+                          key={tab.id}
+                          icon={
+                            <span className="method-badge" style={{ color: getMethodColor(request.method) }}>
+                              {request.method}
+                            </span>
+                          }
+                          active={activeTabId === tab.id}
+                          onClick={() => setActiveTab(tab.id)}
+                          onContextMenu={(e) => {
+                            setContextTarget({ type: 'standaloneRequest', item: { tab, request } });
+                            showContextMenu(e);
+                          }}
+                          draggable={!readonly}
+                          dragType="request"
+                          dragData={{ request, fromCollectionId: null, standaloneTabId: tab.id }}
+                          onDragStart={() => { isDraggingRef.current = true; }}
+                          onDragEnd={() => { isDraggingRef.current = false; }}
+                        >
+                          <div className="standalone-item">
+                            <span className="standalone-item__name">{request.name}</span>
+                          </div>
+                        </CollapsibleListItem>
+                      );
+                    } else {
+                      const websocket = item as WebSocketConnection;
+                      return (
+                        <CollapsibleListItem
+                          key={tab.id}
+                          icon={<SocketIcon />}
+                          active={activeTabId === tab.id}
+                          onClick={() => setActiveTab(tab.id)}
+                          onContextMenu={(e) => {
+                            setContextTarget({ type: 'standaloneWebSocket', item: { tab, websocket } });
+                            showContextMenu(e);
+                          }}
+                        >
+                          <div className="standalone-item">
+                            <span className="standalone-item__name">{websocket.name}</span>
+                            <span className={`standalone-item__status standalone-item__status--${websocket.status}`} />
+                          </div>
+                        </CollapsibleListItem>
+                      );
+                    }
+                  })}
+                </div>
+              )}
+
+              {filteredCollections.length === 0 && filteredStandaloneItems.length === 0 ? (
                 <div className="left-panel__empty">
                   {searchQuery ? (
                     <>
@@ -702,6 +993,14 @@ export const LeftPanel: React.FC = () => {
                     onEditingTitleChange={setEditingCollectionName}
                     onEditingTitleComplete={() => handleFinishEditingCollection(collection)}
                     onEditingTitleCancel={handleCancelEditingCollection}
+                    droppable={!readonly}
+                    dropAcceptTypes={['request']}
+                    onDrop={(data) => handleDropRequestOnCollection(data, collection.id)}
+                    onDropOnHeader={(data) => {
+                      // Drop on collection header adds at first position
+                      handleDropRequestAtPosition(data, collection.id, 0, 'before', undefined);
+                    }}
+                    dropTargetId={collection.id}
                     actions={
                       !readonly && (
                         <Tooltip content="Add Request">
@@ -721,7 +1020,7 @@ export const LeftPanel: React.FC = () => {
                     }
                   >
                     {collection.folders.map(f => renderFolder(f, collection.id))}
-                    {collection.requests.map(r => renderRequestItem(r, collection.id))}
+                    {collection.requests.map((r, idx) => renderRequestItem(r, collection.id, undefined, idx))}
                   </CollapsibleList>
                 ))
               )}

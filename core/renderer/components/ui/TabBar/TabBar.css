@@ -114,6 +114,18 @@
   text-transform: uppercase;
 }
 
+.tab__icon .tab-websocket-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-primary);
+}
+
+.tab__icon .tab-websocket-badge svg {
+  width: 12px;
+  height: 12px;
+}
+
 .tab__title {
   overflow: hidden;
   text-overflow: ellipsis;

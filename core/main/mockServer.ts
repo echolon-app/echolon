@@ -1,7 +1,11 @@
 import http, { IncomingMessage, ServerResponse } from 'http';
+import https from 'https';
+import zlib from 'zlib';
 import { BrowserWindow } from 'electron';
 import os from 'os';
 import { v4 as uuidv4 } from 'uuid';
+import { execFile } from 'node:child_process'
+
 
 // IPC channel constant (duplicated here to avoid cross-rootDir import issues)
 const IPC_CHANNELS = {
@@ -26,6 +30,7 @@ interface MockServerConfig {
   id: string;
   port: number;
   routes: MockRoute[];
+  forwardTo?: string;  // optional URL to forward unmocked requests to
 }
 
 interface CapturedRequest {
@@ -57,12 +62,21 @@ class MockServerManager {
     this.mainWindow = window;
   }
 
-  getLocalHostname(): string {
+  getLocalHostname(): Promise<string> {
+    return new Promise((resolve, reject) => {
+      execFile('scutil', ['--get', 'LocalHostName'], (err, stdout) => {
+        if (err) return reject(err)
+        const name = stdout.trim()
+        resolve(name ? `${name}.local` : '')
+      })
+    })
+  }
+
+  getLocalHostnameBonjour(): string {
     // Get the computer name and format it as a .local hostname
     // macOS uses Bonjour/mDNS which resolves computerName.local
     const hostname = os.hostname();
-    //console.log('hostname::', hostname);
-    //console.log(os.)
+    console.log('hostname::', hostname);
     return hostname.toLowerCase();
     
     // If it already ends with .local, return as-is
@@ -82,7 +96,7 @@ class MockServerManager {
     return `${cleanHostname}`;
   }
 
-  async startServer(config: MockServerConfig): Promise<boolean> {
+  async startServer(config: MockServerConfig): Promise<{ success: boolean; error?: string }> {
     // Stop existing server if running
     if (this.servers.has(config.id)) {
       await this.stopServer(config.id);
@@ -93,16 +107,22 @@ class MockServerManager {
         this.handleRequest(config.id, req, res);
       });
 
-      server.on('error', (err) => {
+      server.on('error', (err: NodeJS.ErrnoException) => {
         console.error(`Mock server error for ${config.id}:`, err);
-        resolve(false);
+        let errorMessage = err.message;
+        if (err.code === 'EADDRINUSE') {
+          errorMessage = `Port ${config.port} is already in use. Try a different port.`;
+        } else if (err.code === 'EACCES') {
+          errorMessage = `Permission denied for port ${config.port}. Try a port above 1024.`;
+        }
+        resolve({ success: false, error: errorMessage });
       });
 
       server.listen(config.port, '0.0.0.0', () => {
         console.log(`Mock server ${config.id} started on port ${config.port}`);
         this.servers.set(config.id, server);
         this.configs.set(config.id, config);
-        resolve(true);
+        resolve({ success: true });
       });
     });
   }
@@ -242,8 +262,43 @@ class MockServerManager {
 
       responseStatus = mock.status;
       responseStatusText = mock.statusText;
-      responseHeaders = mock.headers.length > 0 ? mock.headers : responseHeaders;
       responseBody = mock.body;
+      
+      // Use mock headers but fix content-length to match actual body
+      if (mock.headers.length > 0) {
+        // Filter out content-length and transfer-encoding, we'll set correct content-length
+        responseHeaders = mock.headers.filter(h => {
+          const lowerKey = h.key.toLowerCase();
+          return lowerKey !== 'content-length' && lowerKey !== 'transfer-encoding';
+        });
+        // Add correct content-length for the actual body
+        responseHeaders.push({ key: 'Content-Length', value: String(Buffer.byteLength(responseBody, 'utf8')) });
+      }
+    } else if (config.forwardTo) {
+      // Forward to real API if configured
+      try {
+        const forwardedResponse = await this.forwardRequest(
+          config.forwardTo,
+          req.method || 'GET',
+          path,
+          queryParams,
+          headers,
+          body
+        );
+        responseStatus = forwardedResponse.status;
+        responseStatusText = forwardedResponse.statusText;
+        responseHeaders = forwardedResponse.headers;
+        responseBody = forwardedResponse.body;
+      } catch (error) {
+        console.error('[MockServer] Failed to forward request:', error);
+        responseStatus = 502;
+        responseStatusText = 'Bad Gateway';
+        responseBody = JSON.stringify({ 
+          error: 'Failed to forward request', 
+          message: (error as Error).message,
+          timestamp: new Date().toISOString(),
+        });
+      }
     }
 
     // Send response
@@ -268,6 +323,146 @@ class MockServerManager {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send(IPC_CHANNELS.MOCK_REQUEST_RECEIVED, capturedRequest);
     }
+  }
+
+  private async forwardRequest(
+    forwardTo: string,
+    method: string,
+    path: string,
+    queryParams: Record<string, string>,
+    headers: Array<{ key: string; value: string }>,
+    body?: string
+  ): Promise<{
+    status: number;
+    statusText: string;
+    headers: Array<{ key: string; value: string }>;
+    body: string;
+  }> {
+    const targetUrl = new URL(path, forwardTo);
+    
+    // Add query parameters
+    for (const [key, value] of Object.entries(queryParams)) {
+      targetUrl.searchParams.set(key, value);
+    }
+
+    return new Promise((resolve, reject) => {
+      const isHttps = targetUrl.protocol === 'https:';
+      const httpModule = isHttps ? https : http;
+
+      // Build headers object, excluding host (we'll set the target host)
+      const reqHeaders: Record<string, string> = {};
+      for (const h of headers) {
+        if (h.key.toLowerCase() !== 'host') {
+          reqHeaders[h.key] = h.value;
+        }
+      }
+      reqHeaders['host'] = targetUrl.host;
+
+      const options = {
+        hostname: targetUrl.hostname,
+        port: targetUrl.port || (isHttps ? 443 : 80),
+        path: targetUrl.pathname + targetUrl.search,
+        method: method,
+        headers: reqHeaders,
+      };
+
+      console.log(`[MockServer] Forwarding ${method} ${path} to ${targetUrl.toString()}`);
+
+      const req = httpModule.request(options, (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk) => {
+          chunks.push(Buffer.from(chunk));
+        });
+        res.on('end', async () => {
+          const responseHeaders: Array<{ key: string; value: string }> = [];
+          for (const [key, value] of Object.entries(res.headers)) {
+            if (typeof value === 'string') {
+              responseHeaders.push({ key, value });
+            } else if (Array.isArray(value)) {
+              responseHeaders.push({ key, value: value.join(', ') });
+            }
+          }
+
+          // Combine all chunks into a single buffer
+          const rawBody = Buffer.concat(chunks);
+          
+          // Check content-encoding and decompress if needed
+          const contentEncoding = (res.headers['content-encoding'] || '').toLowerCase().trim();
+          let responseBody: string;
+          let wasDecompressed = false;
+          
+          console.log(`[MockServer] Response content-encoding: "${contentEncoding}", body size: ${rawBody.length} bytes`);
+          
+          try {
+            if (contentEncoding === 'gzip' || contentEncoding === 'x-gzip') {
+              console.log('[MockServer] Decompressing gzip response...');
+              const decompressed = zlib.gunzipSync(rawBody);
+              responseBody = decompressed.toString('utf-8');
+              wasDecompressed = true;
+              console.log(`[MockServer] Decompressed to ${responseBody.length} chars`);
+            } else if (contentEncoding === 'deflate') {
+              console.log('[MockServer] Decompressing deflate response...');
+              // Try raw deflate first, then zlib-wrapped deflate
+              try {
+                const decompressed = zlib.inflateRawSync(rawBody);
+                responseBody = decompressed.toString('utf-8');
+              } catch {
+                const decompressed = zlib.inflateSync(rawBody);
+                responseBody = decompressed.toString('utf-8');
+              }
+              wasDecompressed = true;
+              console.log(`[MockServer] Decompressed to ${responseBody.length} chars`);
+            } else if (contentEncoding === 'br') {
+              console.log('[MockServer] Decompressing brotli response...');
+              const decompressed = zlib.brotliDecompressSync(rawBody);
+              responseBody = decompressed.toString('utf-8');
+              wasDecompressed = true;
+              console.log(`[MockServer] Decompressed to ${responseBody.length} chars`);
+            } else {
+              responseBody = rawBody.toString('utf-8');
+            }
+          } catch (decompressError) {
+            console.error('[MockServer] Failed to decompress response:', decompressError);
+            // Fall back to raw string if decompression fails
+            responseBody = rawBody.toString('utf-8');
+          }
+
+          // If we decompressed the body, remove content-encoding and update content-length
+          // Otherwise the browser will try to decompress already-decompressed data
+          let finalHeaders = responseHeaders;
+          if (wasDecompressed) {
+            finalHeaders = responseHeaders.filter(h => {
+              const lowerKey = h.key.toLowerCase();
+              return lowerKey !== 'content-encoding' && lowerKey !== 'content-length' && lowerKey !== 'transfer-encoding';
+            });
+            // Add correct content-length for the decompressed body
+            finalHeaders.push({ key: 'content-length', value: String(Buffer.byteLength(responseBody, 'utf-8')) });
+          }
+
+          resolve({
+            status: res.statusCode || 500,
+            statusText: res.statusMessage || 'Unknown',
+            headers: finalHeaders,
+            body: responseBody,
+          });
+        });
+      });
+
+      req.on('error', (error) => {
+        console.error('[MockServer] Forward request error:', error);
+        reject(error);
+      });
+      
+      req.setTimeout(30000, () => {
+        req.destroy();
+        reject(new Error('Request timeout'));
+      });
+
+      if (body) {
+        req.write(body);
+      }
+      req.end();
+    });
   }
 
   private findMatchingRoute(routes: MockRoute[], method: string, path: string): MockRoute | undefined {

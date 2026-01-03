@@ -52,14 +52,8 @@ export const CodeEditor = forwardRef<AceEditor, CodeEditorProps>(({
   
   // Handle editor load to configure additional settings
   const handleLoad = useCallback((editor: any) => {
-    // Apply search box extension
-    editor.commands.addCommand({
-      name: 'find',
-      bindKey: { win: 'Ctrl-F', mac: 'Cmd-F' },
-      exec: () => {
-        editor.execCommand('find');
-      },
-    });
+    // Disable Ace's built-in find command (we use custom search in MockingPanel)
+    editor.commands.removeCommand('find');
     
     // Call original onLoad if provided
     onLoad?.(editor);

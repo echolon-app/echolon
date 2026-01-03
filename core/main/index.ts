@@ -21,6 +21,7 @@ const IPC_CHANNELS = {
   GET_LOCAL_HOSTNAME: 'get-local-hostname',
   FETCH_URL_CONTENT: 'fetch-url-content',
   EXECUTE_SCRIPT: 'execute-script',
+  OPEN_EXTERNAL: 'open-external',
 } as const;
 
 // File Storage IPC channels
@@ -199,6 +200,7 @@ interface MockServerConfig {
     };
     isMocked: boolean;
   }>;
+  forwardTo?: string;  // optional URL to forward unmocked requests to
 }
 
 // Setup IPC handlers
@@ -211,6 +213,11 @@ function setupIpcHandlers(): void {
   // Get app version
   ipcMain.handle(IPC_CHANNELS.GET_APP_VERSION, () => {
     return app.getVersion();
+  });
+
+  // Open external URL in default browser/app
+  ipcMain.handle(IPC_CHANNELS.OPEN_EXTERNAL, async (_event, url: string) => {
+    await shell.openExternal(url);
   });
 
   // Execute script - runs in main process to bypass CSP restrictions
@@ -395,7 +402,7 @@ function setupIpcHandlers(): void {
   });
 
   // Mock Server handlers
-  ipcMain.handle(IPC_CHANNELS.START_MOCK_SERVER, async (_event, config: MockServerConfig): Promise<boolean> => {
+  ipcMain.handle(IPC_CHANNELS.START_MOCK_SERVER, async (_event, config: MockServerConfig): Promise<{ success: boolean; error?: string }> => {
     return mockServerManager.startServer(config);
   });
 
@@ -411,8 +418,8 @@ function setupIpcHandlers(): void {
     mockServerManager.updateRoutes(id, routes);
   });
 
-  ipcMain.handle(IPC_CHANNELS.GET_LOCAL_HOSTNAME, (): string => {
-    return mockServerManager.getLocalHostname();
+  ipcMain.handle(IPC_CHANNELS.GET_LOCAL_HOSTNAME, async (): Promise<string> => {
+    return await  mockServerManager.getLocalHostname();
   });
 
   // Cloud Proxy handlers
@@ -706,9 +713,12 @@ app.whenReady().then(async () => {
   createWindow();
   setupMenu(mainWindow);
   
-  if (!isDev) {
-    setupUpdater(mainWindow);
-  }
+  // Setup auto-updater (always register handlers, but only auto-check in production)
+  const config = await fileStorageManager.readConfig();
+  setupUpdater(mainWindow, {
+    // Only auto-check in production, and respect user setting
+    autoCheckUpdates: !isDev && (config?.settings?.autoCheckUpdates ?? true),
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

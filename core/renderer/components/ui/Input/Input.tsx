@@ -21,6 +21,8 @@ export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElem
   suggestions?: string[];
   /** Collection environment for variable resolution (overrides global) */
   collectionEnvironment?: CollectionEnvironment | null;
+  /** Path parameters for URL path variable resolution (e.g., :id) */
+  pathParams?: Array<{ key: string; value: string }>;
   /** Callback when user double-clicks a variable to navigate to its definition */
   onNavigateToVariable?: NavigateToVariableCallback;
 }
@@ -34,6 +36,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
   supportVariables = false,
   suggestions = [],
   collectionEnvironment,
+  pathParams = [],
   onNavigateToVariable,
   className = '',
   value,
@@ -80,6 +83,24 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
       .filter(v => v.enabled && v.key)
       .map(v => v.key);
   }, [supportVariables, getMergedVariables, collectionEnvironment, activeEnvironment]);
+  
+  // Get environment color for variable highlighting
+  // Priority: collection environment (highest in dropdown) > global environment > primary color
+  const collectionEnvColor = collectionEnvironment?.color;
+  const globalEnvColor = activeEnvironment?.color;
+  
+  const envColor = useMemo(() => {
+    // First check collection environment color (has highest priority in dropdown)
+    if (collectionEnvColor) {
+      return collectionEnvColor;
+    }
+    // Then check global environment color
+    if (globalEnvColor) {
+      return globalEnvColor;
+    }
+    // Fall back to null (CSS will use primary color)
+    return null;
+  }, [collectionEnvColor, globalEnvColor]);
   
   // Get variable value with source information
   const getVariableValue = useCallback((varName: string): string | null => {
@@ -248,28 +269,92 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
     selection.addRange(range);
   }, []);
 
-  // Render content with highlighted variables
+  // Get path parameter value
+  const getPathParamValue = useCallback((paramName: string): string | null => {
+    const param = pathParams.find(p => p.key === paramName);
+    return param ? param.value : null;
+  }, [pathParams]);
+
+  // Render content with highlighted variables and path params
   const renderHighlightedContent = useCallback((text: string): React.ReactNode[] => {
-    const parts = text.split(/({{[^}]+}})/g);
-    return parts.map((part, i) => {
-      const match = part.match(/^{{([^}]+)}}$/);
-      if (match) {
-        const varName = match[1];
+    const result: React.ReactNode[] = [];
+    // Combined regex: env variables {{...}} or path params :name
+    const regex = /({{[^}]+}}|:([a-zA-Z_][a-zA-Z0-9_]*))/g;
+    let lastIndex = 0;
+    let match;
+    let keyIndex = 0;
+    
+    while ((match = regex.exec(text)) !== null) {
+      // Add text before the match
+      if (match.index > lastIndex) {
+        result.push(text.slice(lastIndex, match.index));
+      }
+      
+      const fullMatch = match[0];
+      
+      // Check for {{variable}} pattern
+      if (fullMatch.startsWith('{{')) {
+        const varName = fullMatch.slice(2, -2); // Remove {{ and }}
         const varValue = getVariableValue(varName);
         const isValid = varValue !== null;
-        return (
+        
+        //console.log('envColor', envColor,'isValid',isValid);
+        // Apply environment color explicitly when valid
+        // Convert hex color to rgba for background with 20% opacity
+        let varStyle: React.CSSProperties | undefined;
+        if (isValid && envColor) {
+          // Parse hex color and create rgba
+          const hex = envColor.replace('#', '');
+          const r = parseInt(hex.substring(0, 2), 16);
+          const g = parseInt(hex.substring(2, 4), 16);
+          const b = parseInt(hex.substring(4, 6), 16);
+          varStyle = {
+            backgroundColor: `rgba(${r}, ${g}, ${b}, 0.2)`,
+            color: envColor,
+          };
+        }
+
+        //console.log('varStyle', varStyle);
+        
+        result.push(
           <span 
-            key={i} 
+            key={`env-${keyIndex++}`} 
             className={`input__variable ${!isValid ? 'input__variable--invalid' : ''}`}
             data-variable={varName}
+            style={varStyle}
           >
-            {part}
+          {fullMatch}
           </span>
         );
       }
-      return part;
-    });
-  }, [getVariableValue]);
+      // Check for :pathParam pattern
+      else if (fullMatch.startsWith(':') && pathParams.length > 0) {
+        const paramName = fullMatch.slice(1); // Remove :
+        const paramValue = getPathParamValue(paramName);
+        const hasValue = paramValue !== null && paramValue !== '';
+        result.push(
+          <span 
+            key={`path-${keyIndex++}`} 
+            className={`input__path-param ${!hasValue ? 'input__path-param--empty' : ''}`}
+            data-path-param={paramName}
+          >
+            {fullMatch}
+          </span>
+        );
+      }
+      
+      lastIndex = regex.lastIndex;
+    }
+    
+    // Add remaining text
+    if (lastIndex < text.length) {
+      result.push(text.slice(lastIndex));
+    }
+
+    //console.log('result', result);
+    
+    return result;
+  }, [getVariableValue, pathParams, getPathParamValue, envColor]);
 
   // Update contenteditable display
   const updateEditableDisplay = useCallback((text: string, preserveCursor: boolean = true) => {
@@ -287,7 +372,19 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
       } else if (React.isValidElement(part)) {
         const span = document.createElement('span');
         span.className = part.props.className;
-        span.setAttribute('data-variable', part.props['data-variable']);
+        //console.log('part', part);
+        // Handle both environment variables and path params
+        if (part.props['data-variable']) {
+          span.setAttribute('data-variable', part.props['data-variable']);
+        }
+        if (part.props['style']) {
+          for (const key in part.props['style']) {
+            span.style[key] = part.props['style'][key];
+          }
+        }
+        if (part.props['data-path-param']) {
+          span.setAttribute('data-path-param', part.props['data-path-param']);
+        }
         span.textContent = part.props.children as string;
         editableRef.current?.appendChild(span);
       }
@@ -311,6 +408,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
 
   // Track previous environment to detect actual environment changes (not just currentValue changes)
   const prevEnvironmentRef = useRef<typeof activeEnvironment>(null);
+  const prevEnvColorRef = useRef<string | null>(null);
   
   // Re-render variable highlighting only when environment actually changes
   useEffect(() => {
@@ -322,6 +420,16 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
       updateEditableDisplay(newValue, false);
     }
   }, [activeEnvironment, supportVariables, currentValue, updateEditableDisplay]);
+  
+  // Re-render when environment color changes (collection or global)
+  useEffect(() => {
+    if (supportVariables && editableRef.current && envColor !== prevEnvColorRef.current) {
+      prevEnvColorRef.current = envColor;
+      const newValue = String(currentValue || '');
+      // Force re-render to update variable colors
+      updateEditableDisplay(newValue, false);
+    }
+  }, [envColor, supportVariables, currentValue, updateEditableDisplay]);
 
   const emitChange = useCallback((newValue: string) => {
     setLocalValue(newValue);
@@ -520,18 +628,34 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
   // Handle variable hover for tooltip
   const handleVariableMouseEnter = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
-    const varName = target.getAttribute('data-variable');
-    if (!varName) return;
     
-    const varInfo = getVariableInfo(varName);
-    const rect = target.getBoundingClientRect();
-    setVariableTooltip({
-      text: varInfo !== null ? varInfo.value : 'Variable not found',
-      source: varInfo !== null ? varInfo.source : '',
-      x: rect.left + rect.width / 2,
-      y: rect.top - 8,
-    });
-  }, [getVariableInfo]);
+    // Check for environment variable
+    const varName = target.getAttribute('data-variable');
+    if (varName) {
+      const varInfo = getVariableInfo(varName);
+      const rect = target.getBoundingClientRect();
+      setVariableTooltip({
+        text: varInfo !== null ? varInfo.value : 'Variable not found',
+        source: varInfo !== null ? varInfo.source : '',
+        x: rect.left + rect.width / 2,
+        y: rect.top - 8,
+      });
+      return;
+    }
+    
+    // Check for path parameter
+    const pathParam = target.getAttribute('data-path-param');
+    if (pathParam) {
+      const paramValue = getPathParamValue(pathParam);
+      const rect = target.getBoundingClientRect();
+      setVariableTooltip({
+        text: paramValue || '(empty)',
+        source: 'Path Variable',
+        x: rect.left + rect.width / 2,
+        y: rect.top - 8,
+      });
+    }
+  }, [getVariableInfo, getPathParamValue]);
 
   const handleVariableMouseLeave = useCallback(() => {
     setVariableTooltip(null);

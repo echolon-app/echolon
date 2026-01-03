@@ -1,4 +1,4 @@
-export { generateCurlCommand, generateFetchCode, interpolateVariables, CODE_FORMATS } from './codeGenerators';
+export { generateCurlCommand, generateFetchCode, interpolateVariables, interpolateAll, buildResolvedUrl, CODE_FORMATS } from './codeGenerators';
 export type { CodeFormat } from './codeGenerators';
 export { interpolate, extractVariables, highlightVariables, hasVariables, getUnresolvedVariables } from './variableParser';
 export { extractSpecResponseInfo } from './specResponseExtractor';

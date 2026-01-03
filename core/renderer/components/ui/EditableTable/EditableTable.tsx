@@ -14,6 +14,10 @@ export interface EditableTableProps {
   showDescription?: boolean;
   showCheckbox?: boolean;
   readOnly?: boolean;
+  /** Disable editing the key column (for path variables) */
+  disableKeyEdit?: boolean;
+  /** Style rows as path parameters (amber/orange) */
+  isPathParams?: boolean;
   bulkEdit?: boolean;
   onBulkEdit?: () => void;
   keySuggestions?: string[];
@@ -33,6 +37,8 @@ export const EditableTable: React.FC<EditableTableProps> = ({
   showDescription = true,
   showCheckbox = true,
   readOnly = false,
+  disableKeyEdit = false,
+  isPathParams = false,
   keySuggestions = [],
   valueSuggestions = [],
   collectionEnvironment,
@@ -96,7 +102,7 @@ export const EditableTable: React.FC<EditableTableProps> = ({
         {data.map((item, index) => (
           <div
             key={item.id}
-            className={`editable-table__row ${focusedRow === item.id ? 'editable-table__row--focused' : ''} ${!item.enabled ? 'editable-table__row--disabled' : ''} ${item.inheritedFrom ? 'editable-table__row--inherited' : ''} ${item.isSystem ? 'editable-table__row--system' : ''}`}
+            className={`editable-table__row ${focusedRow === item.id ? 'editable-table__row--focused' : ''} ${!item.enabled ? 'editable-table__row--disabled' : ''} ${item.inheritedFrom ? 'editable-table__row--inherited' : ''} ${item.isSystem ? 'editable-table__row--system' : ''} ${isPathParams ? 'editable-table__row--path-param' : ''}`}
           >
             {showCheckbox && (
               <div className="editable-table__cell editable-table__cell--checkbox">
@@ -117,6 +123,9 @@ export const EditableTable: React.FC<EditableTableProps> = ({
                   <InheritedIcon />
                 </span>
               )}
+              {disableKeyEdit ? (
+                <span className="editable-table__key-label" title={`:${item.key}`}>:{item.key}</span>
+              ) : (
               <Input
                 size="sm"
                 placeholder={keyPlaceholder}
@@ -131,6 +140,7 @@ export const EditableTable: React.FC<EditableTableProps> = ({
                 collectionEnvironment={collectionEnvironment}
                 onNavigateToVariable={onNavigateToVariable}
               />
+              )}
             </div>
             <div className="editable-table__cell editable-table__cell--value">
               <Input

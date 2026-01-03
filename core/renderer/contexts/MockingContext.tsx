@@ -104,7 +104,7 @@ interface MockingContextValue {
   setActiveMockApi: (id: string | null) => void;
   
   // Mock Server
-  startMockServer: (mockApiId: string) => Promise<boolean>;
+  startMockServer: (mockApiId: string) => Promise<{ success: boolean; error?: string }>;
   stopMockServer: (mockApiId: string) => Promise<boolean>;
   
   // Cloud Proxy
@@ -447,23 +447,26 @@ export const MockingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setSelectedRequestId(null);
   }, []);
 
-  const startMockServer = useCallback(async (mockApiId: string): Promise<boolean> => {
+  const startMockServer = useCallback(async (mockApiId: string): Promise<{ success: boolean; error?: string }> => {
     const api = mockApis.find(a => a.id === mockApiId);
-    if (!api || !window.electronAPI?.startMockServer) return false;
+    if (!api || !window.electronAPI?.startMockServer) {
+      return { success: false, error: 'Mock API not found' };
+    }
 
     try {
-      const success = await window.electronAPI.startMockServer({
+      const result = await window.electronAPI.startMockServer({
         id: api.id,
         port: api.port,
         routes: api.routes,
+        forwardTo: api.forwardTo,
       });
-      if (success) {
+      if (result.success) {
         updateMockApi(mockApiId, { isRunning: true });
       }
-      return success;
+      return result;
     } catch (error) {
       console.error('Failed to start mock server:', error);
-      return false;
+      return { success: false, error: (error as Error).message || 'Failed to start mock server' };
     }
   }, [mockApis, updateMockApi]);
 
@@ -764,6 +767,12 @@ export const MockingProvider: React.FC<{ children: React.ReactNode }> = ({ child
             storedMock
           );
         }
+      }
+      // For local mode: update routes on local mock server
+      else if (api.isRunning && window.electronAPI?.updateMockRoutes) {
+        const updatedRoutes = [...api.routes, newRoute];
+        console.log(`[MockServer] Updating routes with new mock: ${newRoute.method} ${newRoute.path}`);
+        window.electronAPI.updateMockRoutes(request.mockApiId, updatedRoutes);
       }
     }
 

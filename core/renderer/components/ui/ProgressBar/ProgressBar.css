@@ -1,0 +1,61 @@
+.progress-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+}
+
+.progress-bar__track {
+  flex: 1;
+  background-color: var(--bg-tertiary);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.progress-bar__fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width 0.3s ease-out;
+}
+
+/* Sizes */
+.progress-bar--sm .progress-bar__track {
+  height: 4px;
+}
+
+.progress-bar--md .progress-bar__track {
+  height: 8px;
+}
+
+.progress-bar--lg .progress-bar__track {
+  height: 12px;
+}
+
+/* Variants */
+.progress-bar--primary .progress-bar__fill {
+  background: linear-gradient(90deg, var(--color-primary), var(--color-primary-hover));
+}
+
+.progress-bar--success .progress-bar__fill {
+  background: linear-gradient(90deg, var(--color-success), #22c55e);
+}
+
+.progress-bar--warning .progress-bar__fill {
+  background: linear-gradient(90deg, var(--color-warning), #f59e0b);
+}
+
+.progress-bar--error .progress-bar__fill {
+  background: linear-gradient(90deg, var(--color-error), #ef4444);
+}
+
+/* Label */
+.progress-bar__label {
+  font-size: var(--font-xs);
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  min-width: 36px;
+  text-align: right;
+}
+
+/* Animation for indeterminate state could be added later */
+

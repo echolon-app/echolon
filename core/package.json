@@ -6,17 +6,25 @@
   "author": "Philipp Maximilian Wesel",
   "license": "MIT",
   "scripts": {
-    "dev": "vite",
-    "build": "npm run build:vite && npm run build:electron",
-    "build:vite": "vite build",
+    "dev": "ENV=dev vite",
+    "build": "ENV=prod npm run build:vite && npm run build:electron",
+    "build:vite": "ENV=prod vite build",
     "build:electron": "tsc -p tsconfig.main.json",
     "package": "npm run build && electron-builder",
     "package:mac": "npm run build && electron-builder --mac",
     "package:win": "npm run build && electron-builder --win",
     "package:linux": "npm run build && electron-builder --linux",
     "package:all": "npm run build && electron-builder --mac --win --linux",
+    "release": "npm run build && electron-builder --publish always",
+    "release:mac": "npm run build && electron-builder --mac --publish always",
+    "release:win": "npm run build && electron-builder --win --publish always",
+    "release:linux": "npm run build && electron-builder --linux --publish always",
+    "release:all": "npm run build && electron-builder --mac --win --linux --publish always",
     "lint": "eslint . --ext .ts,.tsx",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "ace-builds": "^1.32.3",
@@ -41,6 +49,7 @@
     "@typescript-eslint/eslint-plugin": "^6.15.0",
     "@typescript-eslint/parser": "^6.15.0",
     "@vitejs/plugin-react": "^4.2.1",
+    "@vitest/coverage-v8": "^4.0.16",
     "electron": "^28.0.0",
     "electron-builder": "^24.9.1",
     "eslint": "^8.56.0",
@@ -49,7 +58,8 @@
     "typescript": "^5.3.3",
     "vite": "^5.0.10",
     "vite-plugin-electron": "^0.28.0",
-    "vite-plugin-electron-renderer": "^0.14.5"
+    "vite-plugin-electron-renderer": "^0.14.5",
+    "vitest": "^4.0.16"
   },
   "build": {
     "extends": "electron-builder.yml"

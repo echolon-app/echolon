@@ -1,15 +1,16 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Button, Input, Dropdown, TabBar, EditableTable, Tooltip, CodeEditor } from '@/components/ui';
-import { SendIcon, CodeIcon, HistoryIcon } from '@/components/ui/icons';
+import { SendIcon, CodeIcon, HistoryIcon, CopyIcon, CheckIcon, SocketIcon } from '@/components/ui/icons';
 import { useRequest, useEnvironments, useTheme, useCollections, useApp } from '@/contexts';
 import { storageManager } from '@/services';
 import { HTTP_METHODS, METHOD_COLORS, DEFAULT_HEADERS } from '../../../../shared/constants';
 import { HttpMethod, KeyValuePair, Collection, AuthType } from '@/types';
-import { extractSpecResponseInfo } from '@/utils';
+import { extractSpecResponseInfo, buildResolvedUrl } from '@/utils';
 import { APP_VERSION } from '@/utils/environment';
 import { ResponseViewer } from './ResponseViewer';
 import { EnvironmentEditor } from './EnvironmentEditor';
 import { CollectionEditor } from './CollectionEditor';
+import { WebSocketPanel } from './WebSocketPanel';
 import { RequestHistoryModal } from '@/components/modals';
 import './CenterPanel.css';
 
@@ -286,6 +287,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
   const [isResponsePanelCollapsed, setIsResponsePanelCollapsed] = useState(false);
   const [isResponseExpanded, setIsResponseExpanded] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [urlCopied, setUrlCopied] = useState(false);
   const resizeRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -307,12 +309,15 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
     : null;
   
   // Get the selected collection environment for variable resolution
+  // Include stringified environments to catch deep changes like color updates
+  const envString = JSON.stringify(requestCollection?.environments);
   const selectedCollectionEnv = useMemo(() => {
     if (!requestCollection?.environments || !requestCollection.defaultEnvironmentId) {
       return null;
     }
     return requestCollection.environments.find(e => e.id === requestCollection.defaultEnvironmentId) || null;
-  }, [requestCollection]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [envString, requestCollection?.defaultEnvironmentId]);
   
   // Get collection-level headers that will be injected
   const collectionHeaders = requestCollection?.headers?.filter(h => h.enabled && h.key) || [];
@@ -464,6 +469,54 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
     }
   }, []);
 
+  // Extract path variables from URL (e.g., :id, :userId)
+  const extractPathVariables = useCallback((url: string): string[] => {
+    // Match :paramName patterns (not inside {{ }} which are environment variables)
+    const matches = url.match(/(?<!\{):([a-zA-Z_][a-zA-Z0-9_]*)/g);
+    if (!matches) return [];
+    return [...new Set(matches.map(m => m.slice(1)))]; // Remove : prefix and dedupe
+  }, []);
+
+  // Get path variables from the current URL
+  const urlPathVariables = useMemo(() => {
+    if (!request?.url) return [];
+    return extractPathVariables(request.url);
+  }, [request?.url, extractPathVariables]);
+
+  // Sync path params with URL path variables
+  useEffect(() => {
+    if (!activeTabId || !request) return;
+    
+    const currentPathVars = extractPathVariables(request.url);
+    const existingParams = request.pathParams || [];
+    
+    // Check if we need to update
+    const existingKeys = existingParams.map(p => p.key);
+    const needsUpdate = currentPathVars.some(v => !existingKeys.includes(v)) ||
+                        existingParams.some(p => p.key && !currentPathVars.includes(p.key));
+    
+    if (needsUpdate) {
+      // Create new pathParams array preserving existing values
+      const newPathParams = currentPathVars.map(varName => {
+        const existing = existingParams.find(p => p.key === varName);
+        return existing || {
+          id: crypto.randomUUID(),
+          key: varName,
+          value: '',
+          enabled: true,
+        };
+      });
+      
+      updateRequest(activeTabId, { pathParams: newPathParams });
+    }
+  }, [activeTabId, request?.url, request?.pathParams, extractPathVariables, updateRequest]);
+
+  // Handle path params change
+  const handlePathParamsChange = useCallback((params: KeyValuePair[]) => {
+    if (!activeTabId) return;
+    updateRequest(activeTabId, { pathParams: params });
+  }, [activeTabId, updateRequest]);
+
   // Sync URL with query params when request has params but URL doesn't include them
   useEffect(() => {
     if (!activeTabId || !request) return;
@@ -559,6 +612,21 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
     await sendRequest();
   };
 
+  const handleCopyUrl = useCallback(async () => {
+    if (!request) return;
+    
+    // Build the fully resolved URL (env vars + path params + query params)
+    const resolvedUrl = buildResolvedUrl(request, activeEnvironment, requestCollection);
+    
+    try {
+      await navigator.clipboard.writeText(resolvedUrl);
+      setUrlCopied(true);
+      setTimeout(() => setUrlCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy URL:', error);
+    }
+  }, [request, activeEnvironment, requestCollection]);
+
   const handleTabRename = (tabId: string, newTitle: string) => {
     renameTab(tabId, newTitle);
     // Also update the collection if this request belongs to one
@@ -636,6 +704,10 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
       >
         {tab.request.method}
       </span>
+    ) : tab.type === 'websocket' ? (
+      <span className="tab-websocket-badge">
+        <SocketIcon />
+      </span>
     ) : undefined,
   }));
 
@@ -662,6 +734,8 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
         <EnvironmentEditor environmentId={activeTab.environmentId} />
       ) : activeTab?.type === 'collection' && activeTab.collectionId ? (
         <CollectionEditor collectionId={activeTab.collectionId} />
+      ) : activeTab?.type === 'websocket' && activeTab.websocket ? (
+        <WebSocketPanel websocket={activeTab.websocket} tabId={activeTab.id} />
       ) : request ? (
         <div 
           className={`center-panel__content ${isResponseExpanded ? 'center-panel__content--horizontal' : ''}`}
@@ -687,6 +761,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                 placeholder="Enter request URL"
                 supportVariables
                 collectionEnvironment={selectedCollectionEnv}
+                pathParams={request.pathParams}
                 onNavigateToVariable={handleNavigateToVariable}
                 className="center-panel__url"
               />
@@ -700,6 +775,16 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
               >
                 Send
               </Button>
+              <div className="center-panel__url-actions">
+                <Tooltip content={urlCopied ? "Copied!" : "Copy URL (resolved)"}>
+                  <Button
+                    variant="ghost"
+                    size="md"
+                    onClick={handleCopyUrl}
+                    icon={urlCopied ? <CheckIcon /> : <CopyIcon />}
+                    className={`center-panel__copy-btn ${urlCopied ? 'center-panel__copy-btn--copied' : ''}`}
+                  />
+                </Tooltip>
               <Tooltip content="Request History">
                 <Button
                   variant="ghost"
@@ -720,6 +805,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                   />
                 </Tooltip>
               )}
+              </div>
             </div>
 
             {/* Request Options */}
@@ -732,9 +818,9 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                     onClick={() => setActiveRequestTab(tab.id as RequestTab)}
                   >
                     {tab.title}
-                    {tab.id === 'params' && request.queryParams.filter(p => p.key).length > 0 && (
+                    {tab.id === 'params' && (request.queryParams.filter(p => p.key).length + (request.pathParams?.length || 0)) > 0 && (
                       <span className="center-panel__option-badge">
-                        {request.queryParams.filter(p => p.key).length}
+                        {request.queryParams.filter(p => p.key).length + (request.pathParams?.length || 0)}
                       </span>
                     )}
                     {tab.id === 'headers' && request.headers.filter(h => h.key).length > 0 && (
@@ -749,6 +835,37 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
             <div className="center-panel__option-content">
               {activeRequestTab === 'params' && (
                 <div className="center-panel__params">
+                  {/* Path Variables */}
+                  {urlPathVariables.length > 0 && (
+                    <div className="center-panel__params-section center-panel__params-section--path">
+                      <div className="center-panel__params-section-header">
+                        <span className="center-panel__params-section-title">Path Variables</span>
+                        <span className="center-panel__params-section-count">{urlPathVariables.length}</span>
+                      </div>
+                      <EditableTable
+                        data={request.pathParams || []}
+                        onChange={handlePathParamsChange}
+                        keyPlaceholder="Variable"
+                        valuePlaceholder="Value"
+                        descriptionPlaceholder="Description"
+                        collectionEnvironment={selectedCollectionEnv}
+                        onNavigateToVariable={handleNavigateToVariable}
+                        disableKeyEdit
+                        isPathParams
+                      />
+                    </div>
+                  )}
+                  
+                  {/* Query Parameters */}
+                  <div className="center-panel__params-section">
+                    {urlPathVariables.length > 0 && (
+                      <div className="center-panel__params-section-header">
+                        <span className="center-panel__params-section-title">Query Parameters</span>
+                        {request.queryParams.filter(p => p.key).length > 0 && (
+                          <span className="center-panel__params-section-count">{request.queryParams.filter(p => p.key).length}</span>
+                        )}
+                      </div>
+                    )}
                   <EditableTable
                     data={request.queryParams}
                     onChange={handleQueryParamsChange}
@@ -758,6 +875,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                     collectionEnvironment={selectedCollectionEnv}
                     onNavigateToVariable={handleNavigateToVariable}
                   />
+                  </div>
                 </div>
               )}
 
@@ -1505,7 +1623,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                 <div className="center-panel__scripts">
                   <div className="center-panel__script">
                     <div className="center-panel__script-header">
-                      <label>Pre-request Script</label>
+                    <label>Pre-request Script</label>
                       <Dropdown
                         options={PRE_REQUEST_SAMPLES.map(s => ({ value: s.value, label: s.label }))}
                         value=""
@@ -1545,7 +1663,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                   </div>
                   <div className="center-panel__script">
                     <div className="center-panel__script-header">
-                      <label>Post-request Script</label>
+                    <label>Post-request Script</label>
                       <Dropdown
                         options={POST_REQUEST_SAMPLES.map(s => ({ value: s.value, label: s.label }))}
                         value=""

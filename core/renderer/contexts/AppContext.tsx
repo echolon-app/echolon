@@ -246,6 +246,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setConsoleEntries(prev => [...prev, entry]);
   }, []);
 
+  // Listen for log events from services (e.g., SyncManager)
+  useEffect(() => {
+    const handleLogEvent = (event: CustomEvent<{ type: ConsoleEntry['type']; message: string; details?: string }>) => {
+      const { type, message, details } = event.detail;
+      logToConsole(type, message, details);
+    };
+
+    window.addEventListener('echolon:log', handleLogEvent as EventListener);
+    return () => {
+      window.removeEventListener('echolon:log', handleLogEvent as EventListener);
+    };
+  }, [logToConsole]);
+
   const clearConsole = useCallback(() => {
     setConsoleEntries([]);
   }, []);

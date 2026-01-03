@@ -10,4 +10,5 @@ export { specImporter, SpecImporter, OpenAPIAdapter, PostmanAdapter } from './Sp
 export type { SpecImportOptions, SpecImportResult, SpecImporterAdapter, SpecInfo, ServerInfo } from './SpecImporter';
 export { specDiffer, SpecDiffer } from './SpecDiffer';
 export { syncManager, SyncManager } from './SyncManager';
+export { websocketManager } from './WebSocketManager';
 

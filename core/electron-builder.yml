@@ -97,14 +97,12 @@ linux:
   synopsis: A powerful, local-first API client
   description: Echolon is a Postman alternative that works completely offline with local storage.
 
-# Auto-updater configuration
+# Auto-updater configuration - uses GitHub Releases
 publish:
-  provider: generic
-  url: https://releases.echolon.app
-  # For GitHub releases, use:
-  # provider: github
-  # owner: your-username
-  # repo: echolon
+  provider: github
+  owner: echolon-app
+  repo: echolon
+  releaseType: release
 
 # Compression
 compression: maximum

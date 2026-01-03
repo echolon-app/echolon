@@ -1,0 +1,427 @@
+.websocket-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--bg-primary);
+}
+
+/* URL Bar */
+.websocket-panel__url-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--border-secondary);
+}
+
+.websocket-panel__protocol {
+  padding: 6px 10px;
+  background-color: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.websocket-panel__url-input {
+  flex: 1;
+}
+
+.websocket-panel__connect-btn {
+  flex-shrink: 0;
+  min-width: 100px;
+}
+
+.websocket-panel__status {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-sm);
+  font-weight: 500;
+  padding: 0 var(--spacing-sm);
+  flex-shrink: 0;
+}
+
+.websocket-panel__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Tabs */
+.websocket-panel__tabs {
+  display: flex;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: 1px solid var(--border-secondary);
+}
+
+.websocket-panel__tab {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.websocket-panel__tab:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.websocket-panel__tab.active {
+  background-color: var(--bg-active);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Tab Content */
+.websocket-panel__content {
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--border-secondary);
+}
+
+.websocket-panel__message-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.websocket-panel__message-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.websocket-panel__params,
+.websocket-panel__headers {
+  min-height: 150px;
+}
+
+/* Settings Tab */
+.websocket-panel__settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-sm) 0;
+}
+
+.websocket-panel__setting {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-lg);
+}
+
+.websocket-panel__setting-info {
+  flex: 1;
+}
+
+.websocket-panel__setting-label {
+  display: block;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.websocket-panel__setting-description {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.websocket-panel__setting-input {
+  width: 100px;
+  padding: 8px 12px;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-secondary);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  font-family: var(--font-mono);
+  text-align: center;
+  flex-shrink: 0;
+  appearance: textfield;
+  -moz-appearance: textfield;
+  -webkit-appearance: textfield;
+}
+
+.websocket-panel__setting-input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.websocket-panel__setting-input::-webkit-inner-spin-button,
+.websocket-panel__setting-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+  display: none;
+}
+
+/* Tab Badge */
+.websocket-panel__tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: var(--spacing-xs);
+  background-color: var(--bg-tertiary);
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* Response Section */
+.websocket-panel__response {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.websocket-panel__response-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: 1px solid var(--border-secondary);
+}
+
+.websocket-panel__response-title {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.websocket-panel__response-status {
+  font-size: var(--font-sm);
+  font-weight: 500;
+  margin-left: auto;
+}
+
+.websocket-panel__response-actions-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-left: var(--spacing-md);
+}
+
+.websocket-panel__response-dots {
+  color: var(--text-tertiary);
+  font-size: var(--font-sm);
+  letter-spacing: 2px;
+}
+
+/* Messages Toolbar */
+.websocket-panel__messages-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: 1px solid var(--border-secondary);
+}
+
+.websocket-panel__search {
+  width: 300px;
+  flex: 1;
+  max-width: 400px;
+}
+
+.websocket-panel__filter {
+  margin-left: var(--spacing-sm);
+}
+
+.websocket-panel__filter-select {
+  padding: 6px 10px;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-secondary);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+
+.websocket-panel__filter-select:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+.websocket-panel__clear-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 6px 10px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-left: auto;
+}
+
+.websocket-panel__clear-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.websocket-panel__clear-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Messages List */
+.websocket-panel__messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.websocket-panel__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-tertiary);
+  font-size: var(--font-sm);
+}
+
+/* Message Item */
+.websocket-panel__message {
+  border-bottom: 1px solid var(--border-secondary);
+}
+
+.websocket-panel__message-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.websocket-panel__message-header:hover {
+  background-color: var(--bg-hover);
+}
+
+.websocket-panel__message-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.websocket-panel__message-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.websocket-panel__message--sent .websocket-panel__message-icon {
+  color: var(--color-primary);
+}
+
+.websocket-panel__message--received .websocket-panel__message-icon {
+  color: var(--color-success);
+}
+
+.websocket-panel__message--system .websocket-panel__message-icon {
+  color: var(--text-tertiary);
+}
+
+.websocket-panel__message--system .websocket-panel__message-header {
+  background-color: var(--bg-secondary);
+}
+
+.websocket-panel__message--system.websocket-panel__message--info .websocket-panel__message-icon {
+  color: var(--color-info, #3b82f6);
+}
+
+.websocket-panel__message-preview {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.websocket-panel__message--system .websocket-panel__message-preview {
+  font-family: var(--font-sans);
+  color: var(--text-secondary);
+}
+
+.websocket-panel__highlight {
+  background-color: var(--color-warning, #f59e0b);
+  color: var(--bg-primary);
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: 500;
+}
+
+.websocket-panel__message-time {
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+}
+
+.websocket-panel__message-expand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.websocket-panel__message-expand svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Message Details */
+.websocket-panel__message-details {
+  padding: var(--spacing-xs);
+  padding-left: calc(var(--spacing-md) + 20px + var(--spacing-sm));
+  background-color: var(--bg-secondary);
+  border-top: 1px solid var(--border-secondary);
+}
+
+.websocket-panel__message-editor-container {
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border-secondary);
+}
+
+.websocket-panel__message-editor-container .ace_editor {
+  background-color: var(--bg-primary) !important;
+}
+
+.websocket-panel__message-content {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: none;
+  padding: 0;
+}
+

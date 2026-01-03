@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { MainLayout } from '@/components/layout';
 import { LeftPanel, CenterPanel, RightPanel, ConsolePanel, CodePanel, MockingPanel, APIReferencePanel } from '@/components/panels';
-import { SettingsModal, ImportModal, GlobalSearchModal, NewCollectionModal, NewEnvironmentModal, MoveCollectionModal, ShortcutsModal } from '@/components/modals';
+import { SettingsModal, ImportModal, GlobalSearchModal, NewCollectionModal, NewEnvironmentModal, MoveCollectionModal, ShortcutsModal, UpdateModal } from '@/components/modals';
 import { useApp, useRequest, useDataLoader, useToast, useCollections } from '@/contexts';
 import { useGlobalShortcuts } from '@/hooks';
 import { isElectron } from '@/utils';
@@ -9,7 +9,8 @@ import './styles/index.css';
 
 // Set data attribute for CSS styling based on environment
 document.documentElement.setAttribute('data-electron', isElectron() ? 'true' : 'false');
-
+document.documentElement.setAttribute('data-env',__ENV__);
+//console.log('META', import.meta);
 
 // Hide the loading screen
 const hideLoader = () => {
@@ -225,6 +226,7 @@ export const App: React.FC = () => {
       <NewEnvironmentModal />
       <MoveCollectionModal />
       <ShortcutsModal />
+      <UpdateModal />
       
       {/* Code Panel Slide-in */}
       {codePanelVisible && (

@@ -643,7 +643,7 @@ class FileStorageManager extends EventEmitter {
         })
       );
 
-      return results.filter((r): r is { endpoint: string; requests: T } => r.requests !== null);
+      return results.filter((r): r is { endpoint: string; requests: Awaited<T> } => r.requests !== null) as { endpoint: string; requests: T }[];
     } catch (error) {
       console.error('Error reading all mock requests:', error);
       return [];

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
-import { Tab, Request, RequestExecution, HistoryEntry, Environment, Collection } from '@/types';
+import { Tab, Request, RequestExecution, HistoryEntry, Environment, Collection, WebSocketConnection } from '@/types';
 import { storageManager, requestService } from '@/services';
 import { useEnvironments } from './EnvironmentsContext';
 import { useCollections } from './CollectionsContext';
@@ -18,6 +18,8 @@ interface RequestContextValue {
   addSampleTab: () => void;
   addCollectionTab: (collection: Collection, initialSubTab?: string) => void;
   addEnvironmentTab: (environment: Environment) => void;
+  addWebSocketTab: (websocket?: WebSocketConnection) => void;
+  updateWebSocket: (tabId: string, updates: Partial<WebSocketConnection>) => void;
   closeTab: (tabId: string) => void;
   setActiveTab: (tabId: string) => void;
   updateTab: (tabId: string, updates: Partial<Tab>) => void;
@@ -48,7 +50,26 @@ export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ child
         isDirty: false,
       }];
     }
-    return savedTabs;
+    // Reset WebSocket tabs to disconnected state (connections can't be restored)
+    // Also ensure settings exist for migrated tabs
+    return savedTabs.map(tab => {
+      if (tab.type === 'websocket' && tab.websocket) {
+        return {
+          ...tab,
+          websocket: {
+            ...tab.websocket,
+            status: 'disconnected' as const,
+            settings: tab.websocket.settings || {
+              handshakeTimeout: 0,
+              reconnectionAttempts: 0,
+              reconnectionInterval: 5000,
+              maxMessageSize: 10,
+            },
+          },
+        };
+      }
+      return tab;
+    });
   });
 
   const [activeTabId, setActiveTabIdState] = useState<string | null>(() => {
@@ -181,6 +202,49 @@ export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setTabs(prev => [...prev, newTab]);
     setActiveTabId(newTab.id);
   }, [tabs, setActiveTabId]);
+
+  const addWebSocketTab = useCallback((websocket?: WebSocketConnection) => {
+    const newWebSocket: WebSocketConnection = websocket || {
+      id: uuidv4(),
+      name: 'New WebSocket',
+      url: 'wss://echo.websocket.org',
+      status: 'disconnected',
+      headers: [],
+      queryParams: [],
+      messages: [],
+      messageToSend: '',
+      settings: {
+        handshakeTimeout: 0,
+        reconnectionAttempts: 0,
+        reconnectionInterval: 5000,
+        maxMessageSize: 10,
+      },
+    };
+
+    const newTab: Tab = {
+      id: uuidv4(),
+      type: 'websocket',
+      title: newWebSocket.name,
+      websocket: newWebSocket,
+      isDirty: false,
+    };
+    setTabs(prev => [...prev, newTab]);
+    setActiveTabId(newTab.id);
+  }, [setActiveTabId]);
+
+  const updateWebSocket = useCallback((tabId: string, updates: Partial<WebSocketConnection>) => {
+    setTabs(prev =>
+      prev.map(t => {
+        if (t.id !== tabId || !t.websocket) return t;
+        return {
+          ...t,
+          websocket: { ...t.websocket, ...updates },
+          title: updates.name || t.title,
+          isDirty: true,
+        };
+      })
+    );
+  }, []);
 
   const closeTab = useCallback((tabId: string) => {
     setTabs(prev => {
@@ -390,6 +454,8 @@ export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ child
         addSampleTab,
         addCollectionTab,
         addEnvironmentTab,
+        addWebSocketTab,
+        updateWebSocket,
         closeTab,
         setActiveTab,
         updateTab,

@@ -1,7 +1,0 @@
-# Blocks both AI access and indexing
-**/node_modules/
-**/dist/
-**/build/
-db-backups/
-
-core/dist/

@@ -126,6 +126,7 @@
 
 .mocking-panel__name-input {
   max-width: 300px;
+  height:32px;
 }
 
 .mocking-panel__name-input input {
@@ -183,7 +184,8 @@
   width: 80px;
 }
 
-.mocking-panel__cloud-settings {
+.mocking-panel__cloud-settings,
+.mocking-panel__local-settings {
   padding: var(--spacing-md) var(--spacing-lg);
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-primary);
@@ -192,19 +194,20 @@
 .mocking-panel__cloud-row {
   display: flex;
   gap: var(--spacing-lg);
-  align-items: flex-end;
+  align-items: center;
 }
 
 .mocking-panel__cloud-field {
   display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
 .mocking-panel__cloud-field label {
-  font-size: var(--font-xs);
-  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .mocking-panel__cloud-field--wide {
@@ -219,6 +222,10 @@
 
 .mocking-panel__namespace-input .input {
   width: 150px;
+}
+
+.mocking-panel__namespace-input .mocking-panel__endpoint-hostname {
+  width: 200px;
 }
 
 .mocking-panel__namespace-suffix {
@@ -373,7 +380,7 @@
 .mocking-panel__table-section {
   display: flex;
   flex-direction: column;
-  min-height: 200px;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -427,6 +434,7 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: auto;
+  min-height: 0; /* Required for flex child to shrink below content size */
 }
 
 .mocking-panel__request-table {
@@ -514,11 +522,59 @@
   vertical-align: middle;
 }
 
+.mocking-panel__request-table .num-header,
+.mocking-panel__request-table .num-cell {
+  width: 40px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: var(--font-xs);
+}
+
+.mocking-panel__request-table .num-cell {
+  font-family: var(--font-mono);
+}
+
 .mocking-panel__request-table .method-cell {
   font-family: var(--font-mono);
   font-size: var(--font-xs);
   font-weight: 700;
   width: 70px;
+}
+
+.mocking-panel__request-table .route-header {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.mocking-panel__request-table .route-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  vertical-align: middle;
+}
+
+.mocking-panel__request-table .route-toggle:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border-color: var(--border-primary);
+}
+
+.mocking-panel__request-table .route-toggle.active {
+  color: var(--accent-primary);
+  background: var(--accent-primary-bg);
+  border-color: var(--accent-primary);
 }
 
 .mocking-panel__request-table .path-cell {
@@ -635,6 +691,17 @@
   user-select: none;
 }
 
+.mocking-panel__details-panel.fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 100vh !important;
+  z-index: 1000;
+  border-top: none;
+}
+
 .mocking-panel__details-header {
   display: flex;
   align-items: center;
@@ -690,7 +757,7 @@
 .mocking-panel__details-header-actions {
   display: flex;
   align-items: center;
-  gap: var(--spacing-md);
+  gap: var(--spacing-xs);
   flex-shrink: 0;
 }
 
@@ -766,6 +833,13 @@
   width: 16px;
   height: 16px;
   color: var(--text-secondary);
+}
+
+.mocking-panel__pane-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-left: auto;
 }
 
 .mocking-panel__tabs {
@@ -888,6 +962,49 @@
 
 .mocking-panel__details-info {
   padding: var(--spacing-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.mocking-panel__curl-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-sm);
+}
+
+.mocking-panel__curl-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mocking-panel__curl-label {
+  font-size: var(--font-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.mocking-panel__curl-code {
+  margin: 0;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  color: var(--text-primary);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.6;
+}
+
+.mocking-panel__curl-code code {
+  font-family: inherit;
 }
 
 .mocking-panel__badge {
@@ -937,10 +1054,86 @@
   flex-shrink: 0;
 }
 
+.mocking-panel__response-meta--inline {
+  gap: var(--spacing-lg);
+}
+
 .mocking-panel__field {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
+}
+
+.mocking-panel__field-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.mocking-panel__field-inline label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.mocking-panel__field-inline .input {
+  width: auto;
+}
+
+.mocking-panel__field-inline .input input {
+  width: 80px;
+}
+
+.mocking-panel__field-inline:last-child .input input {
+  width: 120px;
+}
+
+.mocking-panel__response-size {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  cursor: help;
+  padding: 4px 8px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  margin-left: auto;
+}
+
+.mocking-panel__response-size-compressed {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+
+.mocking-panel__size-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+}
+
+.mocking-panel__size-tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  font-size: var(--font-size-xs);
+}
+
+.mocking-panel__size-tooltip-row span:first-child {
+  color: var(--text-secondary);
+}
+
+.mocking-panel__size-tooltip-row span:last-child {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.mocking-panel__size-tooltip-row--total {
+  border-top: 1px solid var(--border-secondary);
+  padding-top: 4px;
+  margin-top: 2px;
+  font-weight: 500;
 }
 
 .mocking-panel__field label {
@@ -970,10 +1163,119 @@
 
 .mocking-panel__editor-toolbar {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   padding: var(--spacing-xs) 0;
   margin-bottom: var(--spacing-xs);
   flex-shrink: 0;
+  gap: var(--spacing-sm);
+}
+
+.mocking-panel__editor-search {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex: 1;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  transition: border-color 0.15s ease;
+}
+
+.mocking-panel__editor-search:focus-within {
+  border-color: var(--accent-primary);
+}
+
+.mocking-panel__editor-search > svg {
+  width: 14px;
+  height: 14px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.mocking-panel__editor-search-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.mocking-panel__editor-search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.mocking-panel__editor-search-result {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+  padding: 2px 6px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+}
+
+.mocking-panel__editor-search-result.error {
+  color: var(--color-error);
+  background: var(--color-error-bg);
+}
+
+.mocking-panel__editor-search-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  color: var(--text-tertiary);
+  border-radius: var(--radius-xs);
+  transition: all 0.15s ease;
+}
+
+.mocking-panel__editor-search-clear:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.mocking-panel__editor-search-clear svg {
+  width: 12px;
+  height: 12px;
+}
+
+.mocking-panel__editor-search-nav {
+  display: flex;
+  gap: 2px;
+}
+
+.mocking-panel__editor-search-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  color: var(--text-tertiary);
+  border-radius: var(--radius-xs);
+  transition: all 0.15s ease;
+}
+
+.mocking-panel__editor-search-nav-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.mocking-panel__editor-search-nav-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 .mocking-panel__editor {
@@ -1032,6 +1334,30 @@
   height: 14px;
 }
 
+/* Settings link for macOS hostname */
+.mocking-panel__settings-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: var(--spacing-xs);
+  color: var(--text-tertiary);
+  opacity: 0.6;
+  transition: opacity 0.15s, color 0.15s;
+  vertical-align: middle;
+}
+
+.mocking-panel__settings-link:hover {
+  opacity: 1;
+  color: var(--accent-primary);
+}
+
+.mocking-panel__settings-link svg {
+  width: 12px;
+  height: 12px;
+}
+
 /* Modal styles */
 .mocking-panel__modal-overlay {
   position: fixed;
@@ -1039,12 +1365,11 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.6);
+  background-color: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  backdrop-filter: blur(4px);
 }
 
 .mocking-panel__modal {
@@ -1627,4 +1952,21 @@
 
 .mocking-panel__qr-note strong {
   color: var(--text-secondary);
+}
+
+/* Auto-save flash animation */
+@keyframes autosave-flash {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.mocking-panel__autosave-flash {
+  animation: autosave-flash 0.35s ease-in-out 1;
 }

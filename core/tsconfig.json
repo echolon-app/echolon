@@ -19,6 +19,6 @@
       "@shared/*": ["shared/*"]
     }
   },
-  "include": ["renderer/**/*", "shared/**/*"],
+  "include": ["renderer/**/*", "shared/**/*", "global.d.ts"],
   "exclude": ["node_modules", "dist"]
 }

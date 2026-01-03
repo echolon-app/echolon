@@ -55,6 +55,7 @@
 
 .console-panel__entry {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: var(--spacing-sm);
   padding: var(--spacing-xs) var(--spacing-md);
@@ -109,9 +110,10 @@
 }
 
 .console-panel__entry-details {
-  width: 100%;
-  margin-top: var(--spacing-xs);
-  padding: var(--spacing-sm);
+  flex-basis: 100%;
+  margin: 0;
+  margin-left: calc(14px + var(--spacing-sm)); /* Align with message (icon width + gap) */
+  padding: var(--spacing-xs) var(--spacing-sm);
   background-color: var(--bg-secondary);
   border-radius: var(--radius-sm);
   color: var(--text-secondary);

@@ -164,9 +164,11 @@ export const IPC_CHANNELS = {
   FETCH_URL_CONTENT: 'fetch-url-content',
 } as const;
 
+
 // Sync frequency options in minutes (0 = manual only)
 export const SYNC_FREQUENCY_OPTIONS = [
   { value: 0, label: 'Manual only' },
+  __ENV__ === 'dev' ?  { value: 1, label: 'Every 1 minute' } : null,
   { value: 15, label: 'Every 15 minutes' },
   { value: 30, label: 'Every 30 minutes' },
   { value: 60, label: 'Every hour' },

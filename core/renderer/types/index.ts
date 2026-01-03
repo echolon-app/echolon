@@ -181,6 +181,7 @@ export interface Request {
   url: string;
   headers: KeyValuePair[];
   queryParams: KeyValuePair[];
+  pathParams: KeyValuePair[];
   body: RequestBody;
   auth: AuthConfig;
   scripts: {
@@ -293,14 +294,56 @@ export interface Environment {
 
 export interface Tab {
   id: string;
-  type: 'request' | 'collection' | 'environment';
+  type: 'request' | 'collection' | 'environment' | 'websocket';
   title: string;
   request?: Request;
   collectionId?: string;
   environmentId?: string;
+  websocket?: WebSocketConnection;
   isDirty?: boolean;
   initialSubTab?: string; // For initially opening a specific sub-tab (e.g., 'auth' for collection)
   subTab?: string; // Currently selected sub-tab (persisted)
+}
+
+// WebSocket Types
+export type WebSocketConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+
+export interface WebSocketMessage {
+  id: string;
+  type: 'sent' | 'received' | 'system';
+  content: string;
+  timestamp: number;
+  // For system messages like connection status
+  systemType?: 'connected' | 'disconnected' | 'error' | 'info';
+  // Connection handshake details (for the initial connection message)
+  connectionDetails?: {
+    requestUrl?: string;
+    requestMethod?: string;
+    statusCode?: number;
+    statusText?: string;
+    requestHeaders?: Record<string, string>;
+    responseHeaders?: Record<string, string>;
+  };
+}
+
+export interface WebSocketSettings {
+  handshakeTimeout: number; // ms, 0 = no timeout
+  reconnectionAttempts: number; // 0 = no reconnection
+  reconnectionInterval: number; // ms
+  maxMessageSize: number; // MB, 0 = unlimited
+}
+
+export interface WebSocketConnection {
+  id: string;
+  name: string;
+  url: string;
+  status: WebSocketConnectionStatus;
+  headers: KeyValuePair[];
+  queryParams: KeyValuePair[];
+  messages: WebSocketMessage[];
+  messageToSend: string;
+  settings: WebSocketSettings;
+  collectionId?: string;
 }
 
 export interface AppSettings {
@@ -325,6 +368,8 @@ export interface AppSettings {
   // Mocking settings
   mockingMaxCapturedRequests?: number; // Maximum captured requests to store (default: 1000)
   mockingSaveDebounceMs?: number; // Debounce time for saving captured requests (default: 1000)
+  mockingShowQuickTest?: boolean; // Show Quick Test section in mocking panel (default: true)
+  mockingAutoSave?: boolean; // Auto-save mocked response on blur (default: false)
 }
 
 export interface ConsoleEntry {
@@ -371,11 +416,13 @@ export interface MockAPI {
   routes: MockRoute[];
   createdAt: number;
   updatedAt: number;
+  // Local mock server settings
+  forwardTo?: string;  // optional URL to forward unmocked requests to (local mode)
   // Cloud proxy settings
   mode?: MockMode;  // 'local' | 'cloud', defaults to 'local'
   cloudNamespace?: string;  // namespace for cloud proxy (e.g., "test" for test.echolon.app)
   cloudServerUrl?: string;  // cloud proxy server URL
-  cloudForwardTo?: string;  // optional URL to forward requests to
+  cloudForwardTo?: string;  // optional URL to forward requests to (cloud mode)
   cloudStatus?: CloudProxyStatus;  // cloud proxy connection status
 }
 

@@ -334,6 +334,7 @@ export class OpenAPIAdapter implements SpecImporterAdapter {
   ): Request {
     const headers: KeyValuePair[] = [];
     const queryParams: KeyValuePair[] = [];
+    const pathParams: KeyValuePair[] = [];
 
     // Process parameters
     if (operation.parameters) {
@@ -353,6 +354,14 @@ export class OpenAPIAdapter implements SpecImporterAdapter {
             value: this.getSampleValueForParam(param),
             description: param.description || undefined,
             enabled: param.required || false,
+          });
+        } else if (param.in === 'path') {
+          pathParams.push({
+            id: uuidv4(),
+            key: param.name,
+            value: this.getSampleValueForParam(param),
+            description: param.description || this.getParamTypeDescription(param),
+            enabled: true,
           });
         }
       }
@@ -391,6 +400,7 @@ export class OpenAPIAdapter implements SpecImporterAdapter {
       url: `${urlPrefix}${path}`,
       headers,
       queryParams,
+      pathParams,
       body: {
         type: bodyType,
         content: bodyContent,
@@ -958,7 +968,7 @@ export class PostmanAdapter implements SpecImporterAdapter {
     const postmanReq = item.request!;
     
     // Parse URL
-    const { url, queryParams } = this.parseUrl(postmanReq.url);
+    const { url, queryParams, pathParams } = this.parseUrl(postmanReq.url);
     
     // Parse headers
     const headers = this.parseHeaders(postmanReq.header);
@@ -979,14 +989,16 @@ export class PostmanAdapter implements SpecImporterAdapter {
       url,
       headers,
       queryParams,
+      pathParams,
       body,
       auth: auth || { type: 'none' },
       scripts,
     };
   }
 
-  private parseUrl(postmanUrl: PostmanUrl | string): { url: string; queryParams: KeyValuePair[] } {
+  private parseUrl(postmanUrl: PostmanUrl | string): { url: string; queryParams: KeyValuePair[]; pathParams: KeyValuePair[] } {
     const queryParams: KeyValuePair[] = [];
+    const pathParams: KeyValuePair[] = [];
     let url: string;
 
     if (typeof postmanUrl === 'string') {
@@ -1046,11 +1058,33 @@ export class PostmanAdapter implements SpecImporterAdapter {
         }
       }
 
-      // Extract path variables as query params for visibility
+      // Extract path variables
       if (postmanUrl.variable) {
         for (const v of postmanUrl.variable) {
-          // Path variables are typically in the URL like :id or {{id}}
-          // We don't add them to queryParams as they're in the URL path
+          pathParams.push({
+            id: uuidv4(),
+            key: v.key,
+            value: v.value || '',
+            description: v.description,
+            enabled: true,
+          });
+        }
+      }
+    }
+    
+    // Also extract path variables from URL pattern (e.g., :id, :userId)
+    const pathVarMatches = url.match(/(?<!\{):([a-zA-Z_][a-zA-Z0-9_]*)/g);
+    if (pathVarMatches) {
+      for (const match of pathVarMatches) {
+        const varName = match.slice(1); // Remove : prefix
+        // Only add if not already in pathParams
+        if (!pathParams.some(p => p.key === varName)) {
+          pathParams.push({
+            id: uuidv4(),
+            key: varName,
+            value: '',
+            enabled: true,
+          });
         }
       }
     }
@@ -1063,7 +1097,7 @@ export class PostmanAdapter implements SpecImporterAdapter {
       }
     }
 
-    return { url, queryParams };
+    return { url, queryParams, pathParams };
   }
 
   private parseHeaders(headers?: PostmanHeader[]): KeyValuePair[] {
@@ -1195,13 +1229,27 @@ export class PostmanAdapter implements SpecImporterAdapter {
     }
   }
 
-  private getAuthValues(authArray?: Array<{ key: string; value: string }>): Record<string, string> {
+  private getAuthValues(authData?: Array<{ key: string; value: string }> | Record<string, string>): Record<string, string> {
     const result: Record<string, string> = {};
-    if (authArray) {
-      for (const item of authArray) {
+    if (!authData) return result;
+    
+    // Handle array format: [{ key: 'token', value: 'abc' }]
+    if (Array.isArray(authData)) {
+      for (const item of authData) {
+        if (item.key && item.value !== undefined) {
         result[item.key] = item.value;
       }
     }
+    } 
+    // Handle object format: { token: 'abc' }
+    else if (typeof authData === 'object') {
+      for (const [key, value] of Object.entries(authData)) {
+        if (typeof value === 'string') {
+          result[key] = value;
+        }
+      }
+    }
+    
     return result;
   }
 

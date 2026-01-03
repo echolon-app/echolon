@@ -41,6 +41,7 @@ export function collectionToEchoFile(collection: Collection, workspaceName: stri
       createdAt: new Date(collection.createdAt).toISOString(),
       modifiedAt: new Date(collection.updatedAt).toISOString(),
       workspaceId: collection.workspaceId || workspaceName,
+      collapsed: collection.collapsed,
     },
     settings: {
       defaultEnvironmentId: collection.defaultEnvironmentId,
@@ -86,6 +87,7 @@ export function echoFileToCollection(echoFile: EchoFile, workspaceId: string): C
     createdAt: new Date(echoFile.metadata.createdAt).getTime(),
     updatedAt: new Date(echoFile.metadata.modifiedAt).getTime(),
     workspaceId,
+    collapsed: echoFile.metadata.collapsed,
     requests: echoFile.requests.map(echoRequestToRequest),
     folders: echoFile.folders.map(echoFolderToFolder),
     environments: echoFile.environments as CollectionEnvironment[],

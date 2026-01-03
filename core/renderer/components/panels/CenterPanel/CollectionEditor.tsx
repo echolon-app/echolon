@@ -562,6 +562,8 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
     updateCollectionEnvironment,
     deleteCollectionEnvironment,
     toggleCollectionEnvironmentActive,
+    getPendingChanges,
+    clearPendingChanges,
   } = useCollections();
   const { updateTab, activeTabId, closeTab, tabs } = useRequest();
   const { logToConsole } = useApp();
@@ -626,10 +628,32 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
     }
   }, [currentTab?.initialSubTab, activeTabId, updateTab, setActiveTab]);
   
-  // Reset pending changes when collection changes
+  // Load pending changes from SyncManager when sync tab is opened or collection changes
   useEffect(() => {
+    if (collectionId) {
+      const existingChanges = getPendingChanges(collectionId);
+      setPendingChanges(existingChanges || null);
+    } else {
     setPendingChanges(null);
-  }, [collectionId]);
+    }
+  }, [activeTab, collectionId, getPendingChanges]);
+
+  // Listen for sync changes detected event to refresh pending changes
+  useEffect(() => {
+    const handleSyncChanges = (event: CustomEvent<{ collectionId: string }>) => {
+      if (event.detail.collectionId === collectionId) {
+        const existingChanges = getPendingChanges(collectionId);
+        if (existingChanges) {
+          setPendingChanges(existingChanges);
+        }
+      }
+    };
+
+    window.addEventListener('echolon:sync-changes-detected', handleSyncChanges as EventListener);
+    return () => {
+      window.removeEventListener('echolon:sync-changes-detected', handleSyncChanges as EventListener);
+    };
+  }, [collectionId, getPendingChanges]);
 
   // Helper to get all request IDs recursively
   const getAllRequestIds = useCallback((requests: Request[], folders: Folder[]): string[] => {
@@ -832,6 +856,7 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
 
       await updateCollection(collectionId, updatedCollection);
       setPendingChanges(null);
+      clearPendingChanges(collectionId); // Clear from SyncManager too
       logToConsole('success', `Applied ${selectedIds.length} change(s) to collection`);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to apply changes';
@@ -839,7 +864,7 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
     } finally {
       setIsApplying(false);
     }
-  }, [collection, pendingChanges, collectionId, updateCollection, logToConsole]);
+  }, [collection, pendingChanges, collectionId, updateCollection, clearPendingChanges, logToConsole]);
 
   const handleApplySelected = useCallback(() => {
     if (!pendingChanges) return;
@@ -1600,20 +1625,20 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
               <div className="collection-editor__info-item">
                 <span className="collection-editor__info-label">Created</span>
                 <span className="collection-editor__info-value">
-                  {formatDate(collection.createdAt)}
+                  {formatDateTime(collection.createdAt)}
                 </span>
               </div>
               <div className="collection-editor__info-item">
                 <span className="collection-editor__info-label">Last Modified</span>
                 <span className="collection-editor__info-value">
-                  {formatDate(collection.updatedAt)}
+                  {formatDateTime(collection.updatedAt)}
                 </span>
               </div>
               {collection.importedAt && (
                 <div className="collection-editor__info-item">
                   <span className="collection-editor__info-label">Imported</span>
                   <span className="collection-editor__info-value">
-                    {formatDate(collection.importedAt)}
+                    {formatDateTime(collection.importedAt)}
                   </span>
                 </div>
               )}

@@ -1,4 +1,5 @@
 .collapsible-list__header {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
@@ -162,4 +163,90 @@
 .collapsible-list-item--active .collapsible-list-item__content {
   color: var(--text-primary);
   font-weight: 500;
+}
+
+/* Drag and drop styles */
+.collapsible-list--drag-over {
+  outline: 2px dashed var(--color-primary);
+  outline-offset: -2px;
+  background-color: var(--color-primary-bg, rgba(34, 197, 94, 0.1));
+  border-radius: var(--radius-md);
+}
+
+.collapsible-list--drag-over > .collapsible-list__header {
+  background-color: transparent;
+}
+
+/* Header drop indicator (for dropping onto closed folders) */
+.collapsible-list__header--drag-over {
+  background-color: var(--color-primary-bg, rgba(34, 197, 94, 0.15)) !important;
+  outline: 2px dashed var(--color-primary);
+  outline-offset: -2px;
+}
+
+.collapsible-list__header--drag-over::after {
+  content: '↳ Drop here';
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: var(--font-xs);
+  color: var(--color-primary);
+  font-weight: 500;
+  background-color: var(--color-primary);
+  color: white;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.collapsible-list-item[draggable="true"] {
+  cursor: grab;
+}
+
+.collapsible-list-item[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.collapsible-list-item--dragging {
+  opacity: 0.5;
+}
+
+/* Drop position indicators */
+.collapsible-list-item {
+  position: relative;
+}
+
+.collapsible-list-item__drop-indicator {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: var(--color-primary);
+  pointer-events: none;
+  z-index: 10;
+}
+
+.collapsible-list-item__drop-indicator::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  background-color: var(--color-primary);
+  border-radius: 50%;
+  transform: translateY(-2px);
+}
+
+.collapsible-list-item__drop-indicator--before {
+  top: -1px;
+}
+
+.collapsible-list-item__drop-indicator--after {
+  bottom: -1px;
+}
+
+/* Visual feedback when hovering with a dragged item */
+.collapsible-list-item--drop-before,
+.collapsible-list-item--drop-after {
+  background-color: var(--color-primary-bg, rgba(34, 197, 94, 0.08));
 }

@@ -89,7 +89,7 @@
       "problemMatcher": []
     },
     {
-      "label": "Package Windows",
+      "label": "Core:Package Windows",
       "type": "shell",
       "command": "npm run package:win",
       "group": {

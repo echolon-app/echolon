@@ -321,6 +321,11 @@
   color: var(--color-success);
 }
 
+.settings-modal__update-status--downloaded {
+  background-color: var(--color-primary-alpha);
+  color: var(--color-primary);
+}
+
 .settings-modal__update-status--current {
   background-color: var(--color-primary-alpha);
   color: var(--color-primary);

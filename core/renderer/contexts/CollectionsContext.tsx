@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { Collection, Request, Folder, PendingSpecChanges, CollectionEnvironment, KeyValuePair } from '@/types';
+import { Collection, Request, Folder, PendingSpecChanges, CollectionEnvironment, KeyValuePair, CollectionType } from '@/types';
 import { fileStorageManager, syncManager } from '@/services';
 import { echoConverter } from '@/services/EchoFileConverter';
 import { useWorkspace } from './WorkspaceContext';
@@ -11,7 +11,7 @@ interface CollectionsContextValue {
   collections: Collection[];
   allCollections: Collection[];
   isLoading: boolean;
-  addCollection: (name: string, description?: string) => Promise<Collection | null>;
+  addCollection: (name: string, description?: string, type?: CollectionType) => Promise<Collection | null>;
   updateCollection: (id: string, updates: Partial<Collection>) => Promise<void>;
   deleteCollection: (id: string) => Promise<void>;
   importCollection: (collection: Collection) => Promise<void>;
@@ -21,6 +21,7 @@ interface CollectionsContextValue {
   addRequest: (collectionId: string, request: Request, folderId?: string) => void;
   updateRequest: (collectionId: string, requestId: string, updates: Partial<Request>) => void;
   deleteRequest: (collectionId: string, requestId: string, folderId?: string) => void;
+  moveRequestToCollection: (request: Request, fromCollectionId: string | null, toCollectionId: string, folderId?: string, insertIndex?: number) => void;
   addFolder: (collectionId: string, name: string, parentFolderId?: string) => Folder;
   updateFolder: (collectionId: string, folderId: string, updates: Partial<Folder>) => void;
   deleteFolder: (collectionId: string, folderId: string) => void;
@@ -38,6 +39,7 @@ interface CollectionsContextValue {
   // Sync-related
   pendingChangesCount: number;
   getPendingChanges: (collectionId: string) => PendingSpecChanges | undefined;
+  clearPendingChanges: (collectionId: string) => void;
   checkForUpdates: (collectionId: string) => Promise<PendingSpecChanges | null>;
   // File storage helpers
   refreshCollections: () => Promise<void>;
@@ -152,6 +154,12 @@ export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [allCollections, setAllCollections] = useState<Collection[]>([]);
   const [isLoading, setIsLoading] = useState(!isWebMode);
   const [pendingChangesCount, setPendingChangesCount] = useState(0);
+  
+  // Ref to always have access to latest collections (for SyncManager callbacks)
+  const collectionsRef = useRef<Collection[]>([]);
+  useEffect(() => {
+    collectionsRef.current = allCollections;
+  }, [allCollections]);
 
   // Initialize from pre-loaded data
   useEffect(() => {
@@ -191,6 +199,29 @@ export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
   }, [activeWorkspaceId, allCollections, getWorkspaceNameById, isWebMode]);
 
+  // Immediate save to file (no debounce)
+  const saveCollectionToFileImmediate = useCallback(async (collection: Collection) => {
+    // Skip file operations in web mode
+    if (isWebMode) return;
+    
+    const workspaceName = getWorkspaceNameById(collection.workspaceId || '');
+    if (!workspaceName) {
+      console.error('Cannot save collection: workspace not found');
+      return;
+    }
+    
+    // Clear any pending debounced save for this collection
+    const existingTimeout = saveQueueRef.current.get(collection.id);
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+      saveQueueRef.current.delete(collection.id);
+    }
+    
+    const echoFile = echoConverter.collectionToEchoFile(collection, workspaceName);
+    const collectionName = fileStorageManager.sanitizeFilename(collection.name);
+    await fileStorageManager.writeCollection(workspaceName, collectionName, echoFile);
+  }, [getWorkspaceNameById, isWebMode]);
+
   // Debounced save to file (skip in web mode)
   const saveCollectionToFile = useCallback(async (collection: Collection) => {
     // Skip file operations in web mode
@@ -225,7 +256,7 @@ export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     return allCollections.filter(c => c.workspaceId === activeWorkspaceId);
   }, [allCollections, activeWorkspaceId]);
 
-  const addCollection = useCallback(async (name: string, description?: string): Promise<Collection | null> => {
+  const addCollection = useCallback(async (name: string, description?: string, type?: CollectionType): Promise<Collection | null> => {
     const workspaceName = getWorkspaceNameById(activeWorkspaceId || '');
     if (!workspaceName) {
       console.error('Cannot add collection: no active workspace');
@@ -236,6 +267,7 @@ export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
       id: uuidv4(),
       name,
       description,
+      type: type || 'REST',
       requests: [],
       folders: [],
       workspaceId: activeWorkspaceId || undefined,
@@ -275,12 +307,24 @@ export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
       }
     }
     
+    // Reschedule sync check if frequency changed
+    if (updates.specSource?.syncFrequencyMins !== undefined && 
+        updates.specSource.syncFrequencyMins !== collection.specSource?.syncFrequencyMins) {
+      syncManager.scheduleCheck(updatedCollection);
+    }
+    
     setAllCollections(prev =>
       prev.map(c => c.id === id ? updatedCollection : c)
     );
     
-    await saveCollectionToFile(updatedCollection);
-  }, [allCollections, getWorkspaceNameById, saveCollectionToFile]);
+    // Save immediately for UI state changes (collapsed), debounce for other changes
+    const isUIStateChange = Object.keys(updates).every(key => key === 'collapsed');
+    if (isUIStateChange) {
+      await saveCollectionToFileImmediate(updatedCollection);
+    } else {
+      await saveCollectionToFile(updatedCollection);
+    }
+  }, [allCollections, getWorkspaceNameById, saveCollectionToFile, saveCollectionToFileImmediate]);
 
   const deleteCollection = useCallback(async (id: string) => {
     const collection = allCollections.find(c => c.id === id);
@@ -455,6 +499,146 @@ export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     });
   }, [saveCollectionToFile]);
 
+  const moveRequestToCollection = useCallback((
+    request: Request, 
+    fromCollectionId: string | null, 
+    toCollectionId: string, 
+    toFolderId?: string,
+    insertIndex?: number
+  ) => {
+    console.log('[moveRequest] Called with:', { 
+      requestName: request?.name,
+      fromCollectionId, 
+      toCollectionId, 
+      toFolderId, 
+      insertIndex 
+    });
+
+    // Update the request with new collection info
+    const movedRequest: Request = {
+      ...request,
+      collectionId: toCollectionId,
+      folderId: toFolderId,
+    };
+
+    // Helper to insert at specific index or append
+    const insertAtIndex = (arr: Request[], item: Request, index?: number): Request[] => {
+      if (index === undefined || index < 0 || index > arr.length) {
+        return [...arr, item];
+      }
+      const result = [...arr];
+      result.splice(index, 0, item);
+      return result;
+    };
+
+    // Check if moving within same collection
+    const isSameCollection = fromCollectionId === toCollectionId;
+    console.log('[moveRequest] isSameCollection:', isSameCollection);
+
+    setAllCollections(prev => {
+      const newCollections = prev.map(c => {
+        // Case 1: Moving within the same collection
+        if (isSameCollection && c.id === toCollectionId) {
+          // Helper to remove request from folders recursively
+          const removeFromFolders = (folders: Folder[]): Folder[] =>
+            folders.map(f => ({
+              ...f,
+              requests: f.requests.filter(r => r.id !== request.id),
+              folders: removeFromFolders(f.folders),
+            }));
+
+          // Remove from current location (root and all folders)
+          let newRequests = c.requests.filter(r => r.id !== request.id);
+          let newFolders = removeFromFolders(c.folders);
+
+          // Add to target location
+          if (toFolderId) {
+            // Add to specific folder
+            const addToFolder = (folders: Folder[]): Folder[] =>
+              folders.map(f => {
+                if (f.id === toFolderId) {
+                  return { ...f, requests: insertAtIndex(f.requests, movedRequest, insertIndex) };
+                }
+                return { ...f, folders: addToFolder(f.folders) };
+              });
+            newFolders = addToFolder(newFolders);
+          } else {
+            // Add to root - adjust index if moving within root
+            const originalIndex = c.requests.findIndex(r => r.id === request.id);
+            let adjustedIndex = insertIndex;
+            if (originalIndex !== -1 && insertIndex !== undefined && originalIndex < insertIndex) {
+              adjustedIndex = insertIndex - 1;
+            }
+            newRequests = insertAtIndex(newRequests, movedRequest, adjustedIndex);
+          }
+
+          const updated = {
+            ...c,
+            requests: newRequests,
+            folders: newFolders,
+            updatedAt: Date.now(),
+          };
+          saveCollectionToFile(updated);
+          return updated;
+        }
+
+        // Case 2: Remove from source collection (when moving to different collection)
+        if (fromCollectionId && c.id === fromCollectionId && !isSameCollection) {
+          const removeFromFolders = (folders: Folder[]): Folder[] =>
+            folders.map(f => ({
+              ...f,
+              requests: f.requests.filter(r => r.id !== request.id),
+              folders: removeFromFolders(f.folders),
+            }));
+
+          const updated = {
+            ...c,
+            requests: c.requests.filter(r => r.id !== request.id),
+            folders: removeFromFolders(c.folders),
+            updatedAt: Date.now(),
+          };
+          saveCollectionToFile(updated);
+          return updated;
+        }
+
+        // Case 3: Add to target collection (when moving from different collection or standalone)
+        if (c.id === toCollectionId && !isSameCollection) {
+          console.log('[moveRequest] Case 3: Adding to target collection', c.name);
+          if (toFolderId) {
+            // Add to specific folder
+            const addToFolder = (folders: Folder[]): Folder[] =>
+              folders.map(f => {
+                if (f.id === toFolderId) {
+                  return { ...f, requests: insertAtIndex(f.requests, movedRequest, insertIndex) };
+                }
+                return { ...f, folders: addToFolder(f.folders) };
+              });
+
+            const updated = {
+              ...c,
+              folders: addToFolder(c.folders),
+              updatedAt: Date.now(),
+            };
+            saveCollectionToFile(updated);
+            return updated;
+          } else {
+            // Add to root of collection at specified index
+            const updated = {
+              ...c,
+              requests: insertAtIndex(c.requests, movedRequest, insertIndex),
+              updatedAt: Date.now(),
+            };
+            saveCollectionToFile(updated);
+            return updated;
+          }
+        }
+
+        return c;
+      });
+      return newCollections;
+    });
+  }, [saveCollectionToFile]);
+
   const addFolder = useCallback((collectionId: string, name: string, parentFolderId?: string): Folder => {
     const newFolder: Folder = {
       id: uuidv4(),
@@ -500,6 +684,9 @@ export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, [saveCollectionToFile]);
 
   const updateFolder = useCallback((collectionId: string, folderId: string, updates: Partial<Folder>) => {
+    // Check if this is a UI state change (collapsed)
+    const isUIStateChange = Object.keys(updates).every(key => key === 'collapsed');
+    
     setAllCollections(prev => {
       const newCollections = prev.map(c => {
         if (c.id !== collectionId) return c;
@@ -517,12 +704,18 @@ export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
           folders: updateFolders(c.folders),
           updatedAt: Date.now(),
         };
-        saveCollectionToFile(updated);
+        
+        // Save immediately for UI state changes, debounce for others
+        if (isUIStateChange) {
+          saveCollectionToFileImmediate(updated);
+        } else {
+          saveCollectionToFile(updated);
+        }
         return updated;
       });
       return newCollections;
     });
-  }, [saveCollectionToFile]);
+  }, [saveCollectionToFile, saveCollectionToFileImmediate]);
 
   const deleteFolder = useCallback((collectionId: string, folderId: string) => {
     setAllCollections(prev => {
@@ -776,13 +969,19 @@ export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     return syncManager.checkCollection(collectionId);
   }, []);
 
+  const clearPendingChanges = useCallback((collectionId: string): void => {
+    syncManager.clearPendingChanges(collectionId);
+    const allPending = syncManager.getAllPendingChanges();
+    setPendingChangesCount(allPending.reduce((sum, p) => sum + p.changes.length, 0));
+  }, []);
+
   // Initialize sync manager (skip in web mode)
   useEffect(() => {
     if (syncInitialized.current || !initializedRef.current || isWebMode) return;
     syncInitialized.current = true;
 
     syncManager.initialize({
-      getCollections: () => allCollections,
+      getCollections: () => collectionsRef.current,
       updateCollection: async (id, updates) => {
         setAllCollections(prev => {
           const newCollections = prev.map(c => {
@@ -799,7 +998,7 @@ export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
         setPendingChangesCount(allPending.reduce((sum, p) => sum + p.changes.length, 0));
         
         // Dispatch custom event for notification handling
-        const collection = allCollections.find(c => c.id === collectionId);
+        const collection = collectionsRef.current.find(c => c.id === collectionId);
         if (collection) {
           window.dispatchEvent(new CustomEvent('echolon:sync-changes-detected', {
             detail: {
@@ -823,7 +1022,8 @@ export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
       syncManager.cleanup();
       syncInitialized.current = false;
     };
-  }, [allCollections, saveCollectionToFile, isWebMode]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saveCollectionToFile, isWebMode]);
 
   const refreshCollections = useCallback(async () => {
     await refreshData();
@@ -844,6 +1044,7 @@ export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
         addRequest,
         updateRequest,
         deleteRequest,
+        moveRequestToCollection,
         addFolder,
         updateFolder,
         deleteFolder,
@@ -859,6 +1060,7 @@ export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
         getActiveCollectionEnvironment,
         pendingChangesCount,
         getPendingChanges,
+        clearPendingChanges,
         checkForUpdates,
         refreshCollections,
       }}

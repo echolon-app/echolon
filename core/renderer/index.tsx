@@ -15,6 +15,7 @@ import {
   WebModeProvider,
   Reference2Provider,
   FileStorageProvider,
+  UpdateProvider,
 } from '@/contexts';
 import { ToastContainer } from '@/components/ui';
 
@@ -26,24 +27,26 @@ root.render(
       <WebModeProvider>
         <FileStorageProvider>
           <ToastProvider>
-          <DataLoaderProvider>
-              <AppProvider>
-                <WorkspaceProvider>
-                  <GitHubProvider>
-                    <CollectionsProvider>
-                      <EnvironmentsProvider>
-                        <MockingProvider>
-                          <RequestProvider>
-                            <App />
-                            <ToastContainer />
-                          </RequestProvider>
-                        </MockingProvider>
-                      </EnvironmentsProvider>
-                    </CollectionsProvider>
-                  </GitHubProvider>
-                </WorkspaceProvider>
-              </AppProvider>
-          </DataLoaderProvider>
+            <UpdateProvider>
+              <DataLoaderProvider>
+                <AppProvider>
+                  <WorkspaceProvider>
+                    <GitHubProvider>
+                      <CollectionsProvider>
+                        <EnvironmentsProvider>
+                          <MockingProvider>
+                            <RequestProvider>
+                              <App />
+                              <ToastContainer />
+                            </RequestProvider>
+                          </MockingProvider>
+                        </EnvironmentsProvider>
+                      </CollectionsProvider>
+                    </GitHubProvider>
+                  </WorkspaceProvider>
+                </AppProvider>
+              </DataLoaderProvider>
+            </UpdateProvider>
           </ToastProvider>
         </FileStorageProvider>
       </WebModeProvider>

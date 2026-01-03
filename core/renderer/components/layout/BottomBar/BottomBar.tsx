@@ -1,12 +1,14 @@
 import React from 'react';
 import { Button, Tooltip } from '@/components/ui';
-import { SidebarIcon, PanelLeftIcon, ConsoleIcon, ClearIcon, ThunderboltIcon } from '@/components/ui/icons';
-import { useApp } from '@/contexts';
+import { SidebarIcon, PanelLeftIcon, ConsoleIcon, ClearIcon, ThunderboltIcon, MailIcon } from '@/components/ui/icons';
+import { useApp, useMocking, useUpdateOptional } from '@/contexts';
+import { APP_VERSION } from '@/utils/environment';
 import './BottomBar.css';
 
 export const BottomBar: React.FC = () => {
   const { 
     sidebarState,
+    sidebarView,
     cycleSidebarState,
     leftPanelVisible,
     toggleLeftPanel,
@@ -16,12 +18,83 @@ export const BottomBar: React.FC = () => {
     clearConsole,
     openShortcutsModal
   } = useApp();
+  
+  const { capturedRequests, activeMockApiId } = useMocking();
+  const update = useUpdateOptional();
+
+  const handleSupportClick = async () => {
+    const version = APP_VERSION || 'unknown';
+    const platform = navigator.platform || 'unknown';
+    const userAgent = navigator.userAgent || 'unknown';
+    
+    // Extract OS info from userAgent
+    let osInfo = 'Unknown OS';
+    if (userAgent.includes('Mac')) {
+      const match = userAgent.match(/Mac OS X ([0-9_]+)/);
+      osInfo = match ? `macOS ${match[1].replace(/_/g, '.')}` : 'macOS';
+    } else if (userAgent.includes('Windows')) {
+      const match = userAgent.match(/Windows NT ([0-9.]+)/);
+      osInfo = match ? `Windows NT ${match[1]}` : 'Windows';
+    } else if (userAgent.includes('Linux')) {
+      osInfo = 'Linux';
+    }
+
+    const subject = encodeURIComponent(`Echolon-In-App-Support ${version}`);
+    const body = encodeURIComponent(
+`--- System Information ---
+App Version: ${version}
+Operating System: ${osInfo}
+Platform: ${platform}
+User Agent: ${userAgent}
+
+--- Issue Description ---
+Please describe the issue you're experiencing:
+
+1. What were you trying to do?
+
+
+2. What happened instead?
+
+
+3. Steps to reproduce the issue:
+
+
+4. Any error messages shown:
+
+
+--- Additional Context ---
+(Add any screenshots or additional information that might help)
+`
+    );
+    
+    const mailtoUrl = `mailto:support@echolon.app?subject=${subject}&body=${body}`;
+    
+    if (window.electronAPI?.openExternal) {
+      await window.electronAPI.openExternal(mailtoUrl);
+    } else {
+      window.open(mailtoUrl, '_blank');
+    }
+  };
+
+  const handleVersionClick = () => {
+    if (update) {
+      update.openModal('changelog');
+    }
+  };
+  
+  // Get requests for active mock API
+  const activeRequests = activeMockApiId 
+    ? capturedRequests.filter(r => r.mockApiId === activeMockApiId)
+    : [];
 
   const getSidebarTooltip = () => {
     if (sidebarState === 'hidden') return 'Show sidebar';
     if (sidebarState === 'collapsed') return 'Expand sidebar';
     return 'Hide sidebar';
   };
+
+  // Check if there's an update available
+  const hasUpdateAvailable = update && (update.status === 'available' || update.status === 'downloaded');
 
   return (
     <div className="bottom-bar">
@@ -46,13 +119,40 @@ export const BottomBar: React.FC = () => {
             <PanelLeftIcon />
           </Button>
         </Tooltip>
+        <Tooltip content="Contact support" position="top">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={handleSupportClick}
+          >
+            <MailIcon />
+          </Button>
+        </Tooltip>
       </div>
 
       <div className="bottom-bar__center">
-        {/* Status messages can go here */}
+        {sidebarView === 'mocking' && (
+          <span className="bottom-bar__status">
+            {activeRequests.length} {activeRequests.length === 1 ? 'request' : 'requests'}
+          </span>
+        )}
       </div>
 
       <div className="bottom-bar__right">
+        {/* Version indicator */}
+        <Tooltip 
+          content={hasUpdateAvailable ? `Update v${update.updateInfo?.version} available` : 'View changelog'} 
+          position="top"
+        >
+          <button 
+            className={`bottom-bar__version ${hasUpdateAvailable ? 'bottom-bar__version--update' : ''}`}
+            onClick={handleVersionClick}
+          >
+            <span>v{APP_VERSION}</span>
+            {hasUpdateAvailable && <span className="bottom-bar__version-dot" />}
+          </button>
+        </Tooltip>
+
         <Tooltip content={consoleVisible ? 'Hide console' : 'Show console'} position="top">
           <Button 
             variant="ghost" 
@@ -84,4 +184,3 @@ export const BottomBar: React.FC = () => {
 };
 
 export default BottomBar;
-

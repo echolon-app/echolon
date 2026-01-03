@@ -6,9 +6,11 @@ import path from 'path';
 import { builtinModules } from 'module';
 import pkg from './package.json';
 
+console.log('ENV', process.env.ENV);
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
+    __ENV__:JSON.stringify(process.env.ENV),
   },
   plugins: [
     react(),

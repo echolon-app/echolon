@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Modal, Button, Input, Dropdown, EditableTable, ColorEmojiPicker } from '@/components/ui';
-import { useApp, useTheme, COLOR_SCHEMES, useGitHub, useWebModeOptional, useWorkspace } from '@/contexts';
+import { useApp, useTheme, COLOR_SCHEMES, useGitHub, useWebModeOptional, useWorkspace, useUpdateOptional } from '@/contexts';
 import { 
   SettingsIcon, CodeIcon, SendIcon, CreditCardIcon, CheckIcon, InfoIcon,
-  PaletteIcon, RefreshIcon, FolderIcon, GitHubIcon, ExternalLinkIcon, ServerIcon, GlobeIcon, PlusIcon, TrashIcon 
+  PaletteIcon, RefreshIcon, FolderIcon, GitHubIcon, ExternalLinkIcon, ServerIcon, GlobeIcon, PlusIcon, TrashIcon, DownloadIcon, RocketIcon 
 } from '@/components/ui/icons';
 import { fileStorageManager } from '@/services';
 import { isElectron } from '@/utils';
@@ -19,9 +19,8 @@ export const SettingsModal: React.FC = () => {
   const { theme, setTheme, colorScheme, setColorScheme } = useTheme();
   const { isAuthenticated, user, logout } = useGitHub();
   const webMode = useWebModeOptional();
+  const update = useUpdateOptional();
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
-  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'not-available' | 'error'>('idle');
-  const [updateInfo, setUpdateInfo] = useState<{ version: string; releaseNotes: string } | null>(null);
   const [echolonPath, setEcholonPath] = useState<string>('');
   const [corsProxy, setCorsProxy] = useState<string>(() => {
     return localStorage.getItem('echolon_cors_proxy') || '';
@@ -51,33 +50,15 @@ export const SettingsModal: React.FC = () => {
     loadPath();
   }, [settingsModalOpen, isWebMode]);
 
-  useEffect(() => {
-    if (!window.electronAPI) return;
-
-    const unsubscribers: (() => void)[] = [];
-
-    unsubscribers.push(
-      window.electronAPI.onUpdateAvailable((data) => {
-        setUpdateStatus('available');
-        setUpdateInfo({ version: data.version, releaseNotes: data.releaseNotes });
-      }),
-      window.electronAPI.onUpdateNotAvailable(() => {
-        setUpdateStatus('not-available');
-      })
-    );
-
-    return () => {
-      unsubscribers.forEach((unsub) => unsub());
-    };
-  }, []);
-
   const handleCheckForUpdates = async () => {
-    if (!window.electronAPI) return;
-    setUpdateStatus('checking');
-    try {
-      await window.electronAPI.checkForUpdates();
-    } catch {
-      setUpdateStatus('error');
+    if (update) {
+      await update.checkForUpdates();
+    }
+  };
+
+  const handleDownloadUpdate = () => {
+    if (update) {
+      update.openModal('update');
     }
   };
 
@@ -227,28 +208,7 @@ export const SettingsModal: React.FC = () => {
                 </div>
               </div>
 
-              {!isWebMode && (
-                <div className="settings-modal__section">
-                  <h3>Storage Location</h3>
-                  
-                  <div className="settings-modal__field">
-                    <p className="settings-modal__field-description">
-                      Your workspaces and collections are saved at:
-                    </p>
-                    <div className="settings-modal__path-field">
-                      <code className="settings-modal__path-value">{echolonPath}</code>
-                      <Button 
-                        variant="secondary" 
-                        size="sm"
-                        onClick={handleOpenStorageFolder}
-                        icon={<ExternalLinkIcon />}
-                      >
-                        Open
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )}
+             
             </div>
           )}
 
@@ -625,6 +585,38 @@ export const SettingsModal: React.FC = () => {
               </div>
 
               <div className="settings-modal__section">
+                <h3>Interface</h3>
+                
+                <div className="settings-modal__field settings-modal__field--checkbox">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={settings.mockingShowQuickTest ?? true}
+                      onChange={(e) => updateSettings({ mockingShowQuickTest: e.target.checked })}
+                    />
+                    <span>Show Quick Test</span>
+                  </label>
+                  <p className="settings-modal__field-description">
+                    Show the Quick Test buttons for sending test requests to the mock server
+                  </p>
+                </div>
+                
+                <div className="settings-modal__field settings-modal__field--checkbox">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={settings.mockingAutoSave ?? false}
+                      onChange={(e) => updateSettings({ mockingAutoSave: e.target.checked })}
+                    />
+                    <span>Auto-save Mocked Response</span>
+                  </label>
+                  <p className="settings-modal__field-description">
+                    Automatically save the mocked response when you leave an input field (status, headers, body)
+                  </p>
+                </div>
+              </div>
+
+              <div className="settings-modal__section">
                 <h3>Request Capture</h3>
                 
                 <div className="settings-modal__field">
@@ -759,7 +751,7 @@ export const SettingsModal: React.FC = () => {
               </div>
 
               {/* Software Updates - Only show in Electron app */}
-              {isElectronApp && (
+              {isElectronApp && update && (
                 <div className="settings-modal__section">
                   <h3>Software Updates</h3>
                   
@@ -778,32 +770,58 @@ export const SettingsModal: React.FC = () => {
                   </div>
 
                   <div className="settings-modal__update-check">
-                    <Button 
-                      variant="secondary" 
-                      onClick={handleCheckForUpdates}
-                      loading={updateStatus === 'checking'}
-                      icon={<RefreshIcon />}
-                    >
-                      {updateStatus === 'checking' ? 'Checking...' : 'Check for Updates'}
-                    </Button>
+                    {/* Show different buttons based on update status */}
+                    {update.status === 'downloaded' ? (
+                      <Button 
+                        variant="primary" 
+                        onClick={() => update.installUpdate()}
+                        icon={<RocketIcon />}
+                      >
+                        Restart & Install Update
+                      </Button>
+                    ) : update.status === 'available' ? (
+                      <Button 
+                        variant="primary" 
+                        onClick={handleDownloadUpdate}
+                        icon={<DownloadIcon />}
+                      >
+                        Download Update v{update.updateInfo?.version}
+                      </Button>
+                    ) : (
+                      <Button 
+                        variant="secondary" 
+                        onClick={handleCheckForUpdates}
+                        loading={update.status === 'checking'}
+                        icon={<RefreshIcon />}
+                      >
+                        {update.status === 'checking' ? 'Checking...' : 'Check for Updates'}
+                      </Button>
+                    )}
                     
-                    {updateStatus === 'available' && updateInfo && (
+                    {update.status === 'available' && update.updateInfo && (
                       <div className="settings-modal__update-status settings-modal__update-status--available">
                         <CheckIcon />
-                        <span>Version {updateInfo.version} is available!</span>
+                        <span>Version {update.updateInfo.version} is available!</span>
                       </div>
                     )}
                     
-                    {updateStatus === 'not-available' && (
+                    {update.status === 'downloaded' && update.updateInfo && (
+                      <div className="settings-modal__update-status settings-modal__update-status--downloaded">
+                        <RocketIcon />
+                        <span>Version {update.updateInfo.version} ready to install</span>
+                      </div>
+                    )}
+                    
+                    {update.status === 'not-available' && (
                       <div className="settings-modal__update-status settings-modal__update-status--current">
                         <CheckIcon />
                         <span>You're up to date!</span>
                       </div>
                     )}
                     
-                    {updateStatus === 'error' && (
+                    {update.status === 'error' && (
                       <div className="settings-modal__update-status settings-modal__update-status--error">
-                        <span>Failed to check for updates</span>
+                        <span>{update.error || 'Failed to check for updates'}</span>
                       </div>
                     )}
                   </div>

@@ -1,4 +1,4 @@
-import { Request, Response, RequestExecution, Environment, ResponseTiming, SizeBreakdown, NetworkInfo, Collection, AuthConfig, AppSettings, CollectionEnvironment, ScriptOutput, ScriptsOutput } from '@/types';
+import { Request, Response, RequestExecution, Environment, ResponseTiming, SizeBreakdown, NetworkInfo, Collection, AuthConfig, AppSettings, CollectionEnvironment, ScriptOutput, ScriptsOutput, KeyValuePair } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import { SAMPLE_REQUEST } from '../../shared/constants';
 import { isElectron } from '@/utils';
@@ -49,17 +49,21 @@ export class RequestService {
     return RequestService.instance;
   }
 
-  // Replace {{variables}} with actual values
+  // Replace {{variables}} and :pathParams with actual values
   // Collection environment variables have priority over global environment variables
   private interpolateVariables(
     text: string, 
     environment: Environment | null, 
-    collectionEnv?: CollectionEnvironment | null
+    collectionEnv?: CollectionEnvironment | null,
+    pathParams?: KeyValuePair[]
   ): string {
     if (!text) return text;
-    if (!environment && !collectionEnv) return text;
+    
+    let result = text;
 
-    return text.replace(/\{\{([^}]+)\}\}/g, (match, varName) => {
+    // First, interpolate environment variables {{var}}
+    if (environment || collectionEnv) {
+      result = result.replace(/\{\{([^}]+)\}\}/g, (match, varName) => {
       const trimmedName = varName.trim();
       
       // Check collection environment first (higher priority)
@@ -80,6 +84,17 @@ export class RequestService {
       
       return match; // Keep original if not found
     });
+    }
+    
+    // Then, interpolate path parameters :param
+    if (pathParams && pathParams.length > 0) {
+      result = result.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (match, paramName) => {
+        const param = pathParams.find(p => p.key === paramName);
+        return param && param.value ? param.value : match;
+      });
+    }
+    
+    return result;
   }
 
   // Get effective auth (request auth takes precedence over collection auth)
@@ -178,7 +193,7 @@ export class RequestService {
     collection: Collection | null,
     collectionEnv?: CollectionEnvironment | null
   ): string {
-    let url = this.interpolateVariables(request.url, environment, collectionEnv);
+    let url = this.interpolateVariables(request.url, environment, collectionEnv, request.pathParams);
 
     // Ensure URL has protocol
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
@@ -790,6 +805,7 @@ export class RequestService {
       url: '',
       headers: [],
       queryParams: [],
+      pathParams: [],
       body: {
         type: 'none',
         content: '',
@@ -813,6 +829,7 @@ export class RequestService {
       url: SAMPLE_REQUEST.url,
       headers: [],
       queryParams: [],
+      pathParams: [],
       body: {
         type: 'none',
         content: '',

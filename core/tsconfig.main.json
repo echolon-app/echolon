@@ -13,6 +13,6 @@
     "rootDir": ".",
     "declaration": false
   },
-  "include": ["main/**/*", "shared/**/*"],
+  "include": ["main/**/*", "shared/**/*", "global.d.ts"],
   "exclude": ["node_modules"]
 }

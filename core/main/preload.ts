@@ -6,11 +6,15 @@ const IPC_CHANNELS = {
   UPDATE_AVAILABLE: 'update-available',
   UPDATE_NOT_AVAILABLE: 'update-not-available',
   UPDATE_DOWNLOADED: 'update-downloaded',
+  UPDATE_ERROR: 'update-error',
   DOWNLOAD_UPDATE: 'download-update',
   INSTALL_UPDATE: 'install-update',
+  QUIT_AND_INSTALL_LATER: 'quit-and-install-later',
   GET_APP_VERSION: 'get-app-version',
+  UPDATE_DOWNLOAD_PROGRESS: 'update-download-progress',
   MAKE_HTTP_REQUEST: 'make-http-request',
   EXECUTE_SCRIPT: 'execute-script',
+  OPEN_EXTERNAL: 'open-external',
   START_MOCK_SERVER: 'start-mock-server',
   STOP_MOCK_SERVER: 'stop-mock-server',
   GET_MOCK_SERVER_STATUS: 'get-mock-server-status',
@@ -150,6 +154,7 @@ interface MockServerConfig {
     };
     isMocked: boolean;
   }>;
+  forwardTo?: string;  // optional URL to forward unmocked requests to
 }
 
 interface CapturedRequest {
@@ -449,9 +454,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkForUpdates: () => ipcRenderer.invoke(IPC_CHANNELS.CHECK_FOR_UPDATES),
   downloadUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.DOWNLOAD_UPDATE),
   installUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.INSTALL_UPDATE),
+  quitAndInstallLater: () => ipcRenderer.invoke(IPC_CHANNELS.QUIT_AND_INSTALL_LATER),
+
+  // Shell functions
+  openExternal: (url: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.OPEN_EXTERNAL, url),
 
   // Mock Server functions
-  startMockServer: (config: MockServerConfig): Promise<boolean> =>
+  startMockServer: (config: MockServerConfig): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke(IPC_CHANNELS.START_MOCK_SERVER, config),
   stopMockServer: (id: string): Promise<boolean> =>
     ipcRenderer.invoke(IPC_CHANNELS.STOP_MOCK_SERVER, id),
@@ -654,25 +664,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(GITHUB_CHANNELS.PULL_LATEST, { owner, repo, branch }),
 
   // Event listeners
-  onUpdateAvailable: (callback: (data: { version: string; releaseNotes: string; releaseDate: string }) => void) => {
-    const handler = (_event: IpcRendererEvent, data: { version: string; releaseNotes: string; releaseDate: string }) => callback(data);
+  onUpdateAvailable: (callback: (data: { version: string; releaseNotes: string | null; releaseDate: string; releaseName?: string }) => void) => {
+    const handler = (_event: IpcRendererEvent, data: { version: string; releaseNotes: string | null; releaseDate: string; releaseName?: string }) => callback(data);
     ipcRenderer.on(IPC_CHANNELS.UPDATE_AVAILABLE, handler);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_AVAILABLE, handler);
   },
-  onUpdateNotAvailable: (callback: () => void) => {
-    const handler = () => callback();
+  onUpdateNotAvailable: (callback: (data: { currentVersion: string }) => void) => {
+    const handler = (_event: IpcRendererEvent, data: { currentVersion: string }) => callback(data);
     ipcRenderer.on(IPC_CHANNELS.UPDATE_NOT_AVAILABLE, handler);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_NOT_AVAILABLE, handler);
   },
-  onUpdateDownloaded: (callback: (data: { version: string }) => void) => {
-    const handler = (_event: IpcRendererEvent, data: { version: string }) => callback(data);
+  onUpdateDownloaded: (callback: (data: { version: string; releaseNotes: string | null; releaseDate: string; releaseName?: string }) => void) => {
+    const handler = (_event: IpcRendererEvent, data: { version: string; releaseNotes: string | null; releaseDate: string; releaseName?: string }) => callback(data);
     ipcRenderer.on(IPC_CHANNELS.UPDATE_DOWNLOADED, handler);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_DOWNLOADED, handler);
   },
-  onDownloadProgress: (callback: (data: { percent: number; transferred: number; total: number }) => void) => {
-    const handler = (_event: IpcRendererEvent, data: { percent: number; transferred: number; total: number }) => callback(data);
-    ipcRenderer.on('update-download-progress', handler);
-    return () => ipcRenderer.removeListener('update-download-progress', handler);
+  onUpdateError: (callback: (data: { message: string }) => void) => {
+    const handler = (_event: IpcRendererEvent, data: { message: string }) => callback(data);
+    ipcRenderer.on(IPC_CHANNELS.UPDATE_ERROR, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_ERROR, handler);
+  },
+  onDownloadProgress: (callback: (data: { percent: number; transferred: number; total: number; bytesPerSecond: number }) => void) => {
+    const handler = (_event: IpcRendererEvent, data: { percent: number; transferred: number; total: number; bytesPerSecond: number }) => callback(data);
+    ipcRenderer.on(IPC_CHANNELS.UPDATE_DOWNLOAD_PROGRESS, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_DOWNLOAD_PROGRESS, handler);
   },
 
   // Menu event listeners
@@ -749,11 +764,14 @@ declare global {
         envVars: Record<string, string>;
         runtimeVars: Record<string, string>;
       }>;
-      checkForUpdates: () => Promise<unknown>;
-      downloadUpdate: () => Promise<void>;
+      checkForUpdates: () => Promise<{ updateAvailable: boolean; version?: string; releaseNotes?: string | null; releaseDate?: string }>;
+      downloadUpdate: () => Promise<{ success: boolean }>;
       installUpdate: () => void;
+      quitAndInstallLater: () => Promise<{ success: boolean; updatePending: boolean }>;
+      // Shell
+      openExternal: (url: string) => Promise<void>;
       // Mock Server
-      startMockServer: (config: MockServerConfig) => Promise<boolean>;
+      startMockServer: (config: MockServerConfig) => Promise<{ success: boolean; error?: string }>;
       stopMockServer: (id: string) => Promise<boolean>;
       getMockServerStatus: (id: string) => Promise<boolean>;
       updateMockRoutes: (id: string, routes: MockServerConfig['routes']) => Promise<void>;
@@ -833,10 +851,11 @@ declare global {
       githubPushChanges: (owner: string, repo: string, branch: string, message: string, changes: GitHubFileChange[]) => Promise<GitHubApiResponse<{ sha: string }>>;
       githubPullLatest: (owner: string, repo: string, branch: string) => Promise<GitHubApiResponse<{ sha: string; commit: GitHubCommit; tree: Array<{ path: string; type: string; sha: string }> }>>;
       // Updates
-      onUpdateAvailable: (callback: (data: { version: string; releaseNotes: string; releaseDate: string }) => void) => () => void;
-      onUpdateNotAvailable: (callback: () => void) => () => void;
-      onUpdateDownloaded: (callback: (data: { version: string }) => void) => () => void;
-      onDownloadProgress: (callback: (data: { percent: number; transferred: number; total: number }) => void) => () => void;
+      onUpdateAvailable: (callback: (data: { version: string; releaseNotes: string | null; releaseDate: string; releaseName?: string }) => void) => () => void;
+      onUpdateNotAvailable: (callback: (data: { currentVersion: string }) => void) => () => void;
+      onUpdateDownloaded: (callback: (data: { version: string; releaseNotes: string | null; releaseDate: string; releaseName?: string }) => void) => () => void;
+      onUpdateError: (callback: (data: { message: string }) => void) => () => void;
+      onDownloadProgress: (callback: (data: { percent: number; transferred: number; total: number; bytesPerSecond: number }) => void) => () => void;
       onOpenSettings: (callback: () => void) => () => void;
       onNewRequest: (callback: () => void) => () => void;
       onNewCollection: (callback: () => void) => () => void;

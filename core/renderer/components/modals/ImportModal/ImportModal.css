@@ -201,7 +201,7 @@
 }
 
 .import-modal__dropzone-clear {
-  position: absolute;
+
   top: 50%;
   right: -8px;
   transform: translateY(-50%);

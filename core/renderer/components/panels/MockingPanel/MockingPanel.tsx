@@ -1,12 +1,14 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import QRCode from 'qrcode';
+import AceEditor from 'react-ace';
 import { Button, Input, Tooltip, Switch, EditableTable, CodeEditor } from '@/components/ui';
-import { useMocking, useTheme, useToast } from '@/contexts';
+import { useMocking, useTheme, useToast, useApp } from '@/contexts';
 import {
   PlayIcon, StopIcon, CopyIcon, TrashIcon, CheckIcon, ServerIcon,
   FormatIcon, SearchIcon, SortAscIcon, SortDescIcon, CloseIcon, ZapIcon,
   CloudIcon, GlobeIcon, WifiIcon, WifiOffIcon, RequestIcon, ResponseIcon, HelpIcon,
-  QrCodeIcon, SmartphoneIcon
+  QrCodeIcon, SmartphoneIcon, SettingsIcon, MaximizeIcon, MinimizeIcon,
+  ChevronUpIcon, ChevronDownIcon
 } from '@/components/ui/icons';
 import { CapturedRequest, MockedResponse, KeyValuePair, MockMode } from '@/types';
 import { METHOD_COLORS } from '../../../../shared/constants';
@@ -20,13 +22,81 @@ const getMethodColor = (method: string): string => {
   return METHOD_COLORS[method] || '#9ca3af';
 };
 
+// Prevent event propagation - stable reference for modal click handlers
+const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
+
+// Format bytes to human readable string
+const formatBytes = (bytes: number, decimals = 1): string => {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(decimals)) + ' ' + sizes[i];
+};
+
+// Calculate byte size of a string
+const getByteSize = (str: string): number => {
+  return new Blob([str]).size;
+};
+
+// Generate curl command from a captured request
+const generateCurlCommand = (request: CapturedRequest, endpoint: string): string => {
+  const parts: string[] = ['curl'];
+  
+  // Add method (skip for GET as it's default)
+  if (request.method !== 'GET') {
+    parts.push(`-X ${request.method}`);
+  }
+  
+  // Build the full URL using the configured mock endpoint
+  const origin = endpoint.replace(/\/$/, '');
+  
+  let fullUrl = origin + request.url;
+  if (!fullUrl.includes('?') && Object.keys(request.queryParams || {}).length > 0) {
+    const queryString = new URLSearchParams(request.queryParams).toString();
+    fullUrl = `${fullUrl}?${queryString}`;
+  }
+  
+  // Add headers (skip some internal/automatic headers)
+  const skipHeaders = ['host', 'content-length', 'connection', 'accept-encoding'];
+  for (const header of request.headers || []) {
+    if (!skipHeaders.includes(header.key.toLowerCase())) {
+      // Escape single quotes in header values
+      const escapedValue = header.value.replace(/'/g, "'\\''");
+      parts.push(`-H '${header.key}: ${escapedValue}'`);
+    }
+  }
+  
+  // Add body for methods that typically have bodies
+  if (request.body && ['POST', 'PUT', 'PATCH'].includes(request.method)) {
+    // Try to detect if it's JSON
+    const contentTypeHeader = request.headers?.find(h => h.key.toLowerCase() === 'content-type');
+    const isJson = contentTypeHeader?.value.includes('application/json');
+    
+    if (isJson) {
+      // For JSON, use -d with escaped body
+      const escapedBody = request.body.replace(/'/g, "'\\''");
+      parts.push(`-d '${escapedBody}'`);
+    } else {
+      // For other content types, use --data-raw
+      const escapedBody = request.body.replace(/'/g, "'\\''");
+      parts.push(`--data-raw '${escapedBody}'`);
+    }
+  }
+  
+  // Add the URL (quoted in case of special characters)
+  parts.push(`'${fullUrl}'`);
+  
+  return parts.join(' \\\n  ');
+};
+
 // Mock Mode Help Modal
-const MockModeHelpModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+const MockModeHelpModal: React.FC<{ isOpen: boolean; onClose: () => void }> = React.memo(({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
     <div className="mocking-panel__modal-overlay" onClick={onClose}>
-      <div className="mocking-panel__modal mocking-panel__modal--wide" onClick={e => e.stopPropagation()}>
+      <div className="mocking-panel__modal mocking-panel__modal--wide" onClick={stopPropagation}>
         <div className="mocking-panel__modal-header">
           <h2>Local vs Cloud Mocking</h2>
           <button className="mocking-panel__modal-close" onClick={onClose}>&times;</button>
@@ -61,6 +131,7 @@ const MockModeHelpModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
                   <li><strong>Local network</strong> — Any device on same WiFi/LAN</li>
                   <li><strong>Fast</strong> — Zero latency, direct connection</li>
                   <li><strong>Custom port</strong> — Configure your own port number</li>
+                  <li><strong>Forward to API</strong> — Optionally proxy to real backend</li>
                 </ul>
                 <div className="mocking-panel__mode-use-case">
                   <strong>Best for:</strong> Local development, testing on same network
@@ -142,7 +213,7 @@ const MockModeHelpModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
                 </tr>
                 <tr>
                   <td>Forward to real API</td>
-                  <td>❌ No</td>
+                  <td>✅ Yes</td>
                   <td>✅ Yes</td>
                 </tr>
                 <tr>
@@ -157,7 +228,7 @@ const MockModeHelpModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
       </div>
     </div>
   );
-};
+});
 
 // Colored URL component
 const ColoredUrl: React.FC<{ url: string; method: string }> = ({ url, method }) => {
@@ -169,7 +240,7 @@ const ColoredUrl: React.FC<{ url: string; method: string }> = ({ url, method }) 
     const search = urlObj.search;
     
     return (
-      <span className="mocking-panel__colored-url">
+      <span title={url} className="mocking-panel__colored-url">
         <span className="method" style={{ color: getMethodColor(method) }}>{method}</span>
         <span className="protocol">{protocol}://</span>
         <span className="host">{host}</span>
@@ -180,7 +251,7 @@ const ColoredUrl: React.FC<{ url: string; method: string }> = ({ url, method }) 
   } catch {
     // Fallback for invalid URLs
     return (
-      <span className="mocking-panel__colored-url">
+      <span title={url} className="mocking-panel__colored-url">
         <span className="method" style={{ color: getMethodColor(method) }}>{method}</span>
         <span className="path">{url}</span>
       </span>
@@ -191,12 +262,12 @@ const ColoredUrl: React.FC<{ url: string; method: string }> = ({ url, method }) 
 // HelpCircleIcon is same as HelpIcon - use imported HelpIcon
 
 // Flow explanation modal component
-const ProxyFlowModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+const ProxyFlowModal: React.FC<{ isOpen: boolean; onClose: () => void }> = React.memo(({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
     <div className="mocking-panel__modal-overlay" onClick={onClose}>
-      <div className="mocking-panel__modal" onClick={e => e.stopPropagation()}>
+      <div className="mocking-panel__modal" onClick={stopPropagation}>
         <div className="mocking-panel__modal-header">
           <h2>How Cloud Proxy Forwarding Works</h2>
           <button className="mocking-panel__modal-close" onClick={onClose}>
@@ -205,7 +276,7 @@ const ProxyFlowModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ is
         </div>
         <div className="mocking-panel__modal-content">
           {/* Infographic */}
-          <div className="mocking-panel__flow-diagram">
+          <div style={{display: 'block'}} className="mocking-panel__flow-diagram">
             <div className="mocking-panel__flow-row">
               <div className="mocking-panel__flow-box mocking-panel__flow-box--client">
                 <span className="mocking-panel__flow-icon">🌐</span>
@@ -286,14 +357,14 @@ const ProxyFlowModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ is
       </div>
     </div>
   );
-};
+});
 
 // QR Code Modal for mobile device access
 const QRCodeModal: React.FC<{ 
   isOpen: boolean; 
   onClose: () => void; 
   url: string;
-}> = ({ isOpen, onClose, url }) => {
+}> = React.memo(({ isOpen, onClose, url }) => {
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [error, setError] = useState<string>('');
 
@@ -321,7 +392,7 @@ const QRCodeModal: React.FC<{
 
   return (
     <div className="mocking-panel__modal-overlay" onClick={onClose}>
-      <div className="mocking-panel__modal mocking-panel__modal--qr" onClick={e => e.stopPropagation()}>
+      <div className="mocking-panel__modal mocking-panel__modal--qr" onClick={stopPropagation}>
         <div className="mocking-panel__modal-header">
           <h2><SmartphoneIcon /> Connect Mobile Device</h2>
           <button className="mocking-panel__modal-close" onClick={onClose}>
@@ -354,16 +425,20 @@ const QRCodeModal: React.FC<{
       </div>
     </div>
   );
-};
+});
 
 type SortField = 'method' | 'path' | 'status' | 'timestamp';
 type SortDirection = 'asc' | 'desc';
 type RequestTab = 'body' | 'headers' | 'query' | 'details';
 type ResponseTab = 'body' | 'headers';
 
+// Detect macOS for platform-specific UI
+const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+
 export const MockingPanel: React.FC = () => {
   const { resolvedTheme } = useTheme();
   const { success, error: showError } = useToast();
+  const { settings } = useApp();
   const {
     mockApis,
     activeMockApiId,
@@ -403,6 +478,21 @@ export const MockingPanel: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortField, setSortField] = useState<SortField>('timestamp');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [showQueryParams, setShowQueryParams] = useState(false);
+
+  // Editor search state
+  const [editorSearchQuery, setEditorSearchQuery] = useState('');
+  const [editorSearchResult, setEditorSearchResult] = useState<string | null>(null);
+  const [searchMatchIndex, setSearchMatchIndex] = useState(0);
+  const [searchMatchCount, setSearchMatchCount] = useState(0);
+  const editorRef = useRef<AceEditor>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  
+  // Fullscreen mode for details panel
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  
+  // Auto-save animation state
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
 
   // Cloud proxy state
   const [namespaceAvailable, setNamespaceAvailable] = useState<boolean | null>(null);
@@ -474,6 +564,32 @@ export const MockingPanel: React.FC = () => {
     [capturedRequests, selectedRequestId]
   );
 
+  // Calculate response sizes for the selected request
+  const responseSizes = useMemo(() => {
+    if (!selectedRequest?.response) return null;
+    
+    const bodyStr = selectedRequest.response.body || '';
+    const headersStr = selectedRequest.response.headers?.map(h => `${h.key}: ${h.value}`).join('\n') || '';
+    
+    const bodySize = getByteSize(bodyStr);
+    const headerSize = getByteSize(headersStr);
+    const totalSize = bodySize + headerSize;
+    
+    // Check if there's a content-length header for compressed size
+    const contentLengthHeader = selectedRequest.response.headers?.find(
+      h => h.key.toLowerCase() === 'content-length'
+    );
+    const compressedSize = contentLengthHeader ? parseInt(contentLengthHeader.value, 10) : null;
+    
+    return {
+      bodySize,
+      headerSize,
+      totalSize,
+      compressedSize,
+      isCompressed: compressedSize !== null && compressedSize < bodySize,
+    };
+  }, [selectedRequest]);
+
   // Handle column sort
   const handleSort = useCallback((field: SortField) => {
     if (sortField === field) {
@@ -494,6 +610,17 @@ export const MockingPanel: React.FC = () => {
     }
   };
 
+  // Helper to convert simple headers to KeyValuePair format with enabled=true
+  const toKeyValuePairs = (headers: Array<{ key: string; value: string }> | KeyValuePair[]): KeyValuePair[] => {
+    return headers.map(h => ({
+      id: 'id' in h ? h.id : crypto.randomUUID(),
+      key: h.key,
+      value: h.value,
+      description: 'description' in h ? h.description : '',
+      enabled: 'enabled' in h ? h.enabled : true,
+    }));
+  };
+
   // Update edited response when selected request changes
   useEffect(() => {
     if (!selectedRequest) return;
@@ -508,7 +635,7 @@ export const MockingPanel: React.FC = () => {
         const response = {
           status: route.mockedResponse.status,
           statusText: route.mockedResponse.statusText,
-          headers: route.mockedResponse.headers || [],
+          headers: toKeyValuePairs(route.mockedResponse.headers || []),
           body: formattedBody,
         };
         setEditedResponse(response);
@@ -523,7 +650,7 @@ export const MockingPanel: React.FC = () => {
       const response = {
         status: selectedRequest.response.status,
         statusText: selectedRequest.response.statusText,
-        headers: selectedRequest.response.headers || [],
+        headers: toKeyValuePairs(selectedRequest.response.headers || []),
         body: formattedBody,
       };
       setEditedResponse(response);
@@ -573,7 +700,10 @@ export const MockingPanel: React.FC = () => {
           success('Connected', `Connected to ${activeMockApi.cloudNamespace}.echolon.app`);
         }
       } else {
-        await startMockServer(activeMockApi.id);
+        const result = await startMockServer(activeMockApi.id);
+        if (!result.success) {
+          showError('Server failed to start', result.error || 'Failed to start mock server');
+        }
       }
     }
   };
@@ -634,9 +764,14 @@ export const MockingPanel: React.FC = () => {
     }
   };
 
-  const handleForwardToChange = (forwardTo: string) => {
+  const handleCloudForwardToChange = (forwardTo: string) => {
     if (!activeMockApi) return;
     updateMockApi(activeMockApi.id, { cloudForwardTo: forwardTo || undefined });
+  };
+
+  const handleLocalForwardToChange = (forwardTo: string) => {
+    if (!activeMockApi) return;
+    updateMockApi(activeMockApi.id, { forwardTo: forwardTo || undefined });
   };
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -663,7 +798,7 @@ export const MockingPanel: React.FC = () => {
       const response = {
         status: request.response.status,
         statusText: request.response.statusText,
-        headers: request.response.headers || [],
+        headers: toKeyValuePairs(request.response.headers || []),
         body: formattedBody,
       };
       setEditedResponse(response);
@@ -742,19 +877,31 @@ export const MockingPanel: React.FC = () => {
       if (e.key === 'Escape' && selectedRequestId) {
         selectRequest(null);
       }
-      
-      // Delete with backspace or delete key
-      if ((e.key === 'Backspace' || e.key === 'Delete') && selectedRequestId) {
-        // Only if not in an input field
-        handleDeleteRequest(selectedRequestId);
-      }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [filteredRequests, selectedRequestId, activeMockApiId, selectRequest]);
 
-  const handleSaveMock = () => {
+  // CMD+F to focus search input when in editor
+  useEffect(() => {
+    const handleCmdF = (e: KeyboardEvent) => {
+      // Check for CMD+F (Mac) or Ctrl+F (Windows/Linux)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        // Only intercept if we're in the response body tab
+        if (responseTab === 'body' && searchInputRef.current) {
+          e.preventDefault();
+          searchInputRef.current.focus();
+          searchInputRef.current.select();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleCmdF);
+    return () => document.removeEventListener('keydown', handleCmdF);
+  }, [responseTab]);
+
+  const handleSaveMock = useCallback(() => {
     if (!selectedRequest || !editedResponse.body) return;
 
     const response: MockedResponse = {
@@ -769,7 +916,28 @@ export const MockingPanel: React.FC = () => {
     // Update original response to match saved state, disabling the save button
     setOriginalResponse({ ...editedResponse });
     success('Mock saved successfully');
-  };
+  }, [selectedRequest, editedResponse, mockFromCapturedRequest, success]);
+
+  // Auto-save handler for onBlur events when auto-save is enabled
+  const handleAutoSave = useCallback(() => {
+    if (!settings.mockingAutoSave) return;
+    if (!selectedRequest || !editedResponse.body) return;
+    if (!isResponseModified) return; // Don't save if nothing changed
+    
+    const response: MockedResponse = {
+      status: editedResponse.status || 200,
+      statusText: editedResponse.statusText || 'OK',
+      headers: editedResponse.headers || [],
+      body: editedResponse.body,
+    };
+
+    mockFromCapturedRequest(selectedRequest.id, response);
+    setOriginalResponse({ ...editedResponse });
+    
+    // Show brief saving animation
+    setIsAutoSaving(true);
+    setTimeout(() => setIsAutoSaving(false), 350);
+  }, [settings.mockingAutoSave, selectedRequest, editedResponse, isResponseModified, mockFromCapturedRequest]);
 
   const copyEndpoint = useCallback(() => {
     if (activeMockApi) {
@@ -859,6 +1027,151 @@ export const MockingPanel: React.FC = () => {
       // Not valid JSON, ignore
     }
   };
+
+  // Handle editor search - supports text search and JSON path ($.path.to.value)
+  const handleEditorSearch = useCallback((searchQuery: string, bodyContent: string) => {
+    const editor = editorRef.current?.editor;
+    
+    if (!searchQuery || !bodyContent) {
+      setEditorSearchResult(null);
+      setSearchMatchCount(0);
+      setSearchMatchIndex(0);
+      // Clear any existing highlights
+      if (editor) {
+        editor.findAll('', { regExp: false });
+      }
+      return;
+    }
+
+    // Check if it's a JSON path query (starts with $ or .)
+    if (searchQuery.startsWith('$') || searchQuery.startsWith('.')) {
+      // Clear text search highlights for JSON path queries
+      setSearchMatchCount(0);
+      setSearchMatchIndex(0);
+      if (editor) {
+        editor.findAll('', { regExp: false });
+      }
+      
+      try {
+        const parsed = JSON.parse(bodyContent);
+        const path = searchQuery.startsWith('$') 
+          ? searchQuery.slice(1) // Remove leading $
+          : searchQuery;
+        
+        // Parse JSON path like .data.items[0].name or $.data.items[0].name
+        const pathParts = path.split(/\.|\[|\]/).filter(p => p !== '');
+        let current: any = parsed;
+        
+        for (const part of pathParts) {
+          if (current === undefined || current === null) {
+            setEditorSearchResult('Path not found');
+            return;
+          }
+          // Handle array index
+          const index = parseInt(part, 10);
+          if (!isNaN(index)) {
+            current = current[index];
+          } else {
+            current = current[part];
+          }
+        }
+        
+        if (current === undefined) {
+          setEditorSearchResult('Path not found');
+        } else if (typeof current === 'object') {
+          setEditorSearchResult(JSON.stringify(current, null, 2));
+        } else {
+          // For primitive values, try to find and highlight them in the editor
+          const valueStr = String(current);
+          setEditorSearchResult(valueStr);
+          if (editor && valueStr) {
+            const count = editor.findAll(valueStr, {
+              caseSensitive: true,
+              wholeWord: false,
+              regExp: false,
+            });
+            setSearchMatchCount(count);
+            setSearchMatchIndex(count > 0 ? 1 : 0);
+          }
+        }
+      } catch (e) {
+        setEditorSearchResult('Invalid JSON or path');
+      }
+    } else {
+      // Text search - find and highlight all occurrences
+      if (editor) {
+        const matchCount = editor.findAll(searchQuery, {
+          caseSensitive: false,
+          wholeWord: false,
+          regExp: false,
+        });
+        
+        setSearchMatchCount(matchCount);
+        setSearchMatchIndex(matchCount > 0 ? 1 : 0);
+        
+        if (matchCount > 0) {
+          setEditorSearchResult(`${matchCount} match${matchCount === 1 ? '' : 'es'}`);
+        } else {
+          setEditorSearchResult('No matches');
+        }
+      } else {
+        // Fallback if editor not available
+        const regex = new RegExp(searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+        const matches = bodyContent.match(regex);
+        const count = matches?.length || 0;
+        setSearchMatchCount(count);
+        setSearchMatchIndex(count > 0 ? 1 : 0);
+        if (matches) {
+          setEditorSearchResult(`${matches.length} match${matches.length === 1 ? '' : 'es'}`);
+        } else {
+          setEditorSearchResult('No matches');
+        }
+      }
+    }
+  }, []);
+
+  // Run search only when query changes, not when body changes
+  useEffect(() => {
+    if (!editorSearchQuery) {
+      setEditorSearchResult(null);
+      setSearchMatchCount(0);
+      setSearchMatchIndex(0);
+      return;
+    }
+    const timer = setTimeout(() => {
+      handleEditorSearch(editorSearchQuery, editedResponse.body || '');
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [editorSearchQuery, handleEditorSearch]);
+  
+  // Clear search highlights when clearing search
+  const handleClearSearch = useCallback(() => {
+    setEditorSearchQuery('');
+    setEditorSearchResult(null);
+    setSearchMatchCount(0);
+    setSearchMatchIndex(0);
+    const editor = editorRef.current?.editor;
+    if (editor) {
+      editor.findAll('', { regExp: false });
+    }
+  }, []);
+  
+  // Navigate to next/previous search match
+  const handleSearchNext = useCallback(() => {
+    const editor = editorRef.current?.editor;
+    if (editor && searchMatchCount > 0) {
+      editor.findNext();
+      setSearchMatchIndex(prev => prev >= searchMatchCount ? 1 : prev + 1);
+    }
+  }, [searchMatchCount]);
+  
+  const handleSearchPrev = useCallback(() => {
+    const editor = editorRef.current?.editor;
+    if (editor && searchMatchCount > 0) {
+      editor.findPrevious();
+      setSearchMatchIndex(prev => prev <= 1 ? searchMatchCount : prev - 1);
+    }
+  }, [searchMatchCount]);
 
   const handleHeadersChange = (headers: KeyValuePair[]) => {
     setEditedResponse(prev => ({ ...prev, headers }));
@@ -1031,6 +1344,70 @@ export const MockingPanel: React.FC = () => {
         </div>
       </div>
 
+      {/* Local Mock Server Settings */}
+      {!isCloudMode && (
+        <div className="mocking-panel__local-settings">
+          <div className="mocking-panel__cloud-row">
+            <div className="mocking-panel__cloud-field">
+              <label>
+                Endpoint
+                {isMac && (
+                  <Tooltip content="Change hostname in macOS Sharing settings">
+                    <a 
+                      href="#"
+                      className="mocking-panel__settings-link"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        window.electronAPI?.openExternal('x-apple.systempreferences:com.apple.preferences.sharing');
+                      }}
+                    >
+                      <SettingsIcon />
+                    </a>
+                  </Tooltip>
+                )}
+              </label>
+              <div className="mocking-panel__namespace-input">
+                <Input
+                  value={localHostname}
+                  size="sm"
+                  disabled
+                  className="mocking-panel__endpoint-hostname"
+                />
+                <span className="mocking-panel__namespace-suffix">:{activeMockApi.port}</span>
+                <Tooltip content="Show QR code for mobile">
+                  <button 
+                    className="mocking-panel__qr-button"
+                    onClick={() => setShowQRCode(true)}
+                  >
+                    <QrCodeIcon />
+                  </button>
+                </Tooltip>
+              </div>
+            </div>
+            <div className="mocking-panel__cloud-field mocking-panel__cloud-field--wide">
+              <label className="mocking-panel__label-with-help">
+                Forward to (optional)
+                <button 
+                  className="mocking-panel__help-button"
+                  onClick={() => setShowProxyFlowModal(true)}
+                  type="button"
+                  title="Learn how forwarding works"
+                >
+                  <HelpIcon />
+                </button>
+              </label>
+              <Input
+                value={activeMockApi.forwardTo || ''}
+                onChange={(e) => handleLocalForwardToChange(e.target.value)}
+                placeholder="https://api.example.com"
+                size="sm"
+                disabled={activeMockApi.isRunning}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Cloud Proxy Settings */}
       {isCloudMode && (
         <div className="mocking-panel__cloud-settings">
@@ -1058,11 +1435,19 @@ export const MockingPanel: React.FC = () => {
                     <span className="mocking-panel__unavailable">In use</span>
                   )}
                 </span>
+                <Tooltip content="Show QR code for mobile">
+                  <button 
+                    className="mocking-panel__qr-button"
+                    onClick={() => setShowQRCode(true)}
+                  >
+                    <QrCodeIcon />
+                  </button>
+                </Tooltip>
               </div>
             </div>
             <div className="mocking-panel__cloud-field mocking-panel__cloud-field--wide">
               <label className="mocking-panel__label-with-help">
-                Forward requests to (optional)
+                Forward to (optional)
                 <button 
                   className="mocking-panel__help-button"
                   onClick={() => setShowProxyFlowModal(true)}
@@ -1074,7 +1459,7 @@ export const MockingPanel: React.FC = () => {
               </label>
               <Input
                 value={activeMockApi.cloudForwardTo || ''}
-                onChange={(e) => handleForwardToChange(e.target.value)}
+                onChange={(e) => handleCloudForwardToChange(e.target.value)}
                 placeholder="https://api.example.com"
                 size="sm"
                 disabled={activeMockApi.isRunning}
@@ -1105,6 +1490,9 @@ export const MockingPanel: React.FC = () => {
         {!isCloudMode && activeMockApi.isRunning && (
           <span className="mocking-panel__status-hint">
             Send requests to <code onClick={copyEndpoint}>{getMockEndpoint()}</code>
+            {activeMockApi.forwardTo && (
+              <>, unmocked routes forward to <code>{activeMockApi.forwardTo}</code></>
+            )}
             <Tooltip content="Show QR code for mobile">
               <button 
                 className="mocking-panel__qr-button"
@@ -1134,7 +1522,7 @@ export const MockingPanel: React.FC = () => {
       </div>
 
       {/* Quick Actions */}
-      {!isCloudMode && activeMockApi.isRunning && (
+      {!isCloudMode && activeMockApi.isRunning && (settings.mockingShowQuickTest ?? true) && (
         <div className="mocking-panel__quick-actions">
           <span className="mocking-panel__quick-actions-label">
             <ZapIcon /> Quick Test:
@@ -1213,7 +1601,7 @@ export const MockingPanel: React.FC = () => {
                   {searchQuery 
                     ? 'Try adjusting your search query'
                     : activeMockApi.isRunning 
-                      ? `Send requests to http://localhost:${activeMockApi.port} to see them here`
+                      ? `Send requests to http://${localHostname}:${activeMockApi.port} to see them here`
                       : 'Start the server to capture requests'}
                 </p>
               </div>
@@ -1221,6 +1609,7 @@ export const MockingPanel: React.FC = () => {
               <table className="mocking-panel__request-table">
                 <thead>
                   <tr>
+                    <th className="num-header">#</th>
                     <th 
                       className={`sortable ${sortField === 'method' ? `sorted ${sortDirection}` : ''}`}
                       onClick={() => handleSort('method')}
@@ -1234,7 +1623,20 @@ export const MockingPanel: React.FC = () => {
                       className={`sortable ${sortField === 'path' ? `sorted ${sortDirection}` : ''}`}
                       onClick={() => handleSort('path')}
                     >
-                      Route
+                      <span className="route-header">
+                        Route
+                        <Tooltip content={showQueryParams ? "Hide query params" : "Show query params"}>
+                          <button 
+                            className={`route-toggle ${showQueryParams ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowQueryParams(!showQueryParams);
+                            }}
+                          >
+                            ?
+                          </button>
+                        </Tooltip>
+                      </span>
                       <span className="sort-icon">
                         {sortField === 'path' ? (sortDirection === 'asc' ? <SortAscIcon /> : <SortDescIcon />) : null}
                       </span>
@@ -1261,19 +1663,25 @@ export const MockingPanel: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody ref={tableBodyRef}>
-                  {filteredRequests.map(request => (
+                  {filteredRequests.map((request, index) => (
                     <tr
                       key={request.id}
                       className={`${request.isMocked ? 'mocked' : ''} ${selectedRequestId === request.id ? 'selected' : ''}`}
                       onClick={() => handleRequestClick(request)}
                       onContextMenu={(e) => handleContextMenu(e, request.id)}
                     >
+                      <td className="num-cell">{filteredRequests.length - index}</td>
                       <td className="method-cell">
                         <span style={{ color: getMethodColor(request.method) }}>
                           {request.method}
                         </span>
                       </td>
-                      <td className="path-cell">{request.path}</td>
+                      <td className="path-cell">
+                        {showQueryParams && Object.keys(request.queryParams || {}).length > 0
+                          ? `${request.path}?${new URLSearchParams(request.queryParams).toString()}`
+                          : request.path
+                        }
+                      </td>
                       <td className="status-cell">
                         <span className={`status-badge ${
                           request.response?.status ? (
@@ -1306,15 +1714,17 @@ export const MockingPanel: React.FC = () => {
         {/* Bottom Details Panel */}
         {selectedRequestId && selectedRequest && (
           <>
-            {/* Resize Handle */}
-            <div 
-              className="mocking-panel__panel-resize-handle"
-              onMouseDown={handlePanelResizeStart}
-            />
+            {/* Resize Handle - hidden in fullscreen */}
+            {!isFullscreen && (
+              <div 
+                className="mocking-panel__panel-resize-handle"
+                onMouseDown={handlePanelResizeStart}
+              />
+            )}
             
             <div 
-              className={`mocking-panel__details-panel ${isResizing ? 'resizing' : ''}`}
-              style={{ height: detailsPanelHeight }}
+              className={`mocking-panel__details-panel ${isResizing ? 'resizing' : ''} ${isFullscreen ? 'fullscreen' : ''}`}
+              style={isFullscreen ? undefined : { height: detailsPanelHeight }}
             >
               {/* Details Header */}
               <div className="mocking-panel__details-header">
@@ -1323,30 +1733,20 @@ export const MockingPanel: React.FC = () => {
                 </div>
                 
                 <div className="mocking-panel__details-header-actions">
-                  <div className="mocking-panel__mock-toggle">
-                    <span>Enable Mock</span>
-                    <ZapIcon />
-                    <Switch
-                      checked={selectedRequest?.isMocked || false}
-                      onChange={handleToggleMock}
-                      size="sm"
-                    />
-                  </div>
-                  <Button 
-                    variant="primary" 
-                    size="sm" 
-                    onClick={handleSaveMock}
-                    icon={<CheckIcon />}
-                    disabled={!isResponseModified}
-                  >
-                    Save Mock
-                  </Button>
                   <Tooltip content="Delete request">
                     <Button 
                       variant="ghost" 
                       size="sm" 
                       onClick={() => handleDeleteRequest(selectedRequest.id)} 
                       icon={<TrashIcon />} 
+                    />
+                  </Tooltip>
+                  <Tooltip content={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => setIsFullscreen(!isFullscreen)} 
+                      icon={isFullscreen ? <MinimizeIcon /> : <MaximizeIcon />} 
                     />
                   </Tooltip>
                   <Tooltip content="Close">
@@ -1516,6 +1916,31 @@ export const MockingPanel: React.FC = () => {
                             </tr>
                           </tbody>
                         </table>
+                        
+                        {/* cURL Command */}
+                        <div className="mocking-panel__curl-section">
+                          <div className="mocking-panel__curl-header">
+                            <span className="mocking-panel__curl-label">cURL</span>
+                            <Tooltip content="Copy to clipboard">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                icon={<CopyIcon />}
+                                onClick={() => {
+                                  const endpoint = `http://${localHostname}:${activeMockApi?.port || 3456}`;
+                                  const curlCmd = generateCurlCommand(selectedRequest, endpoint);
+                                  navigator.clipboard.writeText(curlCmd);
+                                  success('Copied to clipboard');
+                                }}
+                              >
+                                Copy
+                              </Button>
+                            </Tooltip>
+                          </div>
+                          <pre className="mocking-panel__curl-code">
+                            <code>{generateCurlCommand(selectedRequest, `http://${localHostname}:${activeMockApi?.port || 3456}`)}</code>
+                          </pre>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1545,40 +1970,157 @@ export const MockingPanel: React.FC = () => {
                         Headers
                       </button>
                     </div>
+                    <div className="mocking-panel__pane-header-actions">
+                      <div className="mocking-panel__mock-toggle">
+                        <span>Mock</span>
+                        <ZapIcon />
+                        <Switch
+                          checked={selectedRequest?.isMocked || false}
+                          onChange={handleToggleMock}
+                          size="sm"
+                        />
+                      </div>
+                      <Button 
+                        variant="primary" 
+                        size="sm" 
+                        onClick={handleSaveMock}
+                        icon={<CheckIcon />}
+                        disabled={settings.mockingAutoSave || !isResponseModified}
+                        className={isAutoSaving ? 'mocking-panel__autosave-flash' : ''}
+                      >
+                        {settings.mockingAutoSave ? (isAutoSaving ? 'Saving...' : 'AutoSave') : 'Save'}
+                      </Button>
+                    </div>
                   </div>
                   
                   <div className="mocking-panel__pane-content">
                     {responseTab === 'body' && (
                       <>
-                        {/* Status Row */}
-                        <div className="mocking-panel__response-meta">
-                          <div className="mocking-panel__field">
+                        {/* Status Row - Inline */}
+                        <div className="mocking-panel__response-meta mocking-panel__response-meta--inline">
+                          <div className="mocking-panel__field-inline">
                             <label>Status</label>
                             <Input
+                              style={{ width: '60px' }}
                               type="number"
                               value={editedResponse.status || 200}
                               onChange={(e) => setEditedResponse(prev => ({ 
                                 ...prev, 
                                 status: parseInt(e.target.value, 10) 
                               }))}
+                              onBlur={handleAutoSave}
                               size="sm"
                             />
                           </div>
-                          <div className="mocking-panel__field">
+                          <div className="mocking-panel__field-inline">
                             <label>Status Text</label>
                             <Input
+                              style={{ width: '120px' }}
                               value={editedResponse.statusText || 'OK'}
                               onChange={(e) => setEditedResponse(prev => ({ 
                                 ...prev, 
                                 statusText: e.target.value 
                               }))}
+                              onBlur={handleAutoSave}
                               size="sm"
                             />
                           </div>
+                          {responseSizes && (
+                            <Tooltip 
+                              content={
+                                <div className="mocking-panel__size-tooltip">
+                                  <div className="mocking-panel__size-tooltip-row">
+                                    <span>Body (uncompressed):</span>
+                                    <span>{formatBytes(responseSizes.bodySize)}</span>
+                                  </div>
+                                  {responseSizes.isCompressed && responseSizes.compressedSize && (
+                                    <div className="mocking-panel__size-tooltip-row">
+                                      <span>Body (compressed):</span>
+                                      <span>{formatBytes(responseSizes.compressedSize)}</span>
+                                    </div>
+                                  )}
+                                  <div className="mocking-panel__size-tooltip-row">
+                                    <span>Headers:</span>
+                                    <span>{formatBytes(responseSizes.headerSize)}</span>
+                                  </div>
+                                  <div className="mocking-panel__size-tooltip-row mocking-panel__size-tooltip-row--total">
+                                    <span>Total:</span>
+                                    <span>{formatBytes(responseSizes.totalSize)}</span>
+                                  </div>
+                                </div>
+                              }
+                            >
+                              <span className="mocking-panel__response-size">
+                                {formatBytes(responseSizes.totalSize)}
+                                {responseSizes.isCompressed && responseSizes.compressedSize && (
+                                  <span className="mocking-panel__response-size-compressed">
+                                    ({formatBytes(responseSizes.compressedSize)} compressed)
+                                  </span>
+                                )}
+                              </span>
+                            </Tooltip>
+                          )}
                         </div>
 
                         <div className="mocking-panel__editor-container">
                           <div className="mocking-panel__editor-toolbar">
+                            <div className="mocking-panel__editor-search">
+                              <SearchIcon />
+                              <input
+                                ref={searchInputRef}
+                                type="text"
+                                placeholder="Search or JSON path ($.data.items[0])"
+                                value={editorSearchQuery}
+                                onChange={(e) => setEditorSearchQuery(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    if (e.shiftKey) {
+                                      handleSearchPrev();
+                                    } else {
+                                      handleSearchNext();
+                                    }
+                                  }
+                                }}
+                                className="mocking-panel__editor-search-input"
+                              />
+                              {searchMatchCount > 0 && (
+                                <span className="mocking-panel__editor-search-result">
+                                  {searchMatchIndex} of {searchMatchCount}
+                                </span>
+                              )}
+                              {editorSearchResult && searchMatchCount === 0 && (
+                                <span className={`mocking-panel__editor-search-result ${editorSearchResult.includes('not found') || editorSearchResult === 'No matches' || editorSearchResult.includes('Invalid') ? 'error' : ''}`}>
+                                  {editorSearchResult.length > 50 ? editorSearchResult.slice(0, 50) + '...' : editorSearchResult}
+                                </span>
+                              )}
+                              {searchMatchCount > 0 && (
+                                <div className="mocking-panel__editor-search-nav">
+                                  <button 
+                                    className="mocking-panel__editor-search-nav-btn"
+                                    onClick={handleSearchPrev}
+                                    title="Previous match (Shift+Enter)"
+                                  >
+                                    <ChevronUpIcon />
+                                  </button>
+                                  <button 
+                                    className="mocking-panel__editor-search-nav-btn"
+                                    onClick={handleSearchNext}
+                                    title="Next match (Enter)"
+                                  >
+                                    <ChevronDownIcon />
+                                  </button>
+                                </div>
+                              )}
+                              {editorSearchQuery && (
+                                <button 
+                                  className="mocking-panel__editor-search-clear"
+                                  onClick={handleClearSearch}
+                                >
+                                  <CloseIcon />
+                                </button>
+                              )}
+                            </div>
                             <Tooltip content="Format JSON">
                               <Button
                                 variant="ghost"
@@ -1586,15 +2128,17 @@ export const MockingPanel: React.FC = () => {
                                 onClick={handlePrettyPrint}
                                 icon={<FormatIcon />}
                               >
-                                Pretty Print
+                                Pretty
                               </Button>
                             </Tooltip>
                           </div>
                           <div className="mocking-panel__editor">
                             <CodeEditor
+                              ref={editorRef}
                               mode="json"
                               value={editedResponse.body || ''}
                               onChange={(value) => setEditedResponse(prev => ({ ...prev, body: value }))}
+                              onBlur={handleAutoSave}
                               width="100%"
                               height="100%"
                             />
@@ -1604,7 +2148,7 @@ export const MockingPanel: React.FC = () => {
                     )}
 
                     {responseTab === 'headers' && (
-                      <div className="mocking-panel__headers-editor">
+                      <div className="mocking-panel__headers-editor" onBlur={handleAutoSave}>
                         <EditableTable
                           data={editedResponse.headers || []}
                           onChange={handleHeadersChange}
@@ -1639,7 +2183,7 @@ export const MockingPanel: React.FC = () => {
         <QRCodeModal
           isOpen={showQRCode}
           onClose={() => setShowQRCode(false)}
-          url={`http://${localHostname}:${activeMockApi.port}`}
+          url={getMockEndpoint()}
         />
       )}
 

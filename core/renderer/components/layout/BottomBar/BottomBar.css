@@ -57,3 +57,57 @@
   align-items: center;
   justify-content: center;
 }
+
+.bottom-bar__status {
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+}
+
+/* Version indicator */
+.bottom-bar__version {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.bottom-bar__version:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.bottom-bar__version--update {
+  color: var(--color-primary);
+}
+
+.bottom-bar__version--update:hover {
+  color: var(--color-primary-hover);
+}
+
+.bottom-bar__version-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--color-primary);
+  animation: pulse-dot 2s infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.2);
+  }
+}

@@ -21,6 +21,7 @@ export interface EchoMetadata {
   createdAt: string; // ISO 8601 date string
   modifiedAt: string; // ISO 8601 date string
   workspaceId: string;
+  collapsed?: boolean; // UI state - whether collection is collapsed in sidebar
 }
 
 /**

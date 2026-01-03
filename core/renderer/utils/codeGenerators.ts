@@ -14,7 +14,65 @@ export function interpolateVariables(
   });
 }
 
-// Helper to build URL with query params
+// Interpolate both environment variables and path parameters
+// Collection variables have priority over global environment variables
+export function interpolateAll(
+  text: string,
+  environment: Environment | null,
+  pathParams?: KeyValuePair[],
+  collection?: Collection | null
+): string {
+  if (!text) return text;
+  
+  let result = text;
+  
+  // Get active collection environment (if any)
+  const activeCollectionEnv = collection?.environments?.find(e => e.isActive);
+  
+  // Interpolate environment variables {{var}}
+  // Priority: collection environment > collection variables > global environment
+  result = result.replace(/\{\{([^}]+)\}\}/g, (match, varName) => {
+    const trimmedName = varName.trim();
+    
+    // 1. Check active collection environment first (highest priority)
+    if (activeCollectionEnv) {
+      const collEnvVar = activeCollectionEnv.variables.find(
+        v => v.key === trimmedName && v.enabled
+      );
+      if (collEnvVar) return collEnvVar.value;
+    }
+    
+    // 2. Check collection-level variables
+    if (collection?.variables) {
+      const collVar = collection.variables.find(
+        v => v.key === trimmedName && v.enabled
+      );
+      if (collVar) return collVar.value;
+    }
+    
+    // 3. Fall back to global environment
+    if (environment) {
+      const globalVar = environment.variables.find(
+        v => v.key === trimmedName && v.enabled
+      );
+      if (globalVar) return globalVar.value;
+    }
+    
+    return match; // Keep original if not found
+  });
+  
+  // Then, interpolate path parameters :param
+  if (pathParams && pathParams.length > 0) {
+    result = result.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (match, paramName) => {
+      const param = pathParams.find(p => p.key === paramName);
+      return param && param.value ? param.value : match;
+    });
+  }
+  
+  return result;
+}
+
+// Helper to build URL with query params - resolves all variables and path params
 function buildUrl(request: Request, interpolate: (text: string) => string): string {
   let url = interpolate(request.url);
   if (!url) {
@@ -36,6 +94,16 @@ function buildUrl(request: Request, interpolate: (text: string) => string): stri
     // Invalid URL, use as-is
   }
   return url;
+}
+
+// Build a fully resolved URL (env vars + path params + query params)
+export function buildResolvedUrl(
+  request: Request,
+  environment: Environment | null,
+  collection?: Collection | null
+): string {
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
+  return buildUrl(request, interpolate);
 }
 
 // Helper to get effective auth (request auth takes precedence over collection auth)
@@ -133,7 +201,7 @@ const escape = {
 
 // ============== CURL ==============
 export function generateCurl(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const parts: string[] = ['curl'];
 
   if (request.method !== 'GET') {
@@ -166,7 +234,7 @@ export function generateCurl(request: Request, environment: Environment | null =
 
 // ============== JavaScript - Fetch ==============
 export function generateJavaScriptFetch(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -211,7 +279,7 @@ export function generateJavaScriptFetch(request: Request, environment: Environme
 
 // ============== JavaScript - jQuery ==============
 export function generateJavaScriptJQuery(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -252,7 +320,7 @@ export function generateJavaScriptJQuery(request: Request, environment: Environm
 
 // ============== JavaScript - XHR ==============
 export function generateJavaScriptXHR(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -290,7 +358,7 @@ export function generateJavaScriptXHR(request: Request, environment: Environment
 
 // ============== Node.js - Axios ==============
 export function generateNodeAxios(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -337,7 +405,7 @@ export function generateNodeAxios(request: Request, environment: Environment | n
 
 // ============== Node.js - Native (http/https) ==============
 export function generateNodeNative(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -384,7 +452,7 @@ export function generateNodeNative(request: Request, environment: Environment | 
 
 // ============== Node.js - Request (deprecated but still used) ==============
 export function generateNodeRequest(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -425,7 +493,7 @@ export function generateNodeRequest(request: Request, environment: Environment |
 
 // ============== Node.js - Unirest ==============
 export function generateNodeUnirest(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -462,7 +530,7 @@ export function generateNodeUnirest(request: Request, environment: Environment |
 
 // ============== Python - Requests ==============
 export function generatePythonRequests(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -522,7 +590,7 @@ export function generatePythonRequests(request: Request, environment: Environmen
 
 // ============== Python - http.client ==============
 export function generatePythonHttpClient(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -583,7 +651,7 @@ export function generatePythonHttpClient(request: Request, environment: Environm
 
 // ============== Go - Native ==============
 export function generateGoNative(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -640,7 +708,7 @@ export function generateGoNative(request: Request, environment: Environment | nu
 
 // ============== Java - OkHttp ==============
 export function generateJavaOkHttp(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -679,7 +747,7 @@ export function generateJavaOkHttp(request: Request, environment: Environment | 
 
 // ============== Java - Unirest ==============
 export function generateJavaUnirest(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -704,7 +772,7 @@ export function generateJavaUnirest(request: Request, environment: Environment |
 
 // ============== C# - HttpClient ==============
 export function generateCSharpHttpClient(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -737,7 +805,7 @@ export function generateCSharpHttpClient(request: Request, environment: Environm
 
 // ============== C# - RestSharp ==============
 export function generateCSharpRestSharp(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -767,7 +835,7 @@ export function generateCSharpRestSharp(request: Request, environment: Environme
 
 // ============== PHP - cURL ==============
 export function generatePHPCurl(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -813,7 +881,7 @@ export function generatePHPCurl(request: Request, environment: Environment | nul
 
 // ============== PHP - Guzzle ==============
 export function generatePHPGuzzle(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -852,7 +920,7 @@ export function generatePHPGuzzle(request: Request, environment: Environment | n
 
 // ============== Ruby - Net::HTTP ==============
 export function generateRubyNetHttp(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -888,7 +956,7 @@ export function generateRubyNetHttp(request: Request, environment: Environment |
 
 // ============== Rust - reqwest ==============
 export function generateRustReqwest(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -925,7 +993,7 @@ export function generateRustReqwest(request: Request, environment: Environment |
 
 // ============== Swift - URLSession ==============
 export function generateSwiftURLSession(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -962,7 +1030,7 @@ export function generateSwiftURLSession(request: Request, environment: Environme
 
 // ============== Kotlin - OkHttp ==============
 export function generateKotlinOkHttp(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -1001,7 +1069,7 @@ export function generateKotlinOkHttp(request: Request, environment: Environment 
 
 // ============== Dart - http ==============
 export function generateDartHttp(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -1048,7 +1116,7 @@ export function generateDartHttp(request: Request, environment: Environment | nu
 
 // ============== Dart - dio ==============
 export function generateDartDio(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -1092,7 +1160,7 @@ export function generateDartDio(request: Request, environment: Environment | nul
 
 // ============== Shell - wget ==============
 export function generateShellWget(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -1116,7 +1184,7 @@ export function generateShellWget(request: Request, environment: Environment | n
 
 // ============== Shell - HTTPie ==============
 export function generateShellHttpie(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -1151,7 +1219,7 @@ export function generateShellHttpie(request: Request, environment: Environment |
 
 // ============== C - libcurl ==============
 export function generateCLibcurl(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -1201,7 +1269,7 @@ export function generateCLibcurl(request: Request, environment: Environment | nu
 
 // ============== R - httr ==============
 export function generateRHttr(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -1234,7 +1302,7 @@ export function generateRHttr(request: Request, environment: Environment | null 
 
 // ============== R - RCurl ==============
 export function generateRRCurl(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -1272,7 +1340,7 @@ export function generateRRCurl(request: Request, environment: Environment | null
 
 // ============== Objective-C - NSURLSession ==============
 export function generateObjectiveCNSURLSession(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -1310,7 +1378,7 @@ export function generateObjectiveCNSURLSession(request: Request, environment: En
 
 // ============== OCaml - Cohttp ==============
 export function generateOCamlCohttp(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -1356,7 +1424,7 @@ export function generateOCamlCohttp(request: Request, environment: Environment |
 
 // ============== PHP - HTTP_Request2 ==============
 export function generatePHPHttpRequest2(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -1395,7 +1463,7 @@ export function generatePHPHttpRequest2(request: Request, environment: Environme
 
 // ============== PHP - pecl_http ==============
 export function generatePHPPeclHttp(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);
@@ -1436,7 +1504,7 @@ export function generatePHPPeclHttp(request: Request, environment: Environment |
 
 // ============== HTTP (raw) ==============
 export function generateHTTPRaw(request: Request, environment: Environment | null = null, collection: Collection | null = null): string {
-  const interpolate = (text: string) => interpolateVariables(text, environment);
+  const interpolate = (text: string) => interpolateAll(text, environment, request.pathParams, collection);
   const url = buildUrl(request, interpolate);
   const headers = buildHeaders(request, interpolate, collection);
   const body = buildBody(request, interpolate);

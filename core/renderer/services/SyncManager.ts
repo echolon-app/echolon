@@ -89,10 +89,18 @@ export class SyncManager {
   }
 
   /**
+   * Log a message to the app console
+   */
+  private log(type: 'info' | 'warn' | 'error' | 'success', message: string, details?: string): void {
+    window.dispatchEvent(new CustomEvent('echolon:log', {
+      detail: { type, message, details }
+    }));
+  }
+
+  /**
    * Check a specific collection for updates
    */
   async checkCollection(collectionId: string): Promise<PendingSpecChanges | null> {
-    console.log('checkCollection for updates', collectionId);
     if (!this.callbacks) {
       console.warn('SyncManager not initialized');
       return null;
@@ -104,6 +112,8 @@ export class SyncManager {
     if (!collection?.specSource?.url || !collection.specSource.rawSpec) {
       return null;
     }
+    
+    this.log('info', `Checking for updates: ${collection.name}`, collection.specSource.url);
 
     // Update state to checking
     this.updateSyncState(collectionId, { status: 'checking' });
@@ -132,6 +142,7 @@ export class SyncManager {
           pendingChanges: undefined,
         });
         
+        this.log('success', `No changes found: ${collection.name}`, 'Spec is up to date');
         this.callbacks.onSyncComplete?.(collectionId);
         return null;
       }
@@ -149,6 +160,7 @@ export class SyncManager {
       // Store pending changes
       this.savePendingChanges();
       
+      this.log('info', `Changes detected: ${collection.name}`, `${pendingChanges.changes.length} change(s) found`);
       this.callbacks.onChangesDetected?.(collectionId, pendingChanges);
       return pendingChanges;
       
@@ -161,6 +173,7 @@ export class SyncManager {
         error: errorMessage,
       });
       
+      this.log('error', `Sync failed: ${collection.name}`, errorMessage);
       this.callbacks.onSyncError?.(collectionId, errorMessage);
       return null;
     }

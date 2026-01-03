@@ -84,6 +84,22 @@
   color: var(--text-secondary);
 }
 
+/* Path parameter rows (amber/orange styling) */
+.editable-table__row--path-param {
+  background-color: rgba(245, 158, 11, 0.08);
+  border-left: 2px solid #f59e0b;
+}
+
+.editable-table__row--path-param:hover {
+  background-color: rgba(245, 158, 11, 0.15);
+}
+
+.editable-table__row--path-param .editable-table__cell--key .input,
+.editable-table__row--path-param .editable-table__key-label {
+  color: #fbbf24;
+  font-weight: 500;
+}
+
 .editable-table__inherited-badge {
   display: inline-flex;
   align-items: center;
@@ -118,6 +134,17 @@
   min-width: 120px;
   position: relative;
   overflow: visible;
+}
+
+.editable-table__key-label {
+  display: flex;
+  align-items: center;
+  height: var(--input-height-sm);
+  padding: 0 var(--spacing-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--color-primary);
+  font-weight: 500;
 }
 
 .editable-table__cell--value {

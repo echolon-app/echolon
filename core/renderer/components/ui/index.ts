@@ -16,5 +16,6 @@ export * from './Toast';
 export * from './DiffViewer';
 export * from './CodeEditor';
 export * from './ColorEmojiPicker';
+export * from './ProgressBar';
 export * from './icons';
 
