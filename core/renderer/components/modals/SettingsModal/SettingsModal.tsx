@@ -787,6 +787,14 @@ export const SettingsModal: React.FC = () => {
                       >
                         Download Update v{update.updateInfo?.version}
                       </Button>
+                    ) : update.status === 'downloading' ? (
+                      <Button 
+                        variant="secondary" 
+                        loading={true}
+                        icon={<DownloadIcon />}
+                      >
+                        Downloading... {update.downloadProgress ? `${Math.round(update.downloadProgress.percent)}%` : ''}
+                      </Button>
                     ) : (
                       <Button 
                         variant="secondary" 
@@ -821,7 +829,7 @@ export const SettingsModal: React.FC = () => {
                     
                     {update.status === 'error' && (
                       <div className="settings-modal__update-status settings-modal__update-status--error">
-                        <span>{update.error || 'Failed to check for updates'}</span>
+                        <span>{update.error || 'Failed to check for updates. Make sure a release exists on GitHub.'}</span>
                       </div>
                     )}
                   </div>

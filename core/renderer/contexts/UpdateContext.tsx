@@ -172,15 +172,47 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   
   // Check for updates
   const checkForUpdates = useCallback(async () => {
-    if (!isElectronApp || !window.electronAPI) return;
+    if (!isElectronApp || !window.electronAPI) {
+      console.log('[UpdateContext] Not in Electron environment');
+      return;
+    }
     
+    console.log('[UpdateContext] Starting update check...');
     setStatus('checking');
     setError(null);
     
+    // Set a timeout to reset status if no response received
+    const timeoutId = setTimeout(() => {
+      setStatus((currentStatus) => {
+        if (currentStatus === 'checking') {
+          console.log('[UpdateContext] Update check timed out');
+          setError('Update check timed out. Please try again.');
+          return 'error';
+        }
+        return currentStatus;
+      });
+    }, 30000); // 30 second timeout
+    
     try {
-      await window.electronAPI.checkForUpdates();
-      // Status will be updated by event listeners
+      const result = await window.electronAPI.checkForUpdates();
+      console.log('[UpdateContext] Check result:', result);
+      
+      // Clear timeout since we got a response
+      clearTimeout(timeoutId);
+      
+      // If no event fired, handle the result directly
+      if (result && !result.updateAvailable) {
+        // Set not-available if the event listener didn't already set it
+        setStatus((currentStatus) => {
+          if (currentStatus === 'checking') {
+            return 'not-available';
+          }
+          return currentStatus;
+        });
+      }
     } catch (err) {
+      clearTimeout(timeoutId);
+      console.error('[UpdateContext] Update check error:', err);
       setStatus('error');
       setError(err instanceof Error ? err.message : 'Failed to check for updates');
     }

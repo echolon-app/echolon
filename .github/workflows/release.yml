@@ -7,98 +7,30 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g., 1.0.2)'
-        required: false
+        description: 'Version tag to release (e.g., v1.0.2)'
+        required: true
         type: string
 
 env:
   NODE_VERSION: '20'
 
 jobs:
-  # First, create a draft release so all platform builds can upload to it
-  create-release:
-    runs-on: ubuntu-latest
-    outputs:
-      release_id: ${{ steps.create_release.outputs.id }}
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Get version from tag or input
-        id: get_version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.version }}" ]; then
-            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Generate changelog
-        id: changelog
-        run: |
-          # Get the previous tag
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          
-          if [ -n "$PREV_TAG" ]; then
-            # Generate changelog from commits since last tag
-            CHANGELOG=$(git log --pretty=format:"- %s" $PREV_TAG..HEAD --no-merges)
-          else
-            # First release - get all commits
-            CHANGELOG=$(git log --pretty=format:"- %s" --no-merges | head -20)
-          fi
-          
-          # Escape for GitHub Actions
-          CHANGELOG="${CHANGELOG//'%'/'%25'}"
-          CHANGELOG="${CHANGELOG//$'\n'/'%0A'}"
-          CHANGELOG="${CHANGELOG//$'\r'/'%0D'}"
-          
-          echo "changelog=$CHANGELOG" >> $GITHUB_OUTPUT
-
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref_name }}
-          release_name: Echolon v${{ steps.get_version.outputs.version }}
-          body: |
-            ## What's New
-            
-            ${{ steps.changelog.outputs.changelog }}
-            
-            ---
-            
-            ### Installation
-            
-            **macOS**
-            - Apple Silicon (M1/M2): Download `Echolon-*-arm64.dmg`
-            - Intel: Download `Echolon-*-x64.dmg`
-            
-            **Windows**
-            - Installer: Download `Echolon-Setup-*.exe`
-            - Portable: Download `Echolon-*-portable.exe`
-            
-            **Linux**
-            - AppImage: Download `Echolon-*.AppImage`
-            - Debian/Ubuntu: Download `echolon_*.deb`
-            - Fedora/RHEL: Download `echolon-*.rpm`
-          draft: true
-          prerelease: false
-
-  # Build for macOS (both architectures)
+  # Build for all platforms in parallel
+  # electron-builder with --publish always will:
+  # 1. Create the GitHub release if it doesn't exist
+  # 2. Upload all artifacts including latest.yml files needed for auto-update
+  
   build-macos:
-    needs: create-release
     runs-on: macos-latest
     strategy:
+      fail-fast: false
       matrix:
         arch: [x64, arm64]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -111,11 +43,11 @@ jobs:
         working-directory: core
         run: npm ci
 
-      - name: Build and Package
+      - name: Build and Publish
         working-directory: core
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Code signing (optional - add secrets if you have certificates)
+          # Code signing (uncomment and add secrets if you have certificates)
           # CSC_LINK: ${{ secrets.MAC_CERTS }}
           # CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTS_PASSWORD }}
           # APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -125,16 +57,17 @@ jobs:
           npm run build
           npx electron-builder --mac --${{ matrix.arch }} --publish always
 
-  # Build for Windows (both architectures)
   build-windows:
-    needs: create-release
     runs-on: windows-latest
     strategy:
+      fail-fast: false
       matrix:
-        arch: [x64, ia32]
+        arch: [x64]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -147,24 +80,24 @@ jobs:
         working-directory: core
         run: npm ci
 
-      - name: Build and Package
+      - name: Build and Publish
         working-directory: core
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Code signing (optional - add secrets if you have certificates)
+          # Code signing (uncomment and add secrets if you have certificates)
           # CSC_LINK: ${{ secrets.WIN_CERTS }}
           # CSC_KEY_PASSWORD: ${{ secrets.WIN_CERTS_PASSWORD }}
         run: |
           npm run build
           npx electron-builder --win --${{ matrix.arch }} --publish always
 
-  # Build for Linux
   build-linux:
-    needs: create-release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -177,7 +110,7 @@ jobs:
         working-directory: core
         run: npm ci
 
-      - name: Build and Package
+      - name: Build and Publish
         working-directory: core
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -185,20 +118,94 @@ jobs:
           npm run build
           npx electron-builder --linux --publish always
 
-  # Publish the release (make it non-draft) after all builds succeed
-  publish-release:
-    needs: [create-release, build-macos, build-windows, build-linux]
+  # After all builds complete, update the release with changelog
+  finalize-release:
+    needs: [build-macos, build-windows, build-linux]
     runs-on: ubuntu-latest
     steps:
-      - name: Publish Release
-        uses: actions/github-script@v7
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            await github.rest.repos.updateRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: ${{ needs.create-release.outputs.release_id }},
-              draft: false
-            });
+          fetch-depth: 0
 
+      - name: Get version from tag
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.version }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          TAG="${{ steps.get_version.outputs.tag }}"
+          
+          # Get the previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 $TAG^ 2>/dev/null || echo "")
+          
+          if [ -n "$PREV_TAG" ]; then
+            echo "Generating changelog from $PREV_TAG to $TAG"
+            COMMITS=$(git log --pretty=format:"- %s (%h)" $PREV_TAG..$TAG --no-merges 2>/dev/null || echo "")
+          else
+            echo "First release - getting recent commits"
+            COMMITS=$(git log --pretty=format:"- %s (%h)" -20 --no-merges 2>/dev/null || echo "- Initial release")
+          fi
+          
+          # Write to file to preserve newlines
+          echo "$COMMITS" > /tmp/changelog.txt
+          
+          # Create the full release body
+          cat > /tmp/release_body.md << 'RELEASE_EOF'
+          ## What's Changed
+          
+          RELEASE_EOF
+          
+          cat /tmp/changelog.txt >> /tmp/release_body.md
+          
+          cat >> /tmp/release_body.md << 'RELEASE_EOF'
+          
+          ---
+          
+          ## Installation
+          
+          ### macOS
+          - **Apple Silicon (M1/M2/M3)**: Download `Echolon-*-arm64.dmg`
+          - **Intel**: Download `Echolon-*-x64.dmg` or `Echolon-*-mac.dmg`
+          
+          ### Windows  
+          - **Installer**: Download `Echolon-Setup-*.exe`
+          - **Portable**: Download `Echolon-*-portable.exe`
+          
+          ### Linux
+          - **AppImage** (universal): Download `Echolon-*.AppImage`
+          - **Debian/Ubuntu**: Download `echolon_*.deb`
+          - **Fedora/RHEL**: Download `echolon-*.rpm`
+          
+          ---
+          
+          **Full Changelog**: https://github.com/${{ github.repository }}/compare/PREV_TAG...${{ steps.get_version.outputs.tag }}
+          RELEASE_EOF
+          
+          # Replace PREV_TAG placeholder
+          if [ -n "$PREV_TAG" ]; then
+            sed -i "s/PREV_TAG/$PREV_TAG/g" /tmp/release_body.md
+          else
+            # Remove the changelog link for first release
+            sed -i '/Full Changelog/d' /tmp/release_body.md
+          fi
+
+      - name: Update Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_version.outputs.tag }}
+          name: Echolon v${{ steps.get_version.outputs.version }}
+          body_path: /tmp/release_body.md
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

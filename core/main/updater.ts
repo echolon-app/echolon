@@ -106,8 +106,17 @@ export function setupUpdater(mainWindow: BrowserWindow | null, config: UpdaterCo
         releaseNotes: result?.updateInfo?.releaseNotes,
         releaseDate: result?.updateInfo?.releaseDate,
       };
-    } catch (error) {
-      console.error('[Updater] Failed to check for updates:', error);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('[Updater] Failed to check for updates:', errorMessage);
+      
+      // Send error event to renderer
+      mainWindow?.webContents.send(IPC_CHANNELS.UPDATE_ERROR, {
+        message: errorMessage.includes('404') || errorMessage.includes('No published versions')
+          ? 'No releases found. Please check back later.'
+          : errorMessage,
+      });
+      
       throw error;
     }
   });

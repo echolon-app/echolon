@@ -1,6 +1,6 @@
 {
   "name": "echolon",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A powerful, local-first API client - Postman alternative",
   "main": "dist/main/index.js",
   "author": "Philipp Maximilian Wesel",
