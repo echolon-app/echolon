@@ -37,7 +37,7 @@ coverage/
 
 secrets/
 landing/
-sample-api/
+api/
 proxy-server/
 other/
 

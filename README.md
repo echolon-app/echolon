@@ -1,5 +1,10 @@
 # Echolon
 
+[![version](https://img.shields.io/github/package-json/v/echolon-app/echolon?filename=core%2Fpackage.json&label=version&color=4ade80)](https://github.com/echolon-app/echolon/releases)
+[![License](https://img.shields.io/badge/license-MIT-4ade80)](LICENSE)
+[![Website](https://img.shields.io/badge/Website-Visit-6366f1)](https://echolon.app)
+[![Download](https://img.shields.io/badge/Download-Latest-3b82f6)](https://echolon.app/download)
+
 A powerful, git-native and local-first API client built with Electron and React.
 
 ## Features
@@ -8,12 +13,28 @@ A powerful, git-native and local-first API client built with Electron and React.
 - **Environment Variables**: Manage different environments with variables
 - **Request Builder**: Full-featured request builder with params, headers, body, auth
 - **Response Viewer**: View responses with syntax highlighting and search
-- **API Mocking**: Advanced API mocking features
+- **API Mocking**: Advanced API mocking features (cloud + local)
 - **History**: Track all your request history
-- **Swagger Import**: Import OpenAPI/Swagger files
+- **Imports**: Import OpenAPI/Swagger or Postman files
 - **cURL Export**: Export requests as cURL commands
 - **Dark/Light Mode**: Beautiful themes for any preference
 - **Completely Local**: All data stored locally, no account required
+
+## Commercial
+
+Echolon is a open source project. There is a paid version if you want to support the future development.
+It offers features that are required on a larger scale but 95% of its features are completely.
+The commercial usage applies to the binaries downloaded from Github or echolon.app.
+If you want to build the project yourself it is 100% free.
+
+## Helpful Links
+
+- Website: [echolon.app](https://echolon.app)
+- Download: [echolon.app/download](https://echolon.app/download)
+- Pricing: [echolon.app/pricing](https://echolon.app/pricing)
+- Docs: [docs.echolon.app](https://docs.echolon.app)
+- Support: support@echolon.app
+- Sample API: [sample-api.echolon.app](https://sample-api.echolon.app)
 
 ## Development
 
@@ -100,26 +121,6 @@ brew install rpm
 - **Vite** - Fast bundler
 - **Ace Editor** - Code/JSON viewer
 
-## Project Structure
-
-```
-src/
-├── main/           # Electron main process
-│   ├── index.ts    # Main entry
-│   ├── menu.ts     # Application menu
-│   ├── preload.ts  # Preload script
-│   └── updater.ts  # Auto-update logic
-├── renderer/       # React app
-│   ├── components/ # UI components
-│   ├── contexts/   # React Context providers
-│   ├── hooks/      # Custom hooks
-│   ├── services/   # Business logic
-│   ├── styles/     # Global styles
-│   ├── types/      # TypeScript types
-│   └── utils/      # Utility functions
-└── shared/         # Shared code
-    └── constants.ts
-```
 
 ## License
 
