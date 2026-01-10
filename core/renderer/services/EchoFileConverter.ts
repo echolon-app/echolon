@@ -10,6 +10,7 @@ import {
   EchoFolder,
   EchoMetadata,
   EchoSettings,
+  EchoPublicSharing,
   WorkspaceFile,
   GlobalEnvironmentsFile,
   ECHO_SCHEMA_URL,
@@ -58,6 +59,13 @@ export function collectionToEchoFile(collection: Collection, workspaceName: stri
       syncFrequencyMins: collection.specSource.syncFrequencyMins,
       lastSyncedAt: collection.specSource.lastSyncedAt,
     } : undefined,
+    // Save public sharing configuration
+    publicSharing: collection.publicSharing ? {
+      enabled: collection.publicSharing.enabled,
+      subdomain: collection.publicSharing.subdomain,
+      versions: collection.publicSharing.versions,
+      lastPublishedAt: collection.publicSharing.lastPublishedAt,
+    } : undefined,
     requests: collection.requests.map(requestToEchoRequest),
     folders: collection.folders.map(folderToEchoFolder),
   };
@@ -67,6 +75,11 @@ export function collectionToEchoFile(collection: Collection, workspaceName: stri
  * Convert an EchoFile to a Collection
  */
 export function echoFileToCollection(echoFile: EchoFile, workspaceId: string): Collection {
+  // Validate the echo file has required metadata
+  if (!echoFile || !echoFile.metadata || !echoFile.metadata.id) {
+    throw new Error(`Invalid echo file: missing metadata.id. Got: ${JSON.stringify(echoFile?.metadata)}`);
+  }
+
   // Build specSource from both the saved specSource metadata and the raw openapi content
   let specSource = undefined;
   if (echoFile.specSource || echoFile.openapi) {
@@ -88,13 +101,20 @@ export function echoFileToCollection(echoFile: EchoFile, workspaceId: string): C
     updatedAt: new Date(echoFile.metadata.modifiedAt).getTime(),
     workspaceId,
     collapsed: echoFile.metadata.collapsed,
-    requests: echoFile.requests.map(echoRequestToRequest),
-    folders: echoFile.folders.map(echoFolderToFolder),
+    requests: (echoFile.requests || []).map(echoRequestToRequest),
+    folders: (echoFile.folders || []).map(echoFolderToFolder),
     environments: echoFile.environments as CollectionEnvironment[],
-    headers: echoFile.settings.defaultHeaders as KeyValuePair[],
-    auth: echoFile.settings.auth as AuthConfig,
-    defaultEnvironmentId: echoFile.settings.defaultEnvironmentId,
+    headers: echoFile.settings?.defaultHeaders as KeyValuePair[],
+    auth: echoFile.settings?.auth as AuthConfig,
+    defaultEnvironmentId: echoFile.settings?.defaultEnvironmentId,
     specSource,
+    // Restore public sharing configuration
+    publicSharing: echoFile.publicSharing ? {
+      enabled: echoFile.publicSharing.enabled,
+      subdomain: echoFile.publicSharing.subdomain,
+      versions: echoFile.publicSharing.versions,
+      lastPublishedAt: echoFile.publicSharing.lastPublishedAt,
+    } : undefined,
   };
 }
 
@@ -109,10 +129,12 @@ function requestToEchoRequest(request: Request): EchoRequest {
     url: request.url,
     headers: request.headers,
     queryParams: request.queryParams,
+    pathParams: request.pathParams,
     body: request.body,
     auth: request.auth,
     scripts: request.scripts,
-  };
+    tags: request.tags,
+  } as EchoRequest;
 }
 
 /**
@@ -126,9 +148,11 @@ function echoRequestToRequest(echoRequest: EchoRequest): Request {
     url: echoRequest.url,
     headers: echoRequest.headers as KeyValuePair[],
     queryParams: echoRequest.queryParams as KeyValuePair[],
+    pathParams: echoRequest.pathParams as KeyValuePair[] || [],
     body: echoRequest.body as RequestBody,
     auth: echoRequest.auth as AuthConfig,
-    scripts: echoRequest.scripts,
+    scripts: echoRequest.scripts || { pre: '', post: '' },
+    tags: echoRequest.tags,
   };
 }
 
@@ -185,6 +209,9 @@ export function workspaceToWorkspaceFile(workspace: Workspace): WorkspaceFile {
  * Convert a WorkspaceFile to a Workspace
  */
 export function workspaceFileToWorkspace(workspaceFile: WorkspaceFile): Workspace {
+  if (!workspaceFile || !workspaceFile.id) {
+    throw new Error(`Invalid workspace file: missing id. Got: ${JSON.stringify(workspaceFile)}`);
+  }
   return {
     id: workspaceFile.id,
     name: workspaceFile.name,
@@ -192,7 +219,9 @@ export function workspaceFileToWorkspace(workspaceFile: WorkspaceFile): Workspac
     color: workspaceFile.color,
     createdAt: new Date(workspaceFile.createdAt).getTime(),
     updatedAt: new Date(workspaceFile.updatedAt).getTime(),
-    environments: workspaceFile.environments?.map(e => ({
+    environments: (workspaceFile.environments || [])
+      .filter(e => e && e.id)
+      .map(e => ({
       id: e.id,
       name: e.name,
       variables: e.variables,
@@ -233,7 +262,9 @@ export function globalFileToEnvironments(globalFile: GlobalEnvironmentsFile): {
   selectedId: string | null;
 } {
   return {
-    environments: globalFile.environments.map(env => ({
+    environments: (globalFile.environments || [])
+      .filter(env => env && typeof env.id === 'string')
+      .map(env => ({
       id: env.id,
       name: env.name,
       variables: env.variables as KeyValuePair[],

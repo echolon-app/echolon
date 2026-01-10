@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Workspace, WorkspaceEnvironment, KeyValuePair } from '@/types';
-import { fileStorageManager } from '@/services';
+import { fileStorageManager, webFileSystemManager } from '@/services';
 import { echoConverter } from '@/services/EchoFileConverter';
 import { WORKSPACE_COLORS } from '../../shared/constants';
 import { useDataLoader } from './DataLoaderContext';
 import { useWebModeOptional } from './WebModeContext';
+import { useFileStorageOptional } from './FileStorageContext';
 import { v4 as uuidv4 } from 'uuid';
 
 interface WorkspaceContextValue {
@@ -34,57 +35,128 @@ const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const webMode = useWebModeOptional();
   const isWebMode = webMode?.isWebMode ?? false;
+  const fileStorage = useFileStorageOptional();
+  const isWebFileSystemEnabled = fileStorage?.isWebFileSystemEnabled ?? false;
   const { data, isLoading: dataLoading, refresh: refreshData } = useDataLoader();
   
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [activeWorkspaceId, setActiveWorkspaceIdState] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(!isWebMode);
-  const initializedRef = useRef(false);
+  // Get the appropriate storage manager
+  const getStorageManager = useCallback(() => {
+    if (isWebMode && isWebFileSystemEnabled) {
+      return webFileSystemManager;
+    }
+    return fileStorageManager;
+  }, [isWebMode, isWebFileSystemEnabled]);
+  
+  // Should skip file operations?
+  const shouldSkipFileOps = isWebMode && !isWebFileSystemEnabled;
+  
+  // Create the default web workspace for web mode without file system
+  const defaultWebWorkspace: Workspace = useMemo(() => ({
+    id: 'web-workspace',
+    name: 'API Reference',
+    description: 'Web mode workspace',
+    color: WORKSPACE_COLORS[0],
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  }), []);
+  
+  // Initialize workspaces - in web mode without FS, start with the default workspace
+  // In web mode with FS or electron, start empty (will load from file system)
+  const [workspaces, setWorkspaces] = useState<Workspace[]>(() => {
+    if (isWebMode && !isWebFileSystemEnabled) {
+      return [defaultWebWorkspace];
+    }
+    return [];
+  });
+  
+  // Initialize active workspace ID - in web mode without FS, preselect the default workspace
+  const [activeWorkspaceId, setActiveWorkspaceIdState] = useState<string | null>(() => {
+    if (isWebMode && !isWebFileSystemEnabled) {
+      return 'web-workspace';
+    }
+    return null;
+  });
+  
+  // Loading state: false if already initialized (web mode without FS), true otherwise
+  const [isLoading, setIsLoading] = useState(() => {
+    if (isWebMode && !isWebFileSystemEnabled) return false;
+    return true; // Need to load from file system
+  });
+  
+  // Track initialization state for web mode without FS only
+  const virtualWorkspaceInitRef = useRef(isWebMode && !isWebFileSystemEnabled);
           
-  // Initialize from pre-loaded data
+  // Initialize/sync workspaces from pre-loaded data
   useEffect(() => {
-    if (dataLoading || initializedRef.current) return;
+    if (dataLoading) return;
     
-    // In web mode, create a virtual workspace
-    if (isWebMode) {
-      console.log('[WorkspaceContext] Web mode - creating virtual workspace');
-      const webWorkspace: Workspace = {
-        id: 'web-workspace',
-        name: 'API Reference',
-        description: 'Web mode workspace',
-        color: WORKSPACE_COLORS[0],
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      };
-      setWorkspaces([webWorkspace]);
-      setActiveWorkspaceIdState('web-workspace');
+    // In web mode without file system, create a virtual workspace (only once)
+    if (isWebMode && !isWebFileSystemEnabled) {
+      if (!virtualWorkspaceInitRef.current) {
+        console.log('[WorkspaceContext] Web mode without file system - creating virtual workspace');
+        const webWorkspace: Workspace = {
+          id: 'web-workspace',
+          name: 'API Reference',
+          description: 'Web mode workspace',
+          color: WORKSPACE_COLORS[0],
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+        setWorkspaces([webWorkspace]);
+        setActiveWorkspaceIdState('web-workspace');
+        virtualWorkspaceInitRef.current = true;
+      }
       setIsLoading(false);
-      initializedRef.current = true;
       return;
     }
     
-    console.log('[WorkspaceContext] Initializing with pre-loaded data');
+    // In web mode with file system or electron mode, sync with loaded data
+    // Always update when data changes (not just on initial load)
+    console.log('[WorkspaceContext] Syncing with loaded data', { workspaceCount: data.workspaces.length });
     setWorkspaces(data.workspaces);
-    setActiveWorkspaceIdState(data.activeWorkspaceId);
-      setIsLoading(false);
-    initializedRef.current = true;
-  }, [dataLoading, data.workspaces, data.activeWorkspaceId, isWebMode]);
-
-  // Save active workspace to config when it changes (not in web mode)
-  useEffect(() => {
-    if (!initializedRef.current || activeWorkspaceId === null || isWebMode) return;
     
-    fileStorageManager.updateConfig({
+    // Only update active workspace if we don't have one or if it changed
+    if (data.activeWorkspaceId) {
+      setActiveWorkspaceIdState(data.activeWorkspaceId);
+    }
+    
+    setIsLoading(false);
+    // Reset virtual workspace flag when switching to file system mode
+    virtualWorkspaceInitRef.current = false;
+  }, [dataLoading, data.workspaces, data.activeWorkspaceId, isWebMode, isWebFileSystemEnabled]);
+
+  // Save active workspace to config when it changes (not in web mode without file system)
+  useEffect(() => {
+    // Don't save during initial load or in web mode without file system
+    if (isLoading || activeWorkspaceId === null || shouldSkipFileOps) return;
+    
+    const manager = getStorageManager();
+    manager.updateConfig({
       ui: { activeWorkspaceId }
     });
-  }, [activeWorkspaceId, isWebMode]);
+  }, [activeWorkspaceId, isLoading, shouldSkipFileOps, getStorageManager]);
 
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId) || null;
 
   const addWorkspace = useCallback(async (name: string, description?: string, color?: string): Promise<Workspace | null> => {
     const workspaceColor = color || WORKSPACE_COLORS[workspaces.length % WORKSPACE_COLORS.length];
     
-    const result = await fileStorageManager.createWorkspace(name, description, workspaceColor);
+    if (shouldSkipFileOps) {
+      // In web mode without file system, create a local workspace
+      const newWorkspace: Workspace = {
+        id: uuidv4(),
+        name,
+        description,
+        color: workspaceColor,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      setWorkspaces(prev => [...prev, newWorkspace]);
+      return newWorkspace;
+    }
+    
+    const manager = getStorageManager();
+    const result = await manager.createWorkspace(name, description, workspaceColor);
     
     if (result.success && result.workspace) {
       const newWorkspace = echoConverter.workspaceFileToWorkspace(result.workspace);
@@ -93,7 +165,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
     
     return null;
-  }, [workspaces.length]);
+  }, [workspaces.length, shouldSkipFileOps, getStorageManager]);
 
   const updateWorkspace = useCallback(async (id: string, updates: Partial<Workspace>) => {
     const workspace = workspaces.find(w => w.id === id);
@@ -105,24 +177,28 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       updatedAt: Date.now(),
     };
 
-    // If name changed, we need to rename the directory
-    if (updates.name && updates.name !== workspace.name) {
-      const success = await fileStorageManager.renameWorkspace(workspace.name, updates.name);
-      if (!success) {
-        console.error('Failed to rename workspace directory');
-        return;
+    if (!shouldSkipFileOps) {
+      const manager = getStorageManager();
+      
+      // If name changed, we need to rename the directory
+      if (updates.name && updates.name !== workspace.name) {
+        const success = await manager.renameWorkspace(workspace.name, updates.name);
+        if (!success) {
+          console.error('Failed to rename workspace directory');
+          return;
+        }
       }
-    }
 
-    // Update workspace metadata file
-    const workspaceName = updates.name || workspace.name;
-    const workspaceFile = echoConverter.workspaceToWorkspaceFile(updatedWorkspace);
-    await fileStorageManager.updateWorkspace(workspaceName, workspaceFile);
+      // Update workspace metadata file
+      const workspaceName = updates.name || workspace.name;
+      const workspaceFile = echoConverter.workspaceToWorkspaceFile(updatedWorkspace);
+      await manager.updateWorkspace(workspaceName, workspaceFile);
+    }
 
     setWorkspaces(prev =>
       prev.map(w => w.id === id ? updatedWorkspace : w)
     );
-  }, [workspaces]);
+  }, [workspaces, shouldSkipFileOps, getStorageManager]);
 
   const deleteWorkspace = useCallback(async (id: string) => {
     // Don't allow deleting the last workspace
@@ -131,10 +207,13 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const workspace = workspaces.find(w => w.id === id);
     if (!workspace) return;
 
-    const success = await fileStorageManager.deleteWorkspace(workspace.name);
-    if (!success) {
-      console.error('Failed to delete workspace');
-      return;
+    if (!shouldSkipFileOps) {
+      const manager = getStorageManager();
+      const success = await manager.deleteWorkspace(workspace.name);
+      if (!success) {
+        console.error('Failed to delete workspace');
+        return;
+      }
     }
     
     setWorkspaces(prev => prev.filter(w => w.id !== id));
@@ -146,7 +225,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setActiveWorkspaceIdState(remaining[0].id);
       }
     }
-  }, [workspaces, activeWorkspaceId]);
+  }, [workspaces, activeWorkspaceId, shouldSkipFileOps, getStorageManager]);
 
   const setActiveWorkspace = useCallback((id: string | null) => {
     if (id && workspaces.find(w => w.id === id)) {
@@ -188,16 +267,19 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       updatedAt: Date.now(),
     };
 
-    // Save to file
-    const workspaceFile = echoConverter.workspaceToWorkspaceFile(updatedWorkspace);
-    await fileStorageManager.updateWorkspace(workspace.name, workspaceFile);
+    // Save to file if not skipping file operations
+    if (!shouldSkipFileOps) {
+      const manager = getStorageManager();
+      const workspaceFile = echoConverter.workspaceToWorkspaceFile(updatedWorkspace);
+      await manager.updateWorkspace(workspace.name, workspaceFile);
+    }
 
     setWorkspaces(prev =>
       prev.map(w => w.id === workspaceId ? updatedWorkspace : w)
     );
 
     return newEnv;
-  }, [workspaces]);
+  }, [workspaces, shouldSkipFileOps, getStorageManager]);
 
   const updateWorkspaceEnvironment = useCallback(async (workspaceId: string, envId: string, updates: Partial<WorkspaceEnvironment>) => {
     const workspace = workspaces.find(w => w.id === workspaceId);
@@ -211,14 +293,17 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       updatedAt: Date.now(),
     };
 
-    // Save to file
-    const workspaceFile = echoConverter.workspaceToWorkspaceFile(updatedWorkspace);
-    await fileStorageManager.updateWorkspace(workspace.name, workspaceFile);
+    // Save to file if not skipping file operations
+    if (!shouldSkipFileOps) {
+      const manager = getStorageManager();
+      const workspaceFile = echoConverter.workspaceToWorkspaceFile(updatedWorkspace);
+      await manager.updateWorkspace(workspace.name, workspaceFile);
+    }
 
     setWorkspaces(prev =>
       prev.map(w => w.id === workspaceId ? updatedWorkspace : w)
     );
-  }, [workspaces]);
+  }, [workspaces, shouldSkipFileOps, getStorageManager]);
 
   const deleteWorkspaceEnvironment = useCallback(async (workspaceId: string, envId: string) => {
     const workspace = workspaces.find(w => w.id === workspaceId);
@@ -231,14 +316,17 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       updatedAt: Date.now(),
     };
 
-    // Save to file
-    const workspaceFile = echoConverter.workspaceToWorkspaceFile(updatedWorkspace);
-    await fileStorageManager.updateWorkspace(workspace.name, workspaceFile);
+    // Save to file if not skipping file operations
+    if (!shouldSkipFileOps) {
+      const manager = getStorageManager();
+      const workspaceFile = echoConverter.workspaceToWorkspaceFile(updatedWorkspace);
+      await manager.updateWorkspace(workspace.name, workspaceFile);
+    }
 
     setWorkspaces(prev =>
       prev.map(w => w.id === workspaceId ? updatedWorkspace : w)
     );
-  }, [workspaces]);
+  }, [workspaces, shouldSkipFileOps, getStorageManager]);
 
   const selectWorkspaceEnvironment = useCallback(async (workspaceId: string, envId: string | null) => {
     const workspace = workspaces.find(w => w.id === workspaceId);
@@ -250,14 +338,17 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       updatedAt: Date.now(),
     };
 
-    // Save to file
-    const workspaceFile = echoConverter.workspaceToWorkspaceFile(updatedWorkspace);
-    await fileStorageManager.updateWorkspace(workspace.name, workspaceFile);
+    // Save to file if not skipping file operations
+    if (!shouldSkipFileOps) {
+      const manager = getStorageManager();
+      const workspaceFile = echoConverter.workspaceToWorkspaceFile(updatedWorkspace);
+      await manager.updateWorkspace(workspace.name, workspaceFile);
+    }
 
     setWorkspaces(prev =>
       prev.map(w => w.id === workspaceId ? updatedWorkspace : w)
     );
-  }, [workspaces]);
+  }, [workspaces, shouldSkipFileOps, getStorageManager]);
 
   const addWorkspaceVariable = useCallback((workspaceId: string, envId: string, key: string, value: string) => {
     const workspace = workspaces.find(w => w.id === workspaceId);
@@ -284,10 +375,13 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       prev.map(w => w.id === workspaceId ? updatedWorkspace : w)
     );
 
-    // Debounced save handled by updateWorkspace
-    const workspaceFile = echoConverter.workspaceToWorkspaceFile(updatedWorkspace);
-    fileStorageManager.updateWorkspace(workspace.name, workspaceFile);
-  }, [workspaces]);
+    // Save to file if not skipping file operations
+    if (!shouldSkipFileOps) {
+      const manager = getStorageManager();
+      const workspaceFile = echoConverter.workspaceToWorkspaceFile(updatedWorkspace);
+      manager.updateWorkspace(workspace.name, workspaceFile);
+    }
+  }, [workspaces, shouldSkipFileOps, getStorageManager]);
 
   const updateWorkspaceVariable = useCallback((workspaceId: string, envId: string, varId: string, updates: Partial<KeyValuePair>) => {
     const workspace = workspaces.find(w => w.id === workspaceId);
@@ -312,10 +406,13 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       prev.map(w => w.id === workspaceId ? updatedWorkspace : w)
     );
 
-    // Save to file
-    const workspaceFile = echoConverter.workspaceToWorkspaceFile(updatedWorkspace);
-    fileStorageManager.updateWorkspace(workspace.name, workspaceFile);
-  }, [workspaces]);
+    // Save to file if not skipping file operations
+    if (!shouldSkipFileOps) {
+      const manager = getStorageManager();
+      const workspaceFile = echoConverter.workspaceToWorkspaceFile(updatedWorkspace);
+      manager.updateWorkspace(workspace.name, workspaceFile);
+    }
+  }, [workspaces, shouldSkipFileOps, getStorageManager]);
 
   const deleteWorkspaceVariable = useCallback((workspaceId: string, envId: string, varId: string) => {
     const workspace = workspaces.find(w => w.id === workspaceId);
@@ -335,10 +432,13 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       prev.map(w => w.id === workspaceId ? updatedWorkspace : w)
     );
 
-    // Save to file
-    const workspaceFile = echoConverter.workspaceToWorkspaceFile(updatedWorkspace);
-    fileStorageManager.updateWorkspace(workspace.name, workspaceFile);
-  }, [workspaces]);
+    // Save to file if not skipping file operations
+    if (!shouldSkipFileOps) {
+      const manager = getStorageManager();
+      const workspaceFile = echoConverter.workspaceToWorkspaceFile(updatedWorkspace);
+      manager.updateWorkspace(workspace.name, workspaceFile);
+    }
+  }, [workspaces, shouldSkipFileOps, getStorageManager]);
 
   return (
     <WorkspaceContext.Provider

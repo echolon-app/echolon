@@ -1,17 +1,21 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { AppSettings, ConsoleEntry, Collection } from '@/types';
 import { storageManager } from '@/services';
+import { isElectron } from '@/utils';
 import { v4 as uuidv4 } from 'uuid';
 
-type SidebarView = 'collections' | 'environments' | 'history' | 'mocking' | 'git' | 'socket' | 'graphql';
+type SidebarView = 'collections' | 'environments' | 'history' | 'mocking' | 'git' | 'socket' | 'graphql' | 'workspaces';
 
 type SidebarState = 'hidden' | 'collapsed' | 'expanded';
 
 export type ViewMode = 'tabs' | 'reference';
 
+export type SettingsTab = 'general' | 'storage' | 'github' | 'theming' | 'editor' | 'requests' | 'mocking' | 'subscription' | 'updates' | 'about';
+
 // Check if running in web mode (not Electron)
+// Uses the shared isElectron utility for consistent detection
 const isWebMode = (): boolean => {
-  return typeof window !== 'undefined' && !window.electronAPI;
+  return !isElectron();
 };
 
 interface AppContextValue {
@@ -25,6 +29,7 @@ interface AppContextValue {
   rightPanelVisible: boolean;
   codePanelVisible: boolean;
   settingsModalOpen: boolean;
+  settingsModalTab: SettingsTab | null;
   importModalOpen: boolean;
   newCollectionModalOpen: boolean;
   newEnvironmentModalOpen: boolean;
@@ -53,7 +58,7 @@ interface AppContextValue {
   toggleRightPanel: () => void;
   showCodePanel: () => void;
   hideCodePanel: () => void;
-  openSettingsModal: () => void;
+  openSettingsModal: (tab?: SettingsTab) => void;
   closeSettingsModal: () => void;
   openImportModal: () => void;
   closeImportModal: () => void;
@@ -97,6 +102,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [rightPanelVisible, setRightPanelVisible] = useState(false);
   const [codePanelVisible, setCodePanelVisible] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [settingsModalTab, setSettingsModalTab] = useState<SettingsTab | null>(null);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [newCollectionModalOpen, setNewCollectionModalOpen] = useState(false);
   const [newEnvironmentModalOpen, setNewEnvironmentModalOpen] = useState(false);
@@ -118,6 +124,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     storageManager.setSettings(settings);
   }, [settings]);
+
+  // Apply font size setting to CSS custom properties
+  useEffect(() => {
+    const baseFontSize = 13; // Default font size
+    const scale = settings.fontSize / baseFontSize;
+    const root = document.documentElement;
+    
+    // Scale all font size variables proportionally
+    root.style.setProperty('--font-xs', `${Math.round(11 * scale)}px`);
+    root.style.setProperty('--font-sm', `${Math.round(12 * scale)}px`);
+    root.style.setProperty('--font-md', `${Math.round(13 * scale)}px`);
+    root.style.setProperty('--font-lg', `${Math.round(14 * scale)}px`);
+    root.style.setProperty('--font-xl', `${Math.round(16 * scale)}px`);
+    root.style.setProperty('--font-2xl', `${Math.round(18 * scale)}px`);
+    root.style.setProperty('--font-3xl', `${Math.round(24 * scale)}px`);
+  }, [settings.fontSize]);
 
   // Listen for menu events
   useEffect(() => {
@@ -210,8 +232,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const showCodePanel = useCallback(() => setCodePanelVisible(true), []);
   const hideCodePanel = useCallback(() => setCodePanelVisible(false), []);
 
-  const openSettingsModal = useCallback(() => setSettingsModalOpen(true), []);
-  const closeSettingsModal = useCallback(() => setSettingsModalOpen(false), []);
+  const openSettingsModal = useCallback((tab?: SettingsTab) => {
+    if (tab) {
+      setSettingsModalTab(tab);
+    }
+    setSettingsModalOpen(true);
+  }, []);
+  const closeSettingsModal = useCallback(() => {
+    setSettingsModalOpen(false);
+    setSettingsModalTab(null);
+  }, []);
   const openImportModal = useCallback(() => setImportModalOpen(true), []);
   const closeImportModal = useCallback(() => setImportModalOpen(false), []);
   const openNewCollectionModal = useCallback(() => setNewCollectionModalOpen(true), []);
@@ -293,6 +323,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     rightPanelVisible,
     codePanelVisible,
     settingsModalOpen,
+    settingsModalTab,
     importModalOpen,
     newCollectionModalOpen,
     newEnvironmentModalOpen,
@@ -340,6 +371,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     rightPanelVisible,
     codePanelVisible,
     settingsModalOpen,
+    settingsModalTab,
     importModalOpen,
     newCollectionModalOpen,
     newEnvironmentModalOpen,

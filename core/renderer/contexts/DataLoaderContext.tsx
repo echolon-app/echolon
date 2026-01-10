@@ -6,12 +6,13 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { fileStorageManager } from '@/services';
+import { fileStorageManager, webFileSystemManager } from '@/services';
 import { echoConverter } from '@/services/EchoFileConverter';
 import { Collection, Workspace, Environment } from '@/types';
 import { WORKSPACE_COLORS } from '../../shared/constants';
 import { EcholonConfig, WorkspaceFile, GlobalEnvironmentsFile } from '@/services/FileStorageManager';
 import { useWebModeOptional } from './WebModeContext';
+import { useFileStorageOptional } from './FileStorageContext';
 
 export interface LoadedData {
   workspaces: Workspace[];
@@ -54,33 +55,46 @@ const DataLoaderContext = createContext<DataLoaderContextValue | null>(null);
 export const DataLoaderProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const webMode = useWebModeOptional();
   const isWebMode = webMode?.isWebMode ?? false;
+  // Use optional hook to avoid circular dependency - FileStorageContext provides this
+  const fileStorage = useFileStorageOptional();
+  const isWebFileSystemEnabled = fileStorage?.isWebFileSystemEnabled ?? false;
   
-  const [isLoading, setIsLoading] = useState(!isWebMode); // Don't show loading in web mode
-  const [isInitialized, setIsInitialized] = useState(isWebMode); // Already initialized in web mode
+  // In web mode without file system: no loading needed (already initialized)
+  // In web mode with file system OR electron mode: need to load data
+  const [isLoading, setIsLoading] = useState(() => {
+    if (isWebMode && !isWebFileSystemEnabled) return false; // No loading in pure web mode
+    return true; // Need to load data from file system
+  });
+  const [isInitialized, setIsInitialized] = useState(isWebMode && !isWebFileSystemEnabled); // Already initialized in web mode without FS
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<LoadedData>(defaultData);
   const [timings, setTimings] = useState<LoadingTimings | null>(null);
   const loadStartedRef = useRef(false);
+  const lastWebFsEnabledRef = useRef(isWebFileSystemEnabled);
 
-  const loadAllData = useCallback(async () => {
-    // Skip file system loading in web mode
-    if (isWebMode) {
-      console.log('[DataLoader] Web mode detected, skipping file system initialization');
+  const loadAllData = useCallback(async (forceLoad = false) => {
+    // In web mode without web file system, skip file system loading
+    if (isWebMode && !isWebFileSystemEnabled && !forceLoad) {
+      console.log('[DataLoader] Web mode detected without web file system, skipping file system initialization');
       setIsLoading(false);
       setIsInitialized(true);
       return;
     }
+    
+    // Use appropriate storage manager
+    const storageManager = isWebMode ? webFileSystemManager : fileStorageManager;
+    
     const totalStart = performance.now();
     const timingResults: Partial<LoadingTimings> = {};
 
     try {
-      console.log('[DataLoader] Starting parallel data load...');
+      console.log(`[DataLoader] Starting parallel data load... (webMode: ${isWebMode}, webFS: ${isWebFileSystemEnabled})`);
 
       // Step 1: Initialize file storage (must happen first)
       const fsInitStart = performance.now();
-      const initResult = await fileStorageManager.initialize();
+      const initResult = await storageManager.initialize();
       timingResults.fileStorageInit = Math.round(performance.now() - fsInitStart);
-      console.log(`[DataLoader] File storage init: ${timingResults.fileStorageInit}ms`);
+      //console.log(`[DataLoader] File storage init: ${timingResults.fileStorageInit}ms`);
 
       if (!initResult.success) {
         throw new Error(initResult.error || 'Failed to initialize file storage');
@@ -98,7 +112,7 @@ export const DataLoaderProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         // Load workspaces
         (async () => {
           const start = performance.now();
-          const files = await fileStorageManager.getAllWorkspaces();
+          const files = await storageManager.getAllWorkspaces();
           timingResults.workspaces = Math.round(performance.now() - start);
           console.log(`[DataLoader] Workspaces loaded: ${timingResults.workspaces}ms (${files.length} workspaces)`);
           return files;
@@ -107,7 +121,7 @@ export const DataLoaderProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         // Load collections
         (async () => {
           const start = performance.now();
-          const result = await fileStorageManager.getAllCollectionsAllWorkspaces();
+          const result = await storageManager.getAllCollectionsAllWorkspaces();
           timingResults.collections = Math.round(performance.now() - start);
           const totalCollections = result.reduce((sum, w) => sum + w.collections.length, 0);
           console.log(`[DataLoader] Collections loaded: ${timingResults.collections}ms (${totalCollections} collections)`);
@@ -117,31 +131,33 @@ export const DataLoaderProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         // Load environments
         (async () => {
           const start = performance.now();
-          const envFile = await fileStorageManager.readEnvironments();
+          const envFile = await storageManager.readEnvironments();
           timingResults.environments = Math.round(performance.now() - start);
-          console.log(`[DataLoader] Environments loaded: ${timingResults.environments}ms`);
+          //console.log(`[DataLoader] Environments loaded: ${timingResults.environments}ms`);
           return envFile;
         })(),
         
         // Load config
         (async () => {
           const start = performance.now();
-          const config = await fileStorageManager.readConfig();
+          const config = await storageManager.readConfig();
           timingResults.config = Math.round(performance.now() - start);
-          console.log(`[DataLoader] Config loaded: ${timingResults.config}ms`);
+          //console.log(`[DataLoader] Config loaded: ${timingResults.config}ms`);
           return config;
         })(),
       ]);
 
-      console.log(`[DataLoader] Parallel loading took: ${Math.round(performance.now() - parallelStart)}ms`);
+      //console.log(`[DataLoader] Parallel loading took: ${Math.round(performance.now() - parallelStart)}ms`);
 
       // Process workspaces
       let workspaces = workspaceFilesResult.map(echoConverter.workspaceFileToWorkspace);
+
+      //console.log('[DataLoader] Workspaces loaded:', workspaces);
       
       // If no workspaces exist, create a default one
       if (workspaces.length === 0) {
         console.log('[DataLoader] Creating default workspace...');
-        const result = await fileStorageManager.createWorkspace(
+        const result = await storageManager.createWorkspace(
           'Default Workspace',
           'Your default workspace',
           WORKSPACE_COLORS[0]
@@ -151,13 +167,17 @@ export const DataLoaderProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
       }
 
+      //console.log('[DataLoader] collectionsDataResult:', collectionsDataResult);
+
       // Process collections
       const collections: Collection[] = [];
       for (const { workspace, collections: echoFiles } of collectionsDataResult) {
         const workspaceFile = workspaceFilesResult.find(w => w.name === workspace);
         const workspaceId = workspaceFile?.id || workspace;
+        //console.log('[DataLoader] workspaceId:', workspaceId);
         
         for (const echoFile of echoFiles) {
+        
           collections.push(echoConverter.echoFileToCollection(echoFile, workspaceId));
         }
       }
@@ -165,6 +185,8 @@ export const DataLoaderProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       // Process environments
       let environments: Environment[] = [];
       let selectedEnvironmentId: string | null = null;
+
+      //console.log('[DataLoader] environmentsResult:', environmentsResult);
       
       if (environmentsResult) {
         const envData = echoConverter.globalFileToEnvironments(environmentsResult);
@@ -205,7 +227,7 @@ export const DataLoaderProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } finally {
       setIsLoading(false);
     }
-  }, [isWebMode]);
+  }, [isWebMode, isWebFileSystemEnabled]);
 
   // Initial load
   useEffect(() => {
@@ -214,9 +236,19 @@ export const DataLoaderProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     loadAllData();
   }, [loadAllData]);
 
+  // Reload when web file system becomes enabled
+  useEffect(() => {
+    if (isWebMode && isWebFileSystemEnabled && !lastWebFsEnabledRef.current) {
+      console.log('[DataLoader] Web file system just enabled, reloading data...');
+      lastWebFsEnabledRef.current = true;
+      setIsLoading(true);
+      loadAllData(true);
+    }
+  }, [isWebMode, isWebFileSystemEnabled, loadAllData]);
+
   const refresh = useCallback(async () => {
     setIsLoading(true);
-    await loadAllData();
+    await loadAllData(true);
   }, [loadAllData]);
 
   return (

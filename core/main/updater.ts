@@ -1,19 +1,6 @@
 import { autoUpdater, UpdateInfo } from 'electron-updater';
-import { BrowserWindow, ipcMain } from 'electron';
-
-// IPC channel constants (duplicated here to avoid cross-rootDir import issues)
-const IPC_CHANNELS = {
-  CHECK_FOR_UPDATES: 'check-for-updates',
-  UPDATE_AVAILABLE: 'update-available',
-  UPDATE_NOT_AVAILABLE: 'update-not-available',
-  UPDATE_DOWNLOADED: 'update-downloaded',
-  UPDATE_ERROR: 'update-error',
-  DOWNLOAD_UPDATE: 'download-update',
-  INSTALL_UPDATE: 'install-update',
-  QUIT_AND_INSTALL_LATER: 'quit-and-install-later',
-  GET_APP_VERSION: 'get-app-version',
-  UPDATE_DOWNLOAD_PROGRESS: 'update-download-progress',
-} as const;
+import { BrowserWindow, ipcMain, app } from 'electron';
+import { UPDATE_CHANNELS } from '../shared/ipc-channels';
 
 export interface UpdaterConfig {
   autoCheckUpdates?: boolean;
@@ -25,14 +12,19 @@ let updateDownloaded = false;
 
 export function setupUpdater(mainWindow: BrowserWindow | null, config: UpdaterConfig = {}): void {
   const { autoCheckUpdates = true } = config;
-  
+
+  // Allows to test updates with a not packaged app
+  if (!app.isPackaged) {
+    autoUpdater.forceDevUpdateConfig = true;
+  }
+ 
   // Configure auto-updater
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
   
   // Allow pre-release updates if current version is pre-release
   autoUpdater.allowPrerelease = false;
-  
+
   // Check for updates on startup (after a delay) only if enabled
   if (autoCheckUpdates) {
     setTimeout(() => {
@@ -50,24 +42,19 @@ export function setupUpdater(mainWindow: BrowserWindow | null, config: UpdaterCo
 
   autoUpdater.on('update-available', (info: UpdateInfo) => {
     console.log('[Updater] Update available:', info.version);
-    mainWindow?.webContents.send(IPC_CHANNELS.UPDATE_AVAILABLE, {
-      version: info.version,
-      releaseNotes: info.releaseNotes,
-      releaseDate: info.releaseDate,
-      releaseName: info.releaseName,
-    });
+    onUpdateAvailable(mainWindow, info);
   });
 
   autoUpdater.on('update-not-available', (info: UpdateInfo) => {
     console.log('[Updater] No updates available, current version:', info.version);
-    mainWindow?.webContents.send(IPC_CHANNELS.UPDATE_NOT_AVAILABLE, {
+    mainWindow?.webContents.send(UPDATE_CHANNELS.UPDATE_NOT_AVAILABLE, {
       currentVersion: info.version,
     });
   });
 
   autoUpdater.on('error', (err: Error) => {
     console.error('[Updater] Error:', err.message);
-    mainWindow?.webContents.send(IPC_CHANNELS.UPDATE_ERROR, {
+    mainWindow?.webContents.send(UPDATE_CHANNELS.UPDATE_ERROR, {
       message: err.message,
     });
   });
@@ -75,7 +62,7 @@ export function setupUpdater(mainWindow: BrowserWindow | null, config: UpdaterCo
   autoUpdater.on('download-progress', (progress) => {
     const logMessage = `[Updater] Download progress: ${progress.percent.toFixed(1)}% (${formatBytes(progress.transferred)}/${formatBytes(progress.total)})`;
     console.log(logMessage);
-    mainWindow?.webContents.send(IPC_CHANNELS.UPDATE_DOWNLOAD_PROGRESS, {
+    mainWindow?.webContents.send(UPDATE_CHANNELS.UPDATE_DOWNLOAD_PROGRESS, {
       percent: progress.percent,
       transferred: progress.transferred,
       total: progress.total,
@@ -87,7 +74,7 @@ export function setupUpdater(mainWindow: BrowserWindow | null, config: UpdaterCo
     console.log('[Updater] Update downloaded:', info.version);
     pendingUpdateInfo = info;
     updateDownloaded = true;
-    mainWindow?.webContents.send(IPC_CHANNELS.UPDATE_DOWNLOADED, {
+    mainWindow?.webContents.send(UPDATE_CHANNELS.UPDATE_DOWNLOADED, {
       version: info.version,
       releaseNotes: info.releaseNotes,
       releaseDate: info.releaseDate,
@@ -95,11 +82,14 @@ export function setupUpdater(mainWindow: BrowserWindow | null, config: UpdaterCo
     });
   });
 
+
+
   // IPC handlers
-  ipcMain.handle(IPC_CHANNELS.CHECK_FOR_UPDATES, async () => {
+  ipcMain.handle(UPDATE_CHANNELS.CHECK_FOR_UPDATES, async () => {
     try {
       console.log('[Updater] Manual check for updates triggered');
       const result = await autoUpdater.checkForUpdates();
+      console.log('[Updater] Check for updates result:', result);
       return {
         updateAvailable: result?.updateInfo ? true : false,
         version: result?.updateInfo?.version,
@@ -111,7 +101,7 @@ export function setupUpdater(mainWindow: BrowserWindow | null, config: UpdaterCo
       console.error('[Updater] Failed to check for updates:', errorMessage);
       
       // Send error event to renderer
-      mainWindow?.webContents.send(IPC_CHANNELS.UPDATE_ERROR, {
+      mainWindow?.webContents.send(UPDATE_CHANNELS.UPDATE_ERROR, {
         message: errorMessage.includes('404') || errorMessage.includes('No published versions')
           ? 'No releases found. Please check back later.'
           : errorMessage,
@@ -121,7 +111,7 @@ export function setupUpdater(mainWindow: BrowserWindow | null, config: UpdaterCo
     }
   });
 
-  ipcMain.handle(IPC_CHANNELS.DOWNLOAD_UPDATE, async () => {
+  ipcMain.handle(UPDATE_CHANNELS.DOWNLOAD_UPDATE, async () => {
     try {
       console.log('[Updater] Starting update download...');
       await autoUpdater.downloadUpdate();
@@ -132,7 +122,7 @@ export function setupUpdater(mainWindow: BrowserWindow | null, config: UpdaterCo
     }
   });
 
-  ipcMain.handle(IPC_CHANNELS.INSTALL_UPDATE, () => {
+  ipcMain.handle(UPDATE_CHANNELS.INSTALL_UPDATE, () => {
     console.log('[Updater] Installing update and restarting...');
     // quitAndInstall(isSilent, isForceRunAfter)
     // isSilent: false = show installer window
@@ -141,15 +131,49 @@ export function setupUpdater(mainWindow: BrowserWindow | null, config: UpdaterCo
   });
 
   // Mark update to be installed on next app quit
-  ipcMain.handle(IPC_CHANNELS.QUIT_AND_INSTALL_LATER, () => {
+  ipcMain.handle(UPDATE_CHANNELS.QUIT_AND_INSTALL_LATER, () => {
     console.log('[Updater] Update will be installed on next app restart');
     // autoInstallOnAppQuit is already true, so update will install on quit
     return { success: true, updatePending: updateDownloaded };
   });
 
-  ipcMain.handle(IPC_CHANNELS.GET_APP_VERSION, () => {
-    return autoUpdater.currentVersion.version;
+  // Set custom update server URL (for debug mode)
+  ipcMain.handle(UPDATE_CHANNELS.SET_UPDATE_SERVER, (_, url: string | null) => {
+    try {
+      if (url && url.trim()) {
+        console.log('[Updater] Setting custom update server URL:', url);
+        autoUpdater.setFeedURL({
+          provider: 'generic',
+          url: url.trim(),
+        });
+      } else {
+        // Reset to default GitHub releases
+        console.log('[Updater] Resetting to default update server');
+        autoUpdater.setFeedURL({
+          provider: 'github',
+          owner: 'echolon-app',
+          repo: 'echolon',
+        });
+      }
+      return { success: true, feedUrl: autoUpdater.getFeedURL() };
+    } catch (error) {
+      console.error('[Updater] Failed to set update server:', error);
+      return { success: false, error: String(error) };
+    }
   });
+
+}
+
+export function onUpdateAvailable(mainWindow: BrowserWindow | null, info: UpdateInfo): void {
+  console.log('[Updater] Update available:', info.version);
+  if (mainWindow) {
+    mainWindow.webContents.send(UPDATE_CHANNELS.UPDATE_AVAILABLE, {
+      version: info.version,
+      releaseNotes: info.releaseNotes,
+      releaseDate: info.releaseDate,
+      releaseName: info.releaseName,
+    });
+  }
 }
 
 // Helper function to format bytes

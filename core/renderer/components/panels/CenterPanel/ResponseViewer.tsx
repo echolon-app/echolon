@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import AceEditor from 'react-ace';
-import { useTheme } from '@/contexts';
-import { CodeEditor } from '@/components/ui';
+import { useTheme, useApp } from '@/contexts';
+import { CodeEditor, Switch } from '@/components/ui';
 import { 
   GlobeIcon, CopyIcon, CheckIcon, DownloadIcon, FilterIcon, SearchIcon,
-  HelpIcon, CloseIcon, HorizontalLayoutIcon, VerticalLayoutIcon, ErrorIcon 
+  HelpIcon, CloseIcon, HorizontalLayoutIcon, VerticalLayoutIcon, ErrorIcon, EyeIcon 
 } from '@/components/ui/icons';
 import { RequestExecution, ScriptOutput } from '@/types';
 import { ContextMenu, useContextMenu, Tooltip, Dropdown } from '@/components/ui';
@@ -97,9 +97,53 @@ const applyJsonPath = (obj: any, path: string): any => {
   return result;
 };
 
-type ResponseTab = 'body' | 'cookies' | 'headers' | 'scripts';
+type ResponseTab = 'body' | 'cookies' | 'headers' | 'scripts' | 'preview';
 type BodyViewMode = 'response' | 'example' | 'schema';
 type ContentDisplayMode = 'auto' | 'json' | 'html' | 'xml' | 'javascript' | 'raw' | 'hex' | 'base64';
+
+// Helper to determine if content type is previewable media
+const isPreviewableMedia = (contentType: string): boolean => {
+  const ct = contentType.toLowerCase();
+  return (
+    ct.startsWith('image/') ||
+    ct.startsWith('video/') ||
+    ct.startsWith('audio/') ||
+    ct.includes('application/pdf')
+  );
+};
+
+// Helper to determine if content type is HTML
+const isHtmlContent = (contentType: string): boolean => {
+  const ct = contentType.toLowerCase();
+  return ct.includes('text/html') || ct.includes('application/xhtml');
+};
+
+// Helper to determine the media type category
+const getMediaCategory = (contentType: string): 'image' | 'video' | 'audio' | 'pdf' | null => {
+  const ct = contentType.toLowerCase();
+  if (ct.startsWith('image/')) return 'image';
+  if (ct.startsWith('video/')) return 'video';
+  if (ct.startsWith('audio/')) return 'audio';
+  if (ct.includes('application/pdf')) return 'pdf';
+  return null;
+};
+
+// Helper to convert base64 to Blob URL (more efficient for large files like videos/PDFs)
+const base64ToBlobUrl = (base64: string, contentType: string): string => {
+  try {
+    const byteCharacters = atob(base64);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: contentType });
+    return URL.createObjectURL(blob);
+  } catch (e) {
+    console.error('Failed to create blob URL:', e);
+    return '';
+  }
+};
 
 // Content display mode options
 const contentDisplayModeOptions = [
@@ -148,6 +192,158 @@ interface ResponseViewerProps {
   isExpanded?: boolean;
 }
 
+// Media Preview component - properly manages blob URLs for video/audio/PDF
+const MediaPreview: React.FC<{ bodyBase64: string; contentType: string }> = ({ bodyBase64, contentType }) => {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const mediaCategory = getMediaCategory(contentType);
+
+  // Create blob URL for video/audio/PDF (data URLs don't work well for these)
+  useEffect(() => {
+    if (!bodyBase64 || !mediaCategory) return;
+
+    // For images, we don't need blob URLs - data URLs work fine
+    if (mediaCategory === 'image') {
+      setBlobUrl(null);
+      return;
+    }
+
+    // Create blob URL for video/audio/PDF
+    const url = base64ToBlobUrl(bodyBase64, contentType);
+    setBlobUrl(url);
+
+    // Cleanup: revoke blob URL when component unmounts or data changes
+    return () => {
+      if (url) {
+        URL.revokeObjectURL(url);
+      }
+    };
+  }, [bodyBase64, contentType, mediaCategory]);
+
+  if (!mediaCategory) {
+    return (
+      <div className="response-viewer__preview">
+        <div className="response-viewer__preview-unsupported">
+          <p>Preview not available for this content type: {contentType}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // For images, use data URL (works fine and is simpler)
+  if (mediaCategory === 'image') {
+    const dataUrl = `data:${contentType};base64,${bodyBase64}`;
+    return (
+      <div className="response-viewer__preview">
+        <div className="response-viewer__preview-image-container">
+          <img 
+            src={dataUrl}
+            alt="Response preview"
+            className="response-viewer__preview-image"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // For video/audio/PDF, use blob URL (data URLs don't work well for large files)
+  if (!blobUrl) {
+    return (
+      <div className="response-viewer__preview">
+        <div className="response-viewer__preview-unsupported">
+          <p>Loading preview...</p>
+        </div>
+      </div>
+    );
+  }
+
+  switch (mediaCategory) {
+    case 'video':
+      return (
+        <div className="response-viewer__preview">
+          <div className="response-viewer__preview-video-container">
+            <video 
+              src={blobUrl}
+              controls
+              autoPlay={false}
+              className="response-viewer__preview-video"
+            />
+          </div>
+        </div>
+      );
+    case 'audio':
+      return (
+        <div className="response-viewer__preview">
+          <div className="response-viewer__preview-audio-container">
+            <audio 
+              src={blobUrl}
+              controls
+              className="response-viewer__preview-audio"
+            />
+          </div>
+        </div>
+      );
+    case 'pdf':
+      return (
+        <div className="response-viewer__preview">
+          <div className="response-viewer__preview-pdf-container">
+            <object
+              data={blobUrl}
+              type="application/pdf"
+              className="response-viewer__preview-pdf"
+            >
+              {/* Fallback content when object can't render PDF */}
+              <div className="response-viewer__preview-pdf-fallback">
+                <p>PDF preview is not available in this environment.</p>
+                <a 
+                  href={blobUrl} 
+                  download="response.pdf"
+                  className="response-viewer__preview-download-link"
+                >
+                  Download PDF
+                </a>
+              </div>
+            </object>
+          </div>
+        </div>
+      );
+    default:
+      return (
+        <div className="response-viewer__preview">
+          <div className="response-viewer__preview-unsupported">
+            <p>Preview not available for this content type: {contentType}</p>
+          </div>
+        </div>
+      );
+  }
+};
+
+// HTML Preview component - renders HTML in a sandboxed iframe
+const HtmlPreview: React.FC<{ html: string }> = ({ html }) => {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    if (iframeRef.current) {
+      const doc = iframeRef.current.contentDocument;
+      if (doc) {
+        doc.open();
+        doc.write(html);
+        doc.close();
+      }
+    }
+  }, [html]);
+
+  return (
+    <div className="response-viewer__html-preview">
+      <iframe
+        ref={iframeRef}
+        className="response-viewer__html-preview-iframe"
+        sandbox="allow-same-origin"
+        title="HTML Preview"
+      />
+    </div>
+  );
+};
+
 // Script output section component
 const ScriptOutputSection: React.FC<{ title: string; output: ScriptOutput }> = ({ title, output }) => {
 
@@ -191,6 +387,7 @@ const ScriptOutputSection: React.FC<{ title: string; output: ScriptOutput }> = (
 
 export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoading, height = 300, specResponseInfo, onClose, onExpandToggle, isExpanded }) => {
   const { resolvedTheme } = useTheme();
+  const { openSettingsModal } = useApp();
   const [activeTab, setActiveTab] = useState<ResponseTab>('body');
   const editorRef = useRef<AceEditor>(null);
   const bodyContainerRef = useRef<HTMLDivElement>(null);
@@ -204,6 +401,7 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
   const filterInputRef = useRef<HTMLInputElement>(null);
   const [bodyViewMode, setBodyViewMode] = useState<BodyViewMode>('response');
   const [contentDisplayMode, setContentDisplayMode] = useState<ContentDisplayMode>('auto');
+  const [showHtmlPreview, setShowHtmlPreview] = useState(false);
   
   // Track the previous execution to detect new responses
   const prevExecutionRef = useRef<RequestExecution | null>(null);
@@ -236,9 +434,14 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
     );
     
     if (isNewResponse) {
-      // Switch to body tab when a new response arrives
-      setActiveTab('body');
-      setBodyViewMode('response');
+      // Switch to preview tab when a new response with previewable media arrives
+      if (execution?.response?.contentType && isPreviewableMedia(execution.response.contentType)) {
+        setActiveTab('preview');
+      } else {
+        // Switch to body tab when a new response arrives
+        setActiveTab('body');
+        setBodyViewMode('response');
+      }
     } else if (!hasResponse && hasSpec) {
       setBodyViewMode('example');
     } else if (hasResponse && bodyViewMode !== 'response' && bodyViewMode !== 'example' && bodyViewMode !== 'schema') {
@@ -390,10 +593,11 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
     }
   }, [showFilter]);
 
-  // Clear filter when response changes
+  // Clear filter and reset HTML preview when response changes
   useEffect(() => {
     setJsonPathFilter('');
     setFilterError(null);
+    setShowHtmlPreview(false);
   }, [response?.body]);
 
   const handleCopyToClipboard = useCallback(async () => {
@@ -601,7 +805,20 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
               <span className="response-viewer__error-code">Error code: {execution.errorCode}</span>
             )}
             {errorHelp && (
-              <p className="response-viewer__error-help">{errorHelp}</p>
+              <p className="response-viewer__error-help">
+                {errorHelp}
+                {execution.errorCode === 'ETIMEDOUT' && (
+                  <>
+                    {' '}
+                    <button 
+                      className="response-viewer__error-link"
+                      onClick={() => openSettingsModal('requests')}
+                    >
+                      Open Settings →
+                    </button>
+                  </>
+                )}
+              </p>
             )}
             {execution.duration > 0 && (
               <span className="response-viewer__error-duration">
@@ -676,6 +893,15 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
             Headers
             <span className="response-viewer__tab-badge">{response.headers.length}</span>
           </button>
+          {response.bodyBase64 && isPreviewableMedia(response.contentType) && (
+            <button
+              className={`response-viewer__tab ${activeTab === 'preview' ? 'active' : ''}`}
+              onClick={() => setActiveTab('preview')}
+            >
+              <EyeIcon />
+              Preview
+            </button>
+          )}
             </>
           )}
           {execution?.scriptsOutput && (execution.scriptsOutput.pre || execution.scriptsOutput.post) && (
@@ -814,6 +1040,17 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
                 )}
               </div>
               <div className="response-viewer__body-actions">
+                {/* HTML Preview Toggle - show when response is HTML */}
+                {response && isHtmlContent(response.contentType) && bodyViewMode === 'response' && (
+                  <div className="response-viewer__html-preview-toggle">
+                    <Switch
+                      checked={showHtmlPreview}
+                      onChange={setShowHtmlPreview}
+                      size="sm"
+                      label="Preview"
+                    />
+                  </div>
+                )}
                 <Dropdown
                   options={contentDisplayModeOptions}
                   value={contentDisplayMode}
@@ -855,7 +1092,7 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
                   type="text"
                   value={jsonPathFilter}
                   onChange={(e) => setJsonPathFilter(e.target.value)}
-                  placeholder="Filter JSON (uses JSONPath syntax)"
+                  placeholder="Filter JSON (uses JSONPath syntax, Example: $.data)"
                   className="response-viewer__filter-input"
                 />
                 {jsonPathFilter && (
@@ -895,15 +1132,20 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
               </div>
             )}
 
-            <CodeEditor
-              ref={editorRef}
-              mode={bodyViewMode === 'response' ? getEditorMode() : 'json'}
-              value={getBodyContent()}
-              readOnly
-              width="100%"
-              height={`${showFilter ? editorHeight - 50 : editorHeight}px`}
-              onLoad={handleEditorLoad}
-            />
+            {/* Show HTML preview or code editor based on toggle */}
+            {showHtmlPreview && response && isHtmlContent(response.contentType) && bodyViewMode === 'response' ? (
+              <HtmlPreview html={response.body} />
+            ) : (
+              <CodeEditor
+                ref={editorRef}
+                mode={bodyViewMode === 'response' ? getEditorMode() : 'json'}
+                value={getBodyContent()}
+                readOnly
+                width="100%"
+                height={`${showFilter ? editorHeight - 50 : editorHeight}px`}
+                onLoad={handleEditorLoad}
+              />
+            )}
           </div>
         )}
 
@@ -971,6 +1213,13 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
               <p className="response-viewer__empty-message">No script output</p>
             )}
           </div>
+        )}
+
+        {activeTab === 'preview' && response?.bodyBase64 && (
+          <MediaPreview 
+            bodyBase64={response.bodyBase64} 
+            contentType={response.contentType} 
+          />
         )}
       </div>
 

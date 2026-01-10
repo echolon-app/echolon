@@ -20,6 +20,7 @@ export interface SyncManagerCallbacks {
   onSyncError?: (collectionId: string, error: string) => void;
   getCollections: () => Collection[];
   updateCollection: (id: string, updates: Partial<Collection>) => void;
+  getWorkspaceNameForCollection: (collectionId: string) => string | undefined;
 }
 
 /**
@@ -324,28 +325,79 @@ export class SyncManager {
   }
 
   private async savePendingChanges(): Promise<void> {
+    if (!this.callbacks) return;
+    
     try {
-      const pending: Record<string, PendingSpecChanges> = {};
-      for (const [id, state] of this.syncStates) {
+      // Group pending changes by workspace
+      const pendingByWorkspace: Map<string, Record<string, PendingSpecChanges>> = new Map();
+      
+      for (const [collectionId, state] of this.syncStates) {
         if (state.pendingChanges) {
-          pending[id] = state.pendingChanges;
+          const workspaceName = this.callbacks.getWorkspaceNameForCollection(collectionId);
+          if (workspaceName) {
+            if (!pendingByWorkspace.has(workspaceName)) {
+              pendingByWorkspace.set(workspaceName, {});
+            }
+            pendingByWorkspace.get(workspaceName)![collectionId] = state.pendingChanges;
+          }
         }
       }
-      await fileStorageManager.writeDataFile(PENDING_CHANGES_FILE, pending);
+      
+      // Save each workspace's pending changes to its own file
+      for (const [workspaceName, pending] of pendingByWorkspace) {
+        await fileStorageManager.writeWorkspaceDataFile(workspaceName, PENDING_CHANGES_FILE, pending);
+      }
+      
+      // Also clear any workspaces that no longer have pending changes
+      const collections = this.callbacks.getCollections();
+      const workspacesWithCollections = new Set<string>();
+      for (const collection of collections) {
+        const workspaceName = this.callbacks.getWorkspaceNameForCollection(collection.id);
+        if (workspaceName) {
+          workspacesWithCollections.add(workspaceName);
+        }
+      }
+      
+      // Clear pending changes from workspaces that had them but now don't
+      for (const workspaceName of workspacesWithCollections) {
+        if (!pendingByWorkspace.has(workspaceName)) {
+          // Write empty object to clear the file (or delete it)
+          await fileStorageManager.writeWorkspaceDataFile(workspaceName, PENDING_CHANGES_FILE, {});
+        }
+      }
     } catch (error) {
       console.error('Failed to save pending changes:', error);
     }
   }
 
   private async loadPendingChanges(): Promise<void> {
+    if (!this.callbacks) return;
+    
     try {
-      const pending = await fileStorageManager.readDataFile<Record<string, PendingSpecChanges>>(PENDING_CHANGES_FILE);
-      if (pending) {
-        for (const [collectionId, changes] of Object.entries(pending)) {
-          this.updateSyncState(collectionId, {
-            status: 'has-changes',
-            pendingChanges: changes,
-          });
+      // Get all collections to find their workspaces
+      const collections = this.callbacks.getCollections();
+      const workspaces = new Set<string>();
+      
+      for (const collection of collections) {
+        const workspaceName = this.callbacks.getWorkspaceNameForCollection(collection.id);
+        if (workspaceName) {
+          workspaces.add(workspaceName);
+        }
+      }
+      
+      // Load pending changes from each workspace
+      for (const workspaceName of workspaces) {
+        const pending = await fileStorageManager.readWorkspaceDataFile<Record<string, PendingSpecChanges>>(
+          workspaceName, 
+          PENDING_CHANGES_FILE
+        );
+        if (pending) {
+          for (const [collectionId, changes] of Object.entries(pending)) {
+            this.updateSyncState(collectionId, {
+              status: 'has-changes',
+              pendingChanges: changes,
+            });
+          }
         }
       }
     } catch (error) {

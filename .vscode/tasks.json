@@ -196,7 +196,7 @@
     {
       "label": "SSH",
       "type": "shell",
-      "command": "cd proxy-server && npm run ssh",
+      "command": "cd api && npm run ssh",
       "problemMatcher": [],
       "group": {
         "kind": "build",
@@ -326,6 +326,40 @@
       "label": "Sample API:Deploy",
       "type": "shell",
       "command": "cd sample-api && npm run deploy",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": false
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "API:Dev",
+      "type": "shell",
+      "command": "cd api && npm run dev",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": false
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "API:Deploy",
+      "type": "shell",
+      "command": "cd api && npm run deploy",
       "presentation": {
         "echo": true,
         "reveal": "always",

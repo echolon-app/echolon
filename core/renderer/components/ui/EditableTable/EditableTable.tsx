@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { KeyValuePair, CollectionEnvironment } from '@/types';
-import { CheckIcon, TrashIcon, PlusIcon, MockingIcon as InheritedIcon } from '@/components/ui/icons';
+import { CheckIcon, TrashIcon, PlusIcon, MockingIcon as InheritedIcon, LockIcon, EyeIcon, EyeOffIcon } from '@/components/ui/icons';
 import { Input, NavigateToVariableCallback } from '../Input';
 import { Button } from '../Button';
+import { Tooltip } from '../Tooltip';
 import './EditableTable.css';
 
 export interface EditableTableProps {
@@ -26,6 +27,8 @@ export interface EditableTableProps {
   collectionEnvironment?: CollectionEnvironment | null;
   /** Callback when user double-clicks a variable to navigate to its definition */
   onNavigateToVariable?: NavigateToVariableCallback;
+  /** Show the secure toggle column for variables */
+  showSecureToggle?: boolean;
 }
 
 export const EditableTable: React.FC<EditableTableProps> = ({
@@ -43,8 +46,11 @@ export const EditableTable: React.FC<EditableTableProps> = ({
   valueSuggestions = [],
   collectionEnvironment,
   onNavigateToVariable,
+  showSecureToggle = false,
 }) => {
   const [focusedRow, setFocusedRow] = useState<string | null>(null);
+  // Track which secure rows are currently revealed
+  const [revealedRows, setRevealedRows] = useState<Set<string>>(new Set());
 
   const handleUpdate = useCallback((id: string, field: keyof KeyValuePair, value: string | boolean) => {
     const newData = data.map(item =>
@@ -87,6 +93,38 @@ export const EditableTable: React.FC<EditableTableProps> = ({
     }
   };
 
+  const handleToggleSecure = useCallback((id: string) => {
+    const item = data.find(i => i.id === id);
+    if (item) {
+      handleUpdate(id, 'secure', !item.secure);
+      // If we're making it not secure, remove from revealed set
+      if (item.secure) {
+        setRevealedRows(prev => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }
+    }
+  }, [data, handleUpdate]);
+
+  const handleToggleReveal = useCallback((id: string) => {
+    setRevealedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  // Generate masked value for secure fields
+  const getMaskedValue = (value: string) => {
+    return '•'.repeat(Math.min(value.length || 8, 20));
+  };
+
   return (
     <div className="editable-table">
       <div className="editable-table__header">
@@ -95,6 +133,13 @@ export const EditableTable: React.FC<EditableTableProps> = ({
         <div className="editable-table__cell editable-table__cell--value">{valuePlaceholder}</div>
         {showDescription && (
           <div className="editable-table__cell editable-table__cell--description">{descriptionPlaceholder}</div>
+        )}
+        {showSecureToggle && (
+          <div className="editable-table__cell editable-table__cell--secure">
+            <Tooltip content="Mark as secret" position="top">
+              <LockIcon />
+            </Tooltip>
+          </div>
         )}
         <div className="editable-table__cell editable-table__cell--actions" />
       </div>
@@ -143,20 +188,46 @@ export const EditableTable: React.FC<EditableTableProps> = ({
               )}
             </div>
             <div className="editable-table__cell editable-table__cell--value">
-              <Input
-                size="sm"
-                placeholder={valuePlaceholder}
-                value={item.value}
-                onChange={(e) => handleUpdate(item.id, 'value', e.target.value)}
-                onFocus={() => setFocusedRow(item.id)}
-                onBlur={() => setFocusedRow(null)}
-                onKeyDown={(e) => handleKeyDown(e, index)}
-                disabled={readOnly || item.isSystem}
-                supportVariables
-                suggestions={valueSuggestions}
-                collectionEnvironment={collectionEnvironment}
-                onNavigateToVariable={onNavigateToVariable}
-              />
+              {item.secure && !revealedRows.has(item.id) && focusedRow !== item.id ? (
+                <div className="editable-table__secure-value">
+                  <span className="editable-table__masked-value">{getMaskedValue(item.value)}</span>
+                  <button
+                    type="button"
+                    className="editable-table__reveal-btn"
+                    onClick={() => handleToggleReveal(item.id)}
+                    title="Reveal value"
+                  >
+                    <EyeIcon />
+                  </button>
+                </div>
+              ) : (
+                <div className="editable-table__value-wrapper">
+                  <Input
+                    size="sm"
+                    placeholder={valuePlaceholder}
+                    value={item.value}
+                    onChange={(e) => handleUpdate(item.id, 'value', e.target.value)}
+                    onFocus={() => setFocusedRow(item.id)}
+                    onBlur={() => setFocusedRow(null)}
+                    onKeyDown={(e) => handleKeyDown(e, index)}
+                    disabled={readOnly || item.isSystem}
+                    supportVariables
+                    suggestions={valueSuggestions}
+                    collectionEnvironment={collectionEnvironment}
+                    onNavigateToVariable={onNavigateToVariable}
+                  />
+                  {item.secure && revealedRows.has(item.id) && (
+                    <button
+                      type="button"
+                      className="editable-table__hide-btn"
+                      onClick={() => handleToggleReveal(item.id)}
+                      title="Hide value"
+                    >
+                      <EyeOffIcon />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
             {showDescription && (
               <div className="editable-table__cell editable-table__cell--description">
@@ -169,6 +240,20 @@ export const EditableTable: React.FC<EditableTableProps> = ({
                   onBlur={() => setFocusedRow(null)}
                   disabled={readOnly || item.isSystem}
                 />
+              </div>
+            )}
+            {showSecureToggle && (
+              <div className="editable-table__cell editable-table__cell--secure">
+                <Tooltip content={item.secure ? 'Remove secret' : 'Mark as secret'} position="top">
+                  <button
+                    type="button"
+                    className={`editable-table__secure-toggle ${item.secure ? 'editable-table__secure-toggle--active' : ''}`}
+                    onClick={() => handleToggleSecure(item.id)}
+                    disabled={readOnly}
+                  >
+                    <LockIcon />
+                  </button>
+                </Tooltip>
               </div>
             )}
             <div className="editable-table__cell editable-table__cell--actions">

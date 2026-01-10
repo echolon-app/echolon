@@ -3,23 +3,10 @@ import { BrowserWindow } from 'electron';
 import https from 'https';
 import http from 'http';
 import { URL } from 'url';
+import { CLOUD_PROXY_CHANNELS } from '../shared/ipc-channels';
 
-// IPC channel constants
-export const CLOUD_PROXY_CHANNELS = {
-  CONNECT: 'cloud-proxy-connect',
-  DISCONNECT: 'cloud-proxy-disconnect',
-  STATUS: 'cloud-proxy-status',
-  STATUS_CHANGED: 'cloud-proxy-status-changed',
-  REQUEST_RECEIVED: 'cloud-proxy-request-received',
-  FORWARDED_RESPONSE: 'cloud-proxy-forwarded-response',
-  SEND_RESPONSE: 'cloud-proxy-send-response',
-  CHECK_NAMESPACE: 'cloud-proxy-check-namespace',
-  // Mock management
-  FETCH_MOCKS: 'cloud-proxy-fetch-mocks',
-  UPLOAD_MOCK: 'cloud-proxy-upload-mock',
-  DELETE_MOCK: 'cloud-proxy-delete-mock',
-  SYNC_MOCKS: 'cloud-proxy-sync-mocks',
-} as const;
+// Re-export for backward compatibility
+export { CLOUD_PROXY_CHANNELS };
 
 // Types
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';

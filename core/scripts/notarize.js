@@ -8,13 +8,14 @@ exports.default = async function notarizing(context) {
   }
 
   // Skip notarization if environment variables are not set
-  if (!process.env.APPLE_ID || !process.env.APPLE_APP_SPECIFIC_PASSWORD) {
-    console.log('Skipping notarization: APPLE_ID or APPLE_APP_SPECIFIC_PASSWORD not set');
+  if (!process.env.APPLE_ID || !process.env.APPLE_APP_SPECIFIC_PASSWORD || process.env.SKIP_NOTARIZATION === 'true') {
+    console.log('Skipping notarization: APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD not set or SKIP_NOTARIZATION is set');
     return;
   }
 
   const appName = context.packager.appInfo.productFilename;
 
+  console.time('Notarization');
   console.log(`Notarizing ${appName}...`);
 
   try {
@@ -25,7 +26,7 @@ exports.default = async function notarizing(context) {
       appleIdPassword: process.env.APPLE_APP_SPECIFIC_PASSWORD,
       teamId: process.env.APPLE_TEAM_ID,
     });
-    console.log('Notarization complete!');
+    console.timeEnd('Notarization');
   } catch (error) {
     console.error('Notarization failed:', error);
     throw error;

@@ -49,6 +49,7 @@ export interface HttpResponseResult {
   statusText?: string;
   headers?: Array<{ key: string; value: string }>;
   body?: string;
+  bodyBase64?: string; // Base64-encoded body for binary content (images, videos, PDFs, etc.)
   size?: number;
   duration: number;
   timing?: ResponseTiming;
@@ -95,7 +96,7 @@ export async function makeHttpRequest(options: HttpRequestOptions): Promise<Http
       // Mark end of prepare phase
       const prepareEnd = performance.now();
 
-      console.log('parsedUrl', method, parsedUrl);
+      console.log('MAKE_REQ:', method+":"+parsedUrl.toString());
 
       // Build headers, conditionally including User-Agent
       const requestHeaders: Record<string, string> = {
@@ -162,7 +163,35 @@ export async function makeHttpRequest(options: HttpRequestOptions): Promise<Http
 
           timings.processingComplete = performance.now();
 
-          const bodyText = bodyBuffer.toString('utf-8');
+          // Determine content type from headers
+          const contentTypeHeader = res.headers['content-type'] || '';
+          const contentTypeLower = contentTypeHeader.toLowerCase();
+          
+          // Check if content is binary (images, videos, PDFs, audio, etc.)
+          const isBinaryContent = 
+            contentTypeLower.startsWith('image/') ||
+            contentTypeLower.startsWith('video/') ||
+            contentTypeLower.startsWith('audio/') ||
+            contentTypeLower.includes('application/pdf') ||
+            contentTypeLower.includes('application/octet-stream') ||
+            contentTypeLower.includes('application/zip') ||
+            contentTypeLower.includes('application/gzip') ||
+            contentTypeLower.includes('font/') ||
+            contentTypeLower.includes('application/font') ||
+            contentTypeLower.includes('application/vnd.ms-') ||
+            contentTypeLower.includes('application/vnd.openxmlformats');
+          
+          // For binary content, use base64 encoding; for text, use UTF-8
+          let bodyText: string | undefined;
+          let bodyBase64: string | undefined;
+          
+          if (isBinaryContent) {
+            bodyBase64 = bodyBuffer.toString('base64');
+            bodyText = `[Binary content: ${contentTypeHeader}]`;
+          } else {
+            bodyText = bodyBuffer.toString('utf-8');
+          }
+
           const responseHeaders: Array<{ key: string; value: string }> = [];
           
           // Convert headers to array format
@@ -239,6 +268,7 @@ export async function makeHttpRequest(options: HttpRequestOptions): Promise<Http
             statusText: res.statusMessage || '',
             headers: responseHeaders,
             body: bodyText,
+            bodyBase64,
             size: bodyBuffer.length,
             duration,
             timing,

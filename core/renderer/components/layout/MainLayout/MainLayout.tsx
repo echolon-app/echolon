@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { TopBar } from '../TopBar';
 import { LeftSidebar } from '../LeftSidebar';
 import { BottomBar } from '../BottomBar';
-import { useApp } from '@/contexts';
+import { StorageBanner } from '@/components/ui';
+import { useApp, useFileStorage, useWebModeOptional } from '@/contexts';
 import { storageManager } from '@/services';
 import './MainLayout.css';
 
@@ -20,6 +21,9 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   consolePanel,
 }) => {
   const { sidebarState, leftPanelVisible, consoleVisible, codePanelVisible } = useApp();
+  const { isWebMode, isWebFileSystemEnabled, enableWebFileSystem } = useFileStorage();
+  const webMode = useWebModeOptional();
+  const readonly = webMode?.readonly ?? false;
   const sidebarVisible = sidebarState !== 'hidden';
   
   // Resizable panel widths - load from localStorage
@@ -127,6 +131,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
 
   return (
     <div className="main-layout">
+      <StorageBanner
+        onEnableStorage={enableWebFileSystem}
+        isStorageEnabled={isWebFileSystemEnabled}
+        isWebMode={isWebMode}
+        readonly={readonly}
+      />
       <TopBar />
       
       <div className="main-layout__body">

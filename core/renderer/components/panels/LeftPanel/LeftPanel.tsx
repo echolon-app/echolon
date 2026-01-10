@@ -5,9 +5,10 @@ import {
 } from '@/components/ui';
 import { 
   RadarIcon, PlusIcon, FolderIcon, ImportIcon, PlayIcon, StopIcon, ServerIcon, SocketIcon, GraphQLIcon, 
-  MailIcon, CollapseAllIcon, ExpandAllIcon, EditIcon, CopyIcon, ExportIcon, TrashIcon, OpenIcon, NewTabIcon, MoveIcon
+  MailIcon, CollapseAllIcon, ExpandAllIcon, EditIcon, CopyIcon, ExportIcon, TrashIcon, OpenIcon, NewTabIcon, MoveIcon,
+  WorkspacesIcon
 } from '@/components/ui/icons';
-import { useApp, useCollections, useRequest, useEnvironments, useMocking, useWebMode, useToast } from '@/contexts';
+import { useApp, useCollections, useRequest, useEnvironments, useMocking, useWebMode, useToast, useWorkspace } from '@/contexts';
 import { GitPanel } from '@/components/panels/GitPanel';
 import { GitHubConnectModal } from '@/components/modals/GitHubConnectModal';
 import { requestService } from '@/services';
@@ -20,11 +21,21 @@ const getMethodColor = (method: string): string => {
   return METHOD_COLORS[method] || '#9ca3af';
 };
 
+// Helper function to count all requests in a folder (recursively)
+const countFolderRequests = (folder: Folder): number => {
+  return folder.requests.length + folder.folders.reduce((sum, f) => sum + countFolderRequests(f), 0);
+};
+
+// Helper function to count all requests in a collection
+const countCollectionRequests = (collection: Collection): number => {
+  return collection.requests.length + collection.folders.reduce((sum, f) => sum + countFolderRequests(f), 0);
+};
+
 export const LeftPanel: React.FC = () => {
   const { sidebarView, openImportModal, openNewCollectionModal, openNewEnvironmentModal, openMoveCollectionModal } = useApp();
   const { collections, deleteCollection, addRequest, updateRequest, updateCollection, updateFolder, collapseAllFolders, expandAllFolders, moveRequestToCollection, deleteRequest } = useCollections();
   const { environments, toggleEnvironmentActive } = useEnvironments();
-  const { addTab, addSampleTab, addCollectionTab, addEnvironmentTab, history, closeTab, tabs, setActiveTab, renameTab, activeTabId, activeTab } = useRequest();
+  const { addTab, addSampleTab, addCollectionTab, addEnvironmentTab, addWorkspaceTab, history, closeTab, tabs: allTabs, workspaceTabs: tabs, setActiveTab, renameTab, activeTabId, activeTab } = useRequest();
   const { 
     mockApis, 
     activeMockApiId, 
@@ -36,6 +47,7 @@ export const LeftPanel: React.FC = () => {
     localHostname 
   } = useMocking();
   const { readonly, isWebMode } = useWebMode();
+  const { workspaces, addWorkspace, activeWorkspaceId } = useWorkspace();
   const { error: showError } = useToast();
   
   // Scroll sync state - listen for events from CollectionEditor
@@ -119,7 +131,7 @@ export const LeftPanel: React.FC = () => {
   
   const [searchQuery, setSearchQuery] = useState('');
   const { contextMenu, showContextMenu, hideContextMenu } = useContextMenu();
-  const [contextTarget, setContextTarget] = useState<{ type: string; item: unknown } | null>(null);
+  const [contextTarget, setContextTarget] = useState<{ type: string; item: unknown; collectionId?: string; folderId?: string } | null>(null);
   const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [editingCollectionId, setEditingCollectionId] = useState<string | null>(null);
@@ -277,8 +289,8 @@ export const LeftPanel: React.FC = () => {
     showContextMenu(e);
   };
 
-  const handleRequestContextMenu = (e: React.MouseEvent, request: Request) => {
-    setContextTarget({ type: 'request', item: request });
+  const handleRequestContextMenu = (e: React.MouseEvent, request: Request, collectionId?: string, folderId?: string) => {
+    setContextTarget({ type: 'request', item: request, collectionId, folderId });
     showContextMenu(e);
   };
 
@@ -339,8 +351,8 @@ export const LeftPanel: React.FC = () => {
         ] : []),
         { id: 'divider2', label: '', divider: true },
         { id: 'delete', label: 'Delete', icon: <TrashIcon />, danger: true, onClick: () => {
-          // Close any tabs related to this collection
-          tabs.forEach(tab => {
+          // Close any tabs related to this collection (check all tabs, not just workspace tabs)
+          allTabs.forEach(tab => {
             if (tab.collectionId === collection.id || tab.request?.collectionId === collection.id) {
               closeTab(tab.id);
             }
@@ -373,11 +385,36 @@ export const LeftPanel: React.FC = () => {
         }},
         { id: 'divider1', label: '', divider: true },
         { id: 'duplicate', label: 'Duplicate', icon: <CopyIcon />, onClick: () => {
-          const duplicated = requestService.duplicateRequest(contextTarget.item as Request);
+          const originalRequest = contextTarget.item as Request;
+          const collectionId = contextTarget.collectionId || originalRequest.collectionId;
+          const folderId = contextTarget.folderId || originalRequest.folderId;
+          const duplicated = requestService.duplicateRequest(originalRequest);
+          
+          // If the original request belongs to a collection, add the duplicate to the same collection/folder
+          if (collectionId) {
+            duplicated.collectionId = collectionId;
+            duplicated.folderId = folderId;
+            addRequest(collectionId, duplicated, folderId);
+          }
+          
           addTab(duplicated);
         }},
         { id: 'divider2', label: '', divider: true },
-        { id: 'delete', label: 'Delete', icon: <TrashIcon />, danger: true, onClick: () => {} },
+        { id: 'delete', label: 'Delete', icon: <TrashIcon />, danger: true, onClick: () => {
+          const request = contextTarget.item as Request;
+          const collectionId = contextTarget.collectionId || request.collectionId;
+          const folderId = contextTarget.folderId || request.folderId;
+          if (collectionId) {
+            // Close any tabs with this request
+            allTabs.forEach(tab => {
+              if (tab.request?.id === request.id) {
+                closeTab(tab.id);
+              }
+            });
+            // Delete the request from the collection
+            deleteRequest(collectionId, request.id, folderId);
+          }
+        }},
       ];
     }
 
@@ -621,7 +658,7 @@ export const LeftPanel: React.FC = () => {
           icon={<span className="method-badge" style={{ color: getMethodColor(request.method) }}>{request.method}</span>}
           active={isActive || isReferenceActive}
           onClick={() => !isEditing && handleOpenRequest(request, collectionId, folderId)}
-          onContextMenu={(e) => handleRequestContextMenu(e, request)}
+          onContextMenu={(e) => handleRequestContextMenu(e, request, collectionId, folderId)}
           onDoubleClick={() => handleStartEditing(request)}
           draggable={!readonly && !isEditing}
           dragType="request"
@@ -671,7 +708,8 @@ export const LeftPanel: React.FC = () => {
     return (
       request.name.toLowerCase().includes(lowerQuery) ||
       request.method.toLowerCase().includes(lowerQuery) ||
-      request.url.toLowerCase().includes(lowerQuery)
+      request.url.toLowerCase().includes(lowerQuery) ||
+      (request.tags?.some(tag => tag.toLowerCase().includes(lowerQuery)) ?? false)
     );
   };
 
@@ -817,6 +855,16 @@ export const LeftPanel: React.FC = () => {
     });
   }, [standaloneItems, searchQuery]);
 
+  // Calculate total and filtered request counts for the search indicator
+  const totalRequestCount = useMemo(() => {
+    return collections.reduce((sum, c) => sum + countCollectionRequests(c), 0) + standaloneItems.length;
+  }, [collections, standaloneItems]);
+
+  const filteredRequestCount = useMemo(() => {
+    if (!searchQuery) return totalRequestCount;
+    return filteredCollections.reduce((sum, c) => sum + countCollectionRequests(c as Collection), 0) + filteredStandaloneItems.length;
+  }, [searchQuery, filteredCollections, filteredStandaloneItems, totalRequestCount]);
+
   const filteredEnvironments = searchQuery
     ? environments.filter(e => e.name.toLowerCase().includes(searchQuery.toLowerCase()))
     : environments;
@@ -825,10 +873,25 @@ export const LeftPanel: React.FC = () => {
     ? mockApis.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()))
     : mockApis;
 
+  const filteredWorkspaces = searchQuery
+    ? workspaces.filter(w => 
+        w.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (w.description && w.description.toLowerCase().includes(searchQuery.toLowerCase()))
+      )
+    : workspaces;
+
   const handleNewMockApi = () => {
     const name = `Mock API ${mockApis.length + 1}`;
     const newApi = addMockApi(name);
     setActiveMockApi(newApi.id);
+  };
+
+  const handleNewWorkspace = async () => {
+    const name = `Workspace ${workspaces.length + 1}`;
+    const newWorkspace = await addWorkspace(name);
+    if (newWorkspace) {
+      addWorkspaceTab(newWorkspace);
+    }
   };
 
   const handleMockApiContextMenu = (e: React.MouseEvent, mockApi: MockAPI) => {
@@ -850,15 +913,16 @@ export const LeftPanel: React.FC = () => {
 
   return (
     <div className="left-panel">
-      <div className="left-panel__header">
+      {sidebarView != 'git' && <div className="left-panel__header">
         <SearchInput
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           onClear={() => setSearchQuery('')}
-          placeholder={sidebarView === 'collections' ? 'Search name, method, URL...' : `Search ${sidebarView}...`}
+          placeholder={sidebarView === 'collections' ? 'Search name, method, URL, tags...' : `Search ${sidebarView}...`}
           size="sm"
+          suffix={sidebarView === 'collections' && searchQuery ? `${filteredRequestCount}/${totalRequestCount}` : undefined}
         />
-      </div>
+      </div>}
 
       <div className="left-panel__content" ref={leftPanelContentRef}>
         {sidebarView === 'collections' && (
@@ -1084,31 +1148,38 @@ export const LeftPanel: React.FC = () => {
 
         {sidebarView === 'history' && (
           <div className="left-panel__list">
-            {history.length === 0 ? (
-              <div className="left-panel__empty">
-                <p>No history yet</p>
-                <p className="left-panel__empty-hint">Send a request to see it here</p>
-              </div>
-            ) : (
-              history.slice(0, 50).map(entry => (
-                <CollapsibleListItem
-                  key={entry.id}
-                  icon={
-                    <span className="method-badge" style={{ color: getMethodColor(entry.request.method) }}>
-                      {entry.request.method}
-                    </span>
-                  }
-                  onClick={() => addTab(entry.request)}
-                >
-                  <div className="history-item">
-                    <span className="history-item__url">{entry.request.url || 'Untitled'}</span>
-                    <span className="history-item__time">
-                      {formatTime(entry.timestamp)}
-                    </span>
-                  </div>
-                </CollapsibleListItem>
-              ))
-            )}
+            {(() => {
+              // Filter history by active workspace
+              const workspaceHistory = activeWorkspaceId
+                ? history.filter(entry => entry.request.workspaceId === activeWorkspaceId)
+                : history;
+              
+              return workspaceHistory.length === 0 ? (
+                <div className="left-panel__empty">
+                  <p>No history yet</p>
+                  <p className="left-panel__empty-hint">Send a request to see it here</p>
+                </div>
+              ) : (
+                workspaceHistory.slice(0, 50).map(entry => (
+                  <CollapsibleListItem
+                    key={entry.id}
+                    icon={
+                      <span className="method-badge" style={{ color: getMethodColor(entry.request.method) }}>
+                        {entry.request.method}
+                      </span>
+                    }
+                    onClick={() => addTab(entry.request)}
+                  >
+                    <div className="history-item">
+                      <span className="history-item__url">{entry.request.url || 'Untitled'}</span>
+                      <span className="history-item__time">
+                        {formatTime(entry.timestamp)}
+                      </span>
+                    </div>
+                  </CollapsibleListItem>
+                ))
+              );
+            })()}
           </div>
         )}
 
@@ -1179,13 +1250,20 @@ export const LeftPanel: React.FC = () => {
               <p className="left-panel__coming-soon-hint">
                 Interested in this feature? Let us know!
               </p>
-              <a 
-                href="mailto:services@modrena.com?subject=Feature Request: WebSocket Support in Echolon&body=Hi,%0D%0A%0D%0AI'm interested in WebSocket support for Echolon.%0D%0A%0D%0A[Please describe your use case here]"
+              <button 
                 className="left-panel__coming-soon-link"
+                onClick={() => {
+                  const mailtoUrl = "mailto:support@echolon.app?subject=Feature Request: WebSocket Support in Echolon&body=Hi,%0D%0A%0D%0AI'm interested in WebSocket support for Echolon.%0D%0A%0D%0A[Please describe your use case here]";
+                  if (window.electronAPI?.openExternal) {
+                    window.electronAPI.openExternal(mailtoUrl);
+                  } else {
+                    window.open(mailtoUrl, '_blank');
+                  }
+                }}
               >
                 <MailIcon />
                 Request this feature
-              </a>
+              </button>
             </div>
           </div>
         )}
@@ -1202,19 +1280,78 @@ export const LeftPanel: React.FC = () => {
               <p className="left-panel__coming-soon-hint">
                 Interested in this feature? Let us know!
               </p>
-              <a 
-                href="mailto:services@modrena.com?subject=Feature Request: GraphQL Support in Echolon&body=Hi,%0D%0A%0D%0AI'm interested in GraphQL support for Echolon.%0D%0A%0D%0A[Please describe your use case here]"
+              <button 
                 className="left-panel__coming-soon-link"
+                onClick={() => {
+                  const mailtoUrl = "mailto:support@echolon.app?subject=Feature Request: GraphQL Support in Echolon&body=Hi,%0D%0A%0D%0AI'm interested in GraphQL support for Echolon.%0D%0A%0D%0A[Please describe your use case here]";
+                  if (window.electronAPI?.openExternal) {
+                    window.electronAPI.openExternal(mailtoUrl);
+                  } else {
+                    window.open(mailtoUrl, '_blank');
+                  }
+                }}
               >
                 <MailIcon />
                 Request this feature
-              </a>
+              </button>
             </div>
           </div>
         )}
 
         {sidebarView === 'git' && (
           <GitPanel onConnectClick={() => setGitHubConnectModalOpen(true)} />
+        )}
+
+        {sidebarView === 'workspaces' && (
+          <>
+            <div className="left-panel__actions">
+              <Button variant="ghost" size="sm" onClick={handleNewWorkspace}>
+                <PlusIcon />
+                New Workspace
+              </Button>
+            </div>
+
+            <div className="left-panel__list">
+              {filteredWorkspaces.length === 0 ? (
+                <div className="left-panel__empty">
+                  <WorkspacesIcon />
+                  {searchQuery ? (
+                    <>
+                      <p>No results found</p>
+                      <p className="left-panel__empty-hint">
+                        Try a different search term
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p>No workspaces yet</p>
+                      <p className="left-panel__empty-hint">
+                        Workspaces help you organize your collections
+                      </p>
+                      <Button variant="secondary" size="sm" onClick={handleNewWorkspace}>
+                        Create Workspace
+                      </Button>
+                    </>
+                  )}
+                </div>
+              ) : (
+                filteredWorkspaces.map(workspace => (
+                  <CollapsibleListItem
+                    key={workspace.id}
+                    onClick={() => addWorkspaceTab(workspace)}
+                  >
+                    <div className="workspace-item">
+                      <span 
+                        className="workspace-item__color" 
+                        style={{ backgroundColor: workspace.color || '#6366f1' }} 
+                      />
+                      <span className="workspace-item__name">{workspace.name}</span>
+                    </div>
+                  </CollapsibleListItem>
+                ))
+              )}
+            </div>
+          </>
         )}
       </div>
 

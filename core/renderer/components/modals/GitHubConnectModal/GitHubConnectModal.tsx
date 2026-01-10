@@ -3,7 +3,7 @@ import { useGitHub } from '@/contexts/GitHubContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { 
   GitHubIcon, XIcon, ExternalLinkIcon, EyeIcon, EyeOffIcon, 
-  SearchIcon, CheckIcon, AlertCircleIcon, InfoIcon, KeyIcon, LockIcon 
+  SearchIcon, CheckIcon, AlertCircleIcon, InfoIcon, KeyIcon, LockIcon, RefreshIcon 
 } from '@/components/ui/icons';
 import { GitHubRepository } from '@/services/GitHubService';
 import './GitHubConnectModal.css';
@@ -248,7 +248,17 @@ export const GitHubConnectModal: React.FC<GitHubConnectModalProps> = ({
 
               {/* Repository search */}
               <div className="github-connect-modal__repo-section">
+                <div className="github-connect-modal__repo-header">
                 <h4>Select a Repository</h4>
+                  <button 
+                    className="github-connect-modal__refresh-btn"
+                    onClick={() => fetchRepositories()}
+                    disabled={isLoading}
+                    title="Refresh repositories"
+                  >
+                    <RefreshIcon />
+                  </button>
+                </div>
                 <div className="github-connect-modal__repo-search">
                   <SearchIcon />
                   <input
@@ -283,9 +293,17 @@ export const GitHubConnectModal: React.FC<GitHubConnectModalProps> = ({
                           onClick={() => handleRepoSelect(repo)}
                         >
                           <img 
-                            src={`https://github.com/${repo.owner.login}.png?size=64`}
+                            src={repo.owner.avatar_url || `https://github.com/${repo.owner.login}.png?size=64`}
                             alt={repo.owner.login}
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                              target.nextElementSibling?.classList.add('show');
+                            }}
                           />
+                          <div className="github-connect-modal__repo-placeholder">
+                            <GitHubIcon />
+                          </div>
                           <div className="repo-details">
                             <div className="repo-name">{repo.full_name}</div>
                             <div className="repo-meta">

@@ -1,9 +1,12 @@
 export { storageManager } from './LocalStorageManager';
 export { fileStorageManager } from './FileStorageManager';
 export type { EchoFile, EcholonConfig, GlobalEnvironmentsFile, WorkspaceFile } from './FileStorageManager';
+export { webFileSystemManager } from './WebFileSystemManager';
 export { echoConverter } from './EchoFileConverter';
 export { githubService } from './GitHubService';
 export type { GitHubUser, GitHubRepository, GitHubBranch, GitHubCommit, GitHubContent, LinkedRepository } from './GitHubService';
+export { githubSyncService } from './GitHubSyncService';
+export type { GitHubSyncState, FileChange, SyncStatus, PushResult, PullResult } from './GitHubSyncService';
 export { requestService } from './RequestService';
 export { swaggerImporter } from './SwaggerImporter';
 export { specImporter, SpecImporter, OpenAPIAdapter, PostmanAdapter } from './SpecImporter';
@@ -11,4 +14,8 @@ export type { SpecImportOptions, SpecImportResult, SpecImporterAdapter, SpecInfo
 export { specDiffer, SpecDiffer } from './SpecDiffer';
 export { syncManager, SyncManager } from './SyncManager';
 export { websocketManager } from './WebSocketManager';
-
+export { collectionToOpenAPI, exportToOpenAPIJson, exportToEcholonJson } from './OpenAPIExporter';
+export { publicSpecsService } from './PublicSpecsService';
+export { generatePublicSpecHtml, generateVersionsJson } from './PublicSpecHtmlGenerator';
+export { getScriptCompletions, filterCompletions } from './ScriptCompletions';
+export type { ScriptContext, ScriptCompletion } from './ScriptCompletions';

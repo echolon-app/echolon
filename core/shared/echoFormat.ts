@@ -44,12 +44,14 @@ export interface EchoRequest {
   url: string;
   headers: KeyValuePair[];
   queryParams: KeyValuePair[];
+  pathParams?: KeyValuePair[]; // Path parameters like :id, :userId
   body: RequestBody;
   auth: AuthConfig;
   scripts: {
     pre: string;
     post: string;
   };
+  tags?: string[]; // Tags for categorizing and searching requests
 }
 
 /**
@@ -93,6 +95,26 @@ export interface EchoSpecSource {
 }
 
 /**
+ * Published version information for public sharing
+ */
+export interface EchoPublicSharingVersion {
+  version: string;
+  publishedAt: number;
+  title?: string;
+  description?: string;
+}
+
+/**
+ * Public sharing configuration for a collection
+ */
+export interface EchoPublicSharing {
+  enabled: boolean;
+  subdomain?: string;
+  versions?: EchoPublicSharingVersion[];
+  lastPublishedAt?: number;
+}
+
+/**
  * Complete .echo file structure
  */
 export interface EchoFile {
@@ -103,6 +125,7 @@ export interface EchoFile {
   environments: CollectionEnvironment[];
   openapi?: EchoOpenAPI;
   specSource?: EchoSpecSource;
+  publicSharing?: EchoPublicSharing;
   requests: EchoRequest[];
   folders: EchoFolder[];
 }
@@ -142,6 +165,7 @@ export interface EcholonConfig {
   echolonPath: string;
   theme: 'light' | 'dark' | 'system';
   colorScheme: string;
+  userId?: string; // Unique identifier for this installation (for public spec ownership)
   settings: {
     fontSize: number;
     tabSize: number;
@@ -158,6 +182,8 @@ export interface EcholonConfig {
     autoCheckUpdates?: boolean;
     defaultSyncFrequencyMins?: number;
     sendUserAgent?: boolean;
+    persistHistory?: boolean; // Whether to persist request history to disk (default: true)
+    historyMaxBinarySize?: number; // Max binary response size to store in history in KB (default: 50)
   };
   github?: {
     authMethod: 'oauth' | 'pat';

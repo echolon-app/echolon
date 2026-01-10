@@ -5,7 +5,6 @@
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -224,11 +223,48 @@
   margin-bottom: 20px;
 }
 
+.github-connect-modal__repo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
 .github-connect-modal__repo-section h4 {
-  margin: 0 0 12px;
+  margin: 0;
   font-size: 14px;
   font-weight: 500;
   color: var(--text-primary);
+}
+
+.github-connect-modal__refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.github-connect-modal__refresh-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.github-connect-modal__refresh-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.github-connect-modal__refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .github-connect-modal__repo-search {
@@ -307,6 +343,27 @@
   width: 32px;
   height: 32px;
   border-radius: 6px;
+}
+
+.github-connect-modal__repo-placeholder {
+  display: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.github-connect-modal__repo-placeholder.show {
+  display: flex;
+}
+
+.github-connect-modal__repo-placeholder svg {
+  width: 18px;
+  height: 18px;
+  color: var(--text-muted);
 }
 
 .github-connect-modal__repo-item .repo-details {

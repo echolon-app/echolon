@@ -30,6 +30,7 @@ export interface AutoCompleteProps<T = string> {
   createLabel?: string;
   onCreateClick?: () => void;
   createButtonLabel?: string;
+  leadingIcon?: React.ReactNode;
 }
 
 export function AutoComplete<T = string>({
@@ -50,6 +51,7 @@ export function AutoComplete<T = string>({
   createLabel = 'Create',
   onCreateClick,
   createButtonLabel = 'Create new',
+  leadingIcon,
 }: AutoCompleteProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -240,6 +242,9 @@ export function AutoComplete<T = string>({
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
+        {leadingIcon && (
+          <span className="autocomplete__leading-icon">{leadingIcon}</span>
+        )}
         {selectedOption ? (
           <span className="autocomplete__value">
             {renderValue ? renderValue(selectedOption) : defaultRenderValue(selectedOption)}

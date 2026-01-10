@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { EditableTable, Input, Dropdown, Button, Modal, DiffViewer, Switch, Tooltip, CodeEditor, ColorEmojiPicker } from '@/components/ui';
-import { useCollections, useRequest, useApp, useEnvironments, useTheme, useToast } from '@/contexts';
+import { useCollections, useRequest, useApp, useEnvironments, useTheme, useToast, useWebModeOptional } from '@/contexts';
 import { 
   RadarIcon, GlobeIcon, PlusIcon, FolderIcon, TrashIcon, AlertIcon, 
   RefreshIcon, LinkIcon, SendIcon, ChevronDownIcon, ChevronRightIcon,
@@ -13,6 +13,7 @@ import { formatDate, formatDateTime, formatDateOr } from '@/utils';
 import { v4 as uuidv4 } from 'uuid';
 
 import { ResponseViewer } from './ResponseViewer';
+import { SharingTab } from './SharingTab';
 import { extractSpecResponseInfo } from '@/utils/specResponseExtractor';
 import './CollectionEditor.css';
 
@@ -72,6 +73,17 @@ const RequestItem: React.FC<RequestItemProps> = ({ request, collection, onUpdate
 
   const collectionHeaders = collection?.headers?.filter(h => h.enabled && h.key) || [];
 
+  // Get overrides for inherited collection headers (stored in request headers with special prefix)
+  const inheritedHeaderOverrides = useMemo(() => {
+    const overrides = new Map<string, boolean>();
+    request.headers
+      .filter(h => h.id?.startsWith('__inherited_header_override__'))
+      .forEach(h => {
+        overrides.set(h.key, h.enabled);
+      });
+    return overrides;
+  }, [request.headers]);
+
   const methodOptions = useMemo(() => {
     const standardMethods = HTTP_METHODS.map(method => ({
       value: method,
@@ -124,7 +136,28 @@ const RequestItem: React.FC<RequestItemProps> = ({ request, collection, onUpdate
   };
 
   const handleHeadersChange = (allHeaders: KeyValuePair[]) => {
-    const requestHeaders = allHeaders.filter(h => !h.inheritedFrom);
+    // Get request-level headers (filter out inherited headers)
+    let requestHeaders = allHeaders.filter(h => !h.inheritedFrom);
+    
+    // Remove any existing override markers
+    requestHeaders = requestHeaders.filter(h => !h.id?.startsWith('__inherited_header_override__'));
+    
+    // Handle inherited header overrides
+    const inheritedHeaders = allHeaders.filter(h => h.inheritedFrom);
+    inheritedHeaders.forEach(ih => {
+      const originalHeader = collectionHeaders.find(ch => ch.id === ih.id);
+      if (originalHeader && ih.enabled !== originalHeader.enabled) {
+        // Store override for inherited header
+        requestHeaders.push({
+          id: '__inherited_header_override__' + ih.id,
+          key: ih.id,
+          value: '',
+          enabled: ih.enabled,
+          description: `Override for inherited header: ${ih.key}`,
+        });
+      }
+    });
+    
     onUpdateRequest(request.id, { headers: requestHeaders });
   };
 
@@ -278,10 +311,11 @@ const RequestItem: React.FC<RequestItemProps> = ({ request, collection, onUpdate
                   ...collectionHeaders.map(h => ({
                     ...h,
                     inheritedFrom: collection?.name,
+                    enabled: inheritedHeaderOverrides.has(h.id) ? (inheritedHeaderOverrides.get(h.id) ?? h.enabled) : h.enabled,
                   })),
-                  ...(request.headers.length === 0 
+                  ...(request.headers.filter(h => !h.id?.startsWith('__inherited_header_override__')).length === 0 
                     ? [{ id: uuidv4(), key: '', value: '', enabled: true }] 
-                    : request.headers),
+                    : request.headers.filter(h => !h.id?.startsWith('__inherited_header_override__'))),
                 ]}
                 onChange={handleHeadersChange}
                 keyPlaceholder="Header"
@@ -328,6 +362,8 @@ const RequestItem: React.FC<RequestItemProps> = ({ request, collection, onUpdate
                     width="100%"
                     height="550px"
                     fontSize={12}
+                    supportVariables
+                    collectionEnvironment={selectedCollectionEnv}
                   />
                     {/*<AceEditor
                       mode={request.body.type === 'json' ? 'json' : 'text'}
@@ -543,7 +579,7 @@ const RequestItem: React.FC<RequestItemProps> = ({ request, collection, onUpdate
   );
 };
 
-type CollectionTab = 'reference' | 'overview' | 'environments' | 'headers' | 'auth' | 'sync';
+type CollectionTab = 'reference' | 'overview' | 'environments' | 'headers' | 'auth' | 'sync' | 'sharing';
 
 interface CollectionEditorProps {
   collectionId: string;
@@ -565,10 +601,12 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
     getPendingChanges,
     clearPendingChanges,
   } = useCollections();
-  const { updateTab, activeTabId, closeTab, tabs } = useRequest();
-  const { logToConsole } = useApp();
+  const { updateTab, activeTabId, closeTab, tabs: allTabs, workspaceTabs: tabs } = useRequest();
+  const { logToConsole, settings } = useApp();
   const { environments } = useEnvironments();
   const { success, warning, error: showError } = useToast();
+  const webMode = useWebModeOptional();
+  const isReadOnly = webMode?.readonly ?? false;
   
   // Get the current tab
   const currentTab = tabs.find(t => t.id === activeTabId);
@@ -576,7 +614,7 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
   // Initialize sub-tab from persisted state or default to 'reference'
   const [activeTab, setActiveTabState] = useState<CollectionTab>(() => {
     const savedSubTab = currentTab?.subTab as CollectionTab;
-    const validTabs: CollectionTab[] = ['reference', 'overview', 'environments', 'headers', 'auth', 'sync'];
+    const validTabs: CollectionTab[] = ['reference', 'overview', 'environments', 'headers', 'auth', 'sync', 'sharing'];
     if (savedSubTab && validTabs.includes(savedSubTab)) {
       return savedSubTab;
     }
@@ -617,7 +655,7 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
   // Handle initialSubTab navigation (for when opening from external navigation)
   useEffect(() => {
     if (currentTab?.initialSubTab) {
-      const validTabs: CollectionTab[] = ['overview', 'environments', 'headers', 'auth', 'sync'];
+      const validTabs: CollectionTab[] = ['overview', 'environments', 'headers', 'auth', 'sync', 'sharing'];
       if (validTabs.includes(currentTab.initialSubTab as CollectionTab)) {
         setActiveTab(currentTab.initialSubTab as CollectionTab);
         // Clear the initialSubTab after navigating
@@ -675,18 +713,20 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
   }, [collectionId, collection, getAllRequestIds]);
 
   const markDirty = useCallback(() => {
-    if (activeTabId) {
+    // Only mark as dirty if auto-save is disabled
+    if (activeTabId && !settings.autoSave) {
       updateTab(activeTabId, { isDirty: true });
     }
-  }, [activeTabId, updateTab]);
+  }, [activeTabId, updateTab, settings.autoSave]);
 
   const handleNameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newName = e.target.value;
     updateCollection(collectionId, { name: newName });
     if (activeTabId) {
-      updateTab(activeTabId, { title: newName, isDirty: true });
+      // Only mark as dirty if auto-save is disabled
+      updateTab(activeTabId, { title: newName, isDirty: !settings.autoSave });
     }
-  }, [collectionId, updateCollection, updateTab, activeTabId]);
+  }, [collectionId, updateCollection, updateTab, activeTabId, settings.autoSave]);
 
   const handleDescriptionChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     updateCollection(collectionId, { description: e.target.value });
@@ -1423,7 +1463,7 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
             <span className="collection-editor__tab-indicator" />
           )}
         </button>
-        {hasUrlSource && (
+        {hasUrlSource && !isReadOnly && (
           <button
             className={`collection-editor__tab ${activeTab === 'sync' ? 'active' : ''}`}
             onClick={() => setActiveTab('sync')}
@@ -1433,6 +1473,17 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
               <span className="collection-editor__tab-badge collection-editor__tab-badge--warning">
                 {pendingChanges.changes.length}
               </span>
+            )}
+          </button>
+        )}
+        {!isReadOnly && !hasUrlSource && (
+          <button
+            className={`collection-editor__tab ${activeTab === 'sharing' ? 'active' : ''}`}
+            onClick={() => setActiveTab('sharing')}
+          >
+            Sharing
+            {collection.publicSharing?.enabled && (
+              <span className="collection-editor__tab-indicator collection-editor__tab-indicator--success" />
             )}
           </button>
         )}
@@ -1585,6 +1636,7 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
                 value={collection.name}
                 onChange={handleNameChange}
                 placeholder="Collection name"
+                readOnly={isReadOnly}
               />
             </div>
             <div className="collection-editor__field">
@@ -1594,6 +1646,7 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
                 onChange={handleDescriptionChange}
                 placeholder="Add a description for this collection..."
                 rows={4}
+                readOnly={isReadOnly}
               />
             </div>
             {/* ID */}
@@ -1603,9 +1656,9 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
                 value={collection.id}
                 readOnly
                 placeholder="Collection ID"
-                supportVariables
               />
             </div>
+            {!isReadOnly && (
             <div className="collection-editor__field">
               <label>Default Environment</label>
               <Dropdown
@@ -1621,6 +1674,7 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
                 regardless of the globally active environment.
               </span>
             </div>
+            )}
             <div className="collection-editor__info">
               <div className="collection-editor__info-item">
                 <span className="collection-editor__info-label">Created</span>
@@ -1644,7 +1698,8 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
               )}
             </div>
 
-            {/* Danger Zone */}
+            {/* Danger Zone - only show when not readonly */}
+            {!isReadOnly && (
             <div className="collection-editor__danger-zone">
               <h4>Danger Zone</h4>
               <div className="collection-editor__danger-action">
@@ -1664,6 +1719,7 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
                 </Button>
               </div>
             </div>
+            )}
           </div>
         )}
 
@@ -1677,6 +1733,18 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
             </div>
             
             <div className="collection-editor__environments-header">
+              {isReadOnly ? (
+                <Tooltip content="This collection is read-only">
+                  <Button 
+                    variant="secondary" 
+                    size="sm" 
+                    icon={<PlusIcon />}
+                    disabled
+                  >
+                    New Environment
+                  </Button>
+                </Tooltip>
+              ) : (
               <Button 
                 variant="secondary" 
                 size="sm" 
@@ -1685,6 +1753,7 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
               >
                 New Environment
               </Button>
+              )}
             </div>
 
             {(!collection.environments || collection.environments.length === 0) ? (
@@ -1692,7 +1761,10 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
                 <GlobeIcon />
                 <p>No collection environments yet</p>
                 <p className="collection-editor__environments-empty-hint">
-                  Create an environment to define collection-specific variables that override global ones.
+                  {isReadOnly 
+                    ? 'This collection has no environments defined.'
+                    : 'Create an environment to define collection-specific variables that override global ones.'
+                  }
                 </p>
               </div>
             ) : (
@@ -1706,15 +1778,19 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
                           emoji={env.emoji}
                           onChange={(updates) => handleEnvironmentColorEmojiChange(env.id, updates)}
                           size="sm"
+                          disabled={isReadOnly}
                         />
                         <Input
                           value={env.name}
                           onChange={(e) => handleEnvironmentNameChange(env.id, e.target.value)}
                           className="collection-editor__environment-name"
                           size="sm"
+                          readOnly={isReadOnly}
                         />
                       </div>
                       <div className="collection-editor__environment-actions">
+                        {!isReadOnly && (
+                          <>
                         <Tooltip content={env.isActive ? 'Hide from dropdown' : 'Show in dropdown'} position="left">
                           <Switch
                             checked={env.isActive}
@@ -1728,6 +1804,8 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
                           onClick={() => handleDeleteEnvironment(env.id)}
                           icon={<TrashIcon />}
                         />
+                          </>
+                        )}
                       </div>
                     </div>
                     <div className="collection-editor__environment-variables">
@@ -1741,6 +1819,8 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
                         valuePlaceholder="Value"
                         descriptionPlaceholder="Description (optional)"
                         showDescription={true}
+                        showSecureToggle={true}
+                        readOnly={isReadOnly}
                       />
                     </div>
                   </div>
@@ -2277,6 +2357,14 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
               </div>
             )}
           </div>
+        )}
+
+        {/* Sharing Tab */}
+        {activeTab === 'sharing' && (
+          <SharingTab
+            collection={collection}
+            onUpdateCollection={(updates) => updateCollection(collectionId, updates)}
+          />
         )}
       </div>
 

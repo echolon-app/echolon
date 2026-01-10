@@ -1,105 +1,27 @@
-import { app, BrowserWindow, shell, ipcMain } from 'electron';
+import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron';
 import path from 'path';
 import crypto from 'crypto';
 import { setupMenu } from './menu';
 import { setupUpdater } from './updater';
 import { makeHttpRequest, HttpRequestOptions, HttpResponseResult } from './httpRequest';
+import { parseDigestChallenge, buildDigestAuthHeader, DigestChallenge, DigestAuthParams } from './digestAuth';
 import { mockServerManager } from './mockServer';
-import { cloudProxyManager, CloudProxyConfig, ProxyResponse, StoredMock, CLOUD_PROXY_CHANNELS } from './cloudProxy';
+import { cloudProxyManager, CloudProxyConfig, ProxyResponse, StoredMock } from './cloudProxy';
 import { fileStorageManager } from './fileStorage';
 import { githubManager, GitHubFileChange } from './github';
+import { gitManager } from './git';
 import { EchoFile, EcholonConfig, GlobalEnvironmentsFile, WorkspaceFile } from '../shared/echoFormat';
-
-// IPC channel constants (duplicated here to avoid cross-rootDir import issues)
-const IPC_CHANNELS = {
-  MAKE_HTTP_REQUEST: 'make-http-request',
-  GET_APP_VERSION: 'get-app-version',
-  START_MOCK_SERVER: 'start-mock-server',
-  STOP_MOCK_SERVER: 'stop-mock-server',
-  GET_MOCK_SERVER_STATUS: 'get-mock-server-status',
-  UPDATE_MOCK_ROUTES: 'update-mock-routes',
-  GET_LOCAL_HOSTNAME: 'get-local-hostname',
-  FETCH_URL_CONTENT: 'fetch-url-content',
-  EXECUTE_SCRIPT: 'execute-script',
-  OPEN_EXTERNAL: 'open-external',
-} as const;
-
-// File Storage IPC channels
-const FILE_STORAGE_CHANNELS = {
-  // Initialization
-  INIT_FILE_STORAGE: 'file-storage-init',
-  GET_ECHOLON_PATH: 'file-storage-get-path',
-  SET_ECHOLON_PATH: 'file-storage-set-path',
-  SELECT_DIRECTORY: 'file-storage-select-directory',
-  OPEN_IN_FILE_MANAGER: 'file-storage-open-in-file-manager',
-  // Config
-  READ_CONFIG: 'file-storage-read-config',
-  WRITE_CONFIG: 'file-storage-write-config',
-  UPDATE_CONFIG: 'file-storage-update-config',
-  // Environments
-  READ_ENVIRONMENTS: 'file-storage-read-environments',
-  WRITE_ENVIRONMENTS: 'file-storage-write-environments',
-  // Workspaces
-  GET_ALL_WORKSPACES: 'file-storage-get-all-workspaces',
-  CREATE_WORKSPACE: 'file-storage-create-workspace',
-  READ_WORKSPACE: 'file-storage-read-workspace',
-  UPDATE_WORKSPACE: 'file-storage-update-workspace',
-  RENAME_WORKSPACE: 'file-storage-rename-workspace',
-  DELETE_WORKSPACE: 'file-storage-delete-workspace',
-  // Collections
-  GET_ALL_COLLECTIONS: 'file-storage-get-all-collections',
-  GET_ALL_COLLECTIONS_ALL_WORKSPACES: 'file-storage-get-all-collections-all-workspaces',
-  READ_COLLECTION: 'file-storage-read-collection',
-  WRITE_COLLECTION: 'file-storage-write-collection',
-  DELETE_COLLECTION: 'file-storage-delete-collection',
-  RENAME_COLLECTION: 'file-storage-rename-collection',
-  // File watching
-  WATCH_DIRECTORY: 'file-storage-watch-directory',
-  UNWATCH_DIRECTORY: 'file-storage-unwatch-directory',
-  FILE_CHANGED: 'file-storage-file-changed',
-  // Generic data files
-  READ_DATA_FILE: 'file-storage-read-data-file',
-  WRITE_DATA_FILE: 'file-storage-write-data-file',
-  // Mocking data (per workspace/endpoint)
-  READ_MOCK_REQUESTS: 'file-storage-read-mock-requests',
-  WRITE_MOCK_REQUESTS: 'file-storage-write-mock-requests',
-  READ_ALL_MOCK_REQUESTS: 'file-storage-read-all-mock-requests',
-  READ_ALL_MOCKING_DATA: 'file-storage-read-all-mocking-data',
-  DELETE_MOCK_API_DATA: 'file-storage-delete-mock-api-data',
-  DELETE_MOCK_ENDPOINT_DATA: 'file-storage-delete-mock-endpoint-data',
-  CLEAR_MOCKING_DATA: 'file-storage-clear-mocking-data',
-} as const;
-
-// GitHub IPC channels
-const GITHUB_CHANNELS = {
-  // Authentication
-  AUTH_WITH_PAT: 'github-auth-with-pat',
-  START_OAUTH: 'github-start-oauth',
-  LOGOUT: 'github-logout',
-  GET_CURRENT_USER: 'github-get-current-user',
-  IS_AUTHENTICATED: 'github-is-authenticated',
-  SET_ACCESS_TOKEN: 'github-set-access-token',
-  // Repositories
-  LIST_REPOS: 'github-list-repos',
-  GET_REPO: 'github-get-repo',
-  CREATE_REPO: 'github-create-repo',
-  // Branches
-  LIST_BRANCHES: 'github-list-branches',
-  GET_BRANCH: 'github-get-branch',
-  CREATE_BRANCH: 'github-create-branch',
-  // Commits
-  LIST_COMMITS: 'github-list-commits',
-  GET_COMMIT: 'github-get-commit',
-  // Contents
-  GET_CONTENTS: 'github-get-contents',
-  CREATE_OR_UPDATE_FILE: 'github-create-or-update-file',
-  DELETE_FILE: 'github-delete-file',
-  // Comparison
-  COMPARE_COMMITS: 'github-compare-commits',
-  // Batch operations
-  PUSH_CHANGES: 'github-push-changes',
-  PULL_LATEST: 'github-pull-latest',
-} as const;
+import { onUpdateAvailable } from './updater';
+import { 
+  APP_CHANNELS, 
+  MOCK_SERVER_CHANNELS, 
+  CLOUD_PROXY_CHANNELS, 
+  FILE_STORAGE_CHANNELS,
+  GIT_CHANNELS,
+  GITHUB_CHANNELS,
+  PUBLIC_SPECS_CHANNELS 
+} from '../shared/ipc-channels';
+import { s3UploadManager, UploadSpecOptions } from './s3Upload';
 
 // Disable GPU acceleration for better compatibility
 app.disableHardwareAcceleration();
@@ -118,11 +40,65 @@ let mainWindow: BrowserWindow | null = null;
 
 const isDev = !app.isPackaged;
 
+// Store deep link URL if app wasn't ready when received
+let pendingDeepLinkUrl: string | null = null;
+
+// Handle the protocol URL
+function handleDeepLink(url: string): void {
+  console.log('Deep link received:', url);
+  
+  // Parse the URL: echolon://action/path?query=params
+  try {
+    const parsed = new URL(url);
+    const action = parsed.hostname; // e.g., 'import', 'open'
+    const path = parsed.pathname;   // e.g., '/collection/123'
+    const params = Object.fromEntries(parsed.searchParams);
+    
+    // Send to renderer when window is ready
+    if (mainWindow && mainWindow.webContents) {
+      mainWindow.webContents.send(APP_CHANNELS.DEEP_LINK, { action, path, params, url });
+    } else {
+      // Store for later if window isn't ready
+      pendingDeepLinkUrl = url;
+    }
+  } catch (err) {
+    console.error('Failed to parse deep link:', err);
+  }
+}
+
+// macOS: Handle open-url event (must be registered before app is ready)
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  handleDeepLink(url);
+});
+
+// Windows/Linux: Handle second-instance for single instance lock
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (_event, commandLine) => {
+    // Someone tried to run a second instance, focus our window
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+    
+    // Handle the protocol URL (Windows passes it in argv)
+    const url = commandLine.find(arg => arg.startsWith('echolon://'));
+    if (url) {
+      handleDeepLink(url);
+    }
+  });
+}
+
 function createWindow(): void {
   // Get icon path - use resources folder for packaged app, core/assets for dev
-  const iconPath = isDev 
-    ? path.join(__dirname, '../../core/assets/app-icon/logo.png')
-    : path.join(__dirname, '../../resources/icon.png');
+  console.log('isDev', isDev);
+  const iconPath = isDev ? path.join(__dirname, '../../assets/app-icon/logo@512.png')
+    : path.join(__dirname, '../../assets/app-icon/logo@512.png');
+  //console.log('iconPath', iconPath);
 
   mainWindow = new BrowserWindow({
     width: 1500,
@@ -141,6 +117,7 @@ function createWindow(): void {
       contextIsolation: true,
       sandbox: false,
       webSecurity: true,
+      devTools: true, // REMOVE LATER
     },
   });
 
@@ -161,7 +138,7 @@ function createWindow(): void {
     mainWindow.webContents.openDevTools();
 
     if (process.platform === 'darwin') {
-      app.dock.setIcon(path.join(__dirname, '../../resources/icon.png'))
+      app.dock.setIcon(path.join(__dirname, '../../assets/app-icon/logo@512.png'))
       app.setName('Echolon')
       app.dock.setBadge('') // forces Dock refresh sometimes
      // app.dock.setTitle('Echolon')
@@ -206,22 +183,51 @@ interface MockServerConfig {
 // Setup IPC handlers
 function setupIpcHandlers(): void {
   // HTTP Request handler - bypasses CORS
-  ipcMain.handle(IPC_CHANNELS.MAKE_HTTP_REQUEST, async (_event, options: HttpRequestOptions): Promise<HttpResponseResult> => {
+  ipcMain.handle(APP_CHANNELS.MAKE_HTTP_REQUEST, async (_event, options: HttpRequestOptions): Promise<HttpResponseResult> => {
     return makeHttpRequest(options);
   });
 
+  // Compute Digest Auth header
+  ipcMain.handle(APP_CHANNELS.COMPUTE_DIGEST_AUTH, async (_event, options: {
+    wwwAuthHeader: string;
+    username: string;
+    password: string;
+    method: string;
+    uri: string;
+  }): Promise<{ success: boolean; header?: string; error?: string; challenge?: DigestChallenge }> => {
+    try {
+      const challenge = parseDigestChallenge(options.wwwAuthHeader);
+      if (!challenge) {
+        return { success: false, error: 'Invalid WWW-Authenticate header' };
+      }
+
+      const params: DigestAuthParams = {
+        username: options.username,
+        password: options.password,
+        method: options.method,
+        uri: options.uri,
+        challenge,
+      };
+
+      const header = buildDigestAuthHeader(params);
+      return { success: true, header, challenge };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  });
+
   // Get app version
-  ipcMain.handle(IPC_CHANNELS.GET_APP_VERSION, () => {
+  ipcMain.handle(APP_CHANNELS.GET_APP_VERSION, () => {
     return app.getVersion();
   });
 
   // Open external URL in default browser/app
-  ipcMain.handle(IPC_CHANNELS.OPEN_EXTERNAL, async (_event, url: string) => {
+  ipcMain.handle(APP_CHANNELS.OPEN_EXTERNAL, async (_event, url: string) => {
     await shell.openExternal(url);
   });
 
   // Execute script - runs in main process to bypass CSP restrictions
-  ipcMain.handle(IPC_CHANNELS.EXECUTE_SCRIPT, async (_event, options: {
+  ipcMain.handle(APP_CHANNELS.EXECUTE_SCRIPT, async (_event, options: {
     script: string;
     context: {
       request: { url: string; method: string; headers: Record<string, string>; body?: string | null };
@@ -300,22 +306,64 @@ function setupIpcHandlers(): void {
     };
 
     // Create the `res` response object (only for post-request scripts)
-    const res = context.response ? {
-      status: context.response.status,
-      statusText: context.response.statusText,
-      headers: { ...context.response.headers },
-      body: context.response.body,
-      responseTime: context.response.responseTime,
-      getStatus: () => context.response!.status,
-      getStatusText: () => context.response!.statusText,
-      getHeaders: () => ({ ...context.response!.headers }),
+    // Now mutable to allow script modifications
+    const resData = context.response ? { ...context.response } : null;
+    
+    // Try to parse body as JSON so users can modify it directly (e.g., res.body.field = value)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let parsedBody: any = null;
+    let bodyIsJson = false;
+    if (resData?.body) {
+      try {
+        parsedBody = JSON.parse(resData.body);
+        bodyIsJson = typeof parsedBody === 'object' && parsedBody !== null;
+      } catch {
+        // Not valid JSON, keep as string
+        parsedBody = resData.body;
+      }
+    }
+    
+    const res = resData ? {
+      get status() { return resData.status; },
+      set status(val: number) { resData.status = val; },
+      get statusText() { return resData.statusText; },
+      set statusText(val: string) { resData.statusText = val; },
+      get headers() { return resData.headers; },
+      set headers(val: Record<string, string>) { resData.headers = val; },
+      // Return parsed JSON object if body was JSON, otherwise return string
+      get body() { return bodyIsJson ? parsedBody : resData.body; },
+      set body(val: string | Record<string, unknown>) { 
+        if (typeof val === 'object' && val !== null) {
+          parsedBody = val;
+          bodyIsJson = true;
+        } else {
+          parsedBody = val;
+          bodyIsJson = false;
+        }
+      },
+      get responseTime() { return resData.responseTime; },
+      // Getter methods
+      getStatus: () => resData.status,
+      getStatusText: () => resData.statusText,
+      getHeaders: () => ({ ...resData.headers }),
       getHeader: (name: string) => {
         const lowerName = name.toLowerCase();
-        const key = Object.keys(context.response!.headers).find(k => k.toLowerCase() === lowerName);
-        return key ? context.response!.headers[key] : undefined;
+        const key = Object.keys(resData.headers).find(k => k.toLowerCase() === lowerName);
+        return key ? resData.headers[key] : undefined;
       },
-      getBody: () => context.response!.body,
-      getResponseTime: () => context.response!.responseTime,
+      getBody: () => bodyIsJson ? parsedBody : resData.body,
+      getResponseTime: () => resData.responseTime,
+      // Setter methods
+      setHeader: (name: string, value: string) => { resData.headers[name] = value; },
+      setBody: (val: string | Record<string, unknown>) => {
+        if (typeof val === 'object' && val !== null) {
+          parsedBody = val;
+          bodyIsJson = true;
+        } else {
+          parsedBody = val;
+          bodyIsJson = false;
+        }
+      },
     } : null;
 
     try {
@@ -341,11 +389,24 @@ function setupIpcHandlers(): void {
         encodeURIComponent, decodeURIComponent, encodeURI, decodeURI
       );
 
+      // Stringify the body if it was parsed as JSON
+      const finalBody = bodyIsJson && parsedBody !== null 
+        ? JSON.stringify(parsedBody, null, 2) 
+        : (parsedBody as string) || resData?.body || '';
+
       return {
         logs,
         duration: Date.now() - startTime,
         envVars: updatedEnvVars,
         runtimeVars: updatedRuntimeVars,
+        // Return modified response data if available
+        modifiedResponse: resData ? {
+          status: resData.status,
+          statusText: resData.statusText,
+          headers: resData.headers,
+          body: finalBody,
+          responseTime: resData.responseTime,
+        } : undefined,
       };
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -357,18 +418,31 @@ function setupIpcHandlers(): void {
         timestamp: Date.now(),
       });
 
+      // Stringify the body if it was parsed as JSON
+      const finalBody = bodyIsJson && parsedBody !== null 
+        ? JSON.stringify(parsedBody, null, 2) 
+        : (parsedBody as string) || resData?.body || '';
+
       return {
         logs,
         error: errorMessage,
         duration: Date.now() - startTime,
         envVars: updatedEnvVars,
         runtimeVars: updatedRuntimeVars,
+        // Still return modified response even on error (partial modifications may have been made)
+        modifiedResponse: resData ? {
+          status: resData.status,
+          statusText: resData.statusText,
+          headers: resData.headers,
+          body: finalBody,
+          responseTime: resData.responseTime,
+        } : undefined,
       };
     }
   });
 
   // Fetch URL content - for spec import, bypasses CORS
-  ipcMain.handle(IPC_CHANNELS.FETCH_URL_CONTENT, async (_event, url: string) => {
+  ipcMain.handle(APP_CHANNELS.FETCH_URL_CONTENT, async (_event, url: string) => {
     try {
       const result = await makeHttpRequest({
         method: 'GET',
@@ -401,24 +475,91 @@ function setupIpcHandlers(): void {
     }
   });
 
+  // Restart app
+  ipcMain.handle(APP_CHANNELS.RESTART_APP, () => {
+    if (app.isPackaged) {
+      // Production: full app relaunch
+      app.relaunch();
+      app.quit();
+    } else {
+      // Development: just reload the window (relaunch doesn't work well with dev server)
+      const focusedWindow = BrowserWindow.getFocusedWindow();
+      if (focusedWindow) {
+        focusedWindow.reload();
+      } else {
+        // Fallback: reload all windows
+        BrowserWindow.getAllWindows().forEach(win => win.reload());
+      }
+    }
+  });
+
+  // Toggle DevTools
+  ipcMain.handle(APP_CHANNELS.TOGGLE_DEV_TOOLS, () => {
+    const focusedWindow = BrowserWindow.getFocusedWindow();
+    const targetWindow = focusedWindow || mainWindow;
+    
+    if (targetWindow) {
+      if (targetWindow.webContents.isDevToolsOpened()) {
+        targetWindow.webContents.closeDevTools();
+      } else {
+        // Use detached mode on Windows/Linux for reliability
+        if (process.platform === 'darwin') {
+          targetWindow.webContents.openDevTools();
+        } else {
+          targetWindow.webContents.openDevTools({ mode: 'detach' });
+        }
+      }
+    }
+  });
+
+  // Wipe all data - deletes all files in echolon directory
+  ipcMain.handle(APP_CHANNELS.WIPE_ALL_DATA, async () => {
+    try {
+      const echolonPath = fileStorageManager.getEcholonPath();
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      
+      // Read directory contents
+      const entries = await fs.readdir(echolonPath, { withFileTypes: true });
+      
+      // Delete each entry recursively
+      for (const entry of entries) {
+        const fullPath = path.join(echolonPath, entry.name);
+        if (entry.isDirectory()) {
+          await fs.rm(fullPath, { recursive: true, force: true });
+        } else {
+          await fs.unlink(fullPath);
+        }
+      }
+      
+      return { success: true };
+    } catch (error) {
+      console.error('[Main] Failed to wipe data:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  });
+
   // Mock Server handlers
-  ipcMain.handle(IPC_CHANNELS.START_MOCK_SERVER, async (_event, config: MockServerConfig): Promise<{ success: boolean; error?: string }> => {
+  ipcMain.handle(MOCK_SERVER_CHANNELS.START_MOCK_SERVER, async (_event, config: MockServerConfig): Promise<{ success: boolean; error?: string }> => {
     return mockServerManager.startServer(config);
   });
 
-  ipcMain.handle(IPC_CHANNELS.STOP_MOCK_SERVER, async (_event, id: string): Promise<boolean> => {
+  ipcMain.handle(MOCK_SERVER_CHANNELS.STOP_MOCK_SERVER, async (_event, id: string): Promise<boolean> => {
     return mockServerManager.stopServer(id);
   });
 
-  ipcMain.handle(IPC_CHANNELS.GET_MOCK_SERVER_STATUS, (_event, id: string): boolean => {
+  ipcMain.handle(MOCK_SERVER_CHANNELS.GET_MOCK_SERVER_STATUS, (_event, id: string): boolean => {
     return mockServerManager.isServerRunning(id);
   });
 
-  ipcMain.handle(IPC_CHANNELS.UPDATE_MOCK_ROUTES, (_event, { id, routes }: { id: string; routes: MockServerConfig['routes'] }): void => {
+  ipcMain.handle(MOCK_SERVER_CHANNELS.UPDATE_MOCK_ROUTES, (_event, { id, routes }: { id: string; routes: MockServerConfig['routes'] }): void => {
     mockServerManager.updateRoutes(id, routes);
   });
 
-  ipcMain.handle(IPC_CHANNELS.GET_LOCAL_HOSTNAME, async (): Promise<string> => {
+  ipcMain.handle(MOCK_SERVER_CHANNELS.GET_LOCAL_HOSTNAME, async (): Promise<string> => {
     return await  mockServerManager.getLocalHostname();
   });
 
@@ -611,6 +752,149 @@ function setupIpcHandlers(): void {
     return fileStorageManager.clearMockingData(workspaceName);
   });
 
+  // OpenAPI export
+  ipcMain.handle(FILE_STORAGE_CHANNELS.WRITE_COLLECTION_OPENAPI, async (_event, { workspaceName, collectionId, openapiJson, version }: { workspaceName: string; collectionId: string; openapiJson: string; version?: string }) => {
+    return fileStorageManager.writeCollectionOpenAPI(workspaceName, collectionId, openapiJson, version);
+  });
+
+  ipcMain.handle(FILE_STORAGE_CHANNELS.READ_COLLECTION_OPENAPI, async (_event, { workspaceName, collectionId, version }: { workspaceName: string; collectionId: string; version?: string }) => {
+    return fileStorageManager.readCollectionOpenAPI(workspaceName, collectionId, version);
+  });
+
+  // Request History (per workspace)
+  ipcMain.handle(FILE_STORAGE_CHANNELS.READ_HISTORY, async (_event, workspaceName: string) => {
+    return fileStorageManager.readHistory(workspaceName);
+  });
+
+  ipcMain.handle(FILE_STORAGE_CHANNELS.WRITE_HISTORY, async (_event, { workspaceName, data }: { workspaceName: string; data: unknown }) => {
+    return fileStorageManager.writeHistory(workspaceName, data);
+  });
+
+  ipcMain.handle(FILE_STORAGE_CHANNELS.CLEAR_HISTORY, async (_event, workspaceName: string) => {
+    return fileStorageManager.clearHistory(workspaceName);
+  });
+
+  // Workspace data files (workspace-specific state like sync states, pending changes)
+  ipcMain.handle(FILE_STORAGE_CHANNELS.READ_WORKSPACE_DATA_FILE, async (_event, { workspaceName, filename }: { workspaceName: string; filename: string }) => {
+    return fileStorageManager.readWorkspaceDataFile(workspaceName, filename);
+  });
+
+  ipcMain.handle(FILE_STORAGE_CHANNELS.WRITE_WORKSPACE_DATA_FILE, async (_event, { workspaceName, filename, data }: { workspaceName: string; filename: string; data: unknown }) => {
+    return fileStorageManager.writeWorkspaceDataFile(workspaceName, filename, data);
+  });
+
+  ipcMain.handle(FILE_STORAGE_CHANNELS.DELETE_WORKSPACE_DATA_FILE, async (_event, { workspaceName, filename }: { workspaceName: string; filename: string }) => {
+    return fileStorageManager.deleteWorkspaceDataFile(workspaceName, filename);
+  });
+
+  // ==================== Git Handlers ====================
+
+  // Repository operations
+  ipcMain.handle(GIT_CHANNELS.INIT, async (_event, dir: string) => {
+    return gitManager.init(dir);
+  });
+
+  ipcMain.handle(GIT_CHANNELS.IS_REPO, async (_event, dir: string) => {
+    return gitManager.isRepo(dir);
+  });
+
+  ipcMain.handle(GIT_CHANNELS.CLONE, async (_event, { url, dir, branch }: { url: string; dir: string; branch?: string }) => {
+    return gitManager.clone(url, dir, branch);
+  });
+
+  // Status
+  ipcMain.handle(GIT_CHANNELS.STATUS, async (_event, dir: string) => {
+    return gitManager.status(dir);
+  });
+
+  // Staging
+  ipcMain.handle(GIT_CHANNELS.ADD, async (_event, { dir, filepath }: { dir: string; filepath: string }) => {
+    return gitManager.add(dir, filepath);
+  });
+
+  ipcMain.handle(GIT_CHANNELS.ADD_ALL, async (_event, dir: string) => {
+    return gitManager.addAll(dir);
+  });
+
+  ipcMain.handle(GIT_CHANNELS.UNSTAGE, async (_event, { dir, filepath }: { dir: string; filepath: string }) => {
+    return gitManager.unstage(dir, filepath);
+  });
+
+  ipcMain.handle(GIT_CHANNELS.DISCARD_CHANGES, async (_event, { dir, filepath }: { dir: string; filepath: string }) => {
+    return gitManager.discardChanges(dir, filepath);
+  });
+
+  // Commits
+  ipcMain.handle(GIT_CHANNELS.COMMIT, async (_event, { dir, message, author }: { dir: string; message: string; author: { name: string; email: string } }) => {
+    return gitManager.commit(dir, message, author);
+  });
+
+  ipcMain.handle(GIT_CHANNELS.LOG, async (_event, { dir, depth }: { dir: string; depth?: number }) => {
+    return gitManager.log(dir, depth);
+  });
+
+  // Branches
+  ipcMain.handle(GIT_CHANNELS.LIST_BRANCHES, async (_event, dir: string) => {
+    return gitManager.listBranches(dir);
+  });
+
+  ipcMain.handle(GIT_CHANNELS.CURRENT_BRANCH, async (_event, dir: string) => {
+    return gitManager.currentBranch(dir);
+  });
+
+  ipcMain.handle(GIT_CHANNELS.CREATE_BRANCH, async (_event, { dir, name, checkout }: { dir: string; name: string; checkout?: boolean }) => {
+    return gitManager.createBranch(dir, name, checkout);
+  });
+
+  ipcMain.handle(GIT_CHANNELS.CHECKOUT, async (_event, { dir, ref }: { dir: string; ref: string }) => {
+    return gitManager.checkout(dir, ref);
+  });
+
+  ipcMain.handle(GIT_CHANNELS.DELETE_BRANCH, async (_event, { dir, name }: { dir: string; name: string }) => {
+    return gitManager.deleteBranch(dir, name);
+  });
+
+  // Remotes
+  ipcMain.handle(GIT_CHANNELS.LIST_REMOTES, async (_event, dir: string) => {
+    return gitManager.listRemotes(dir);
+  });
+
+  ipcMain.handle(GIT_CHANNELS.ADD_REMOTE, async (_event, { dir, name, url }: { dir: string; name: string; url: string }) => {
+    return gitManager.addRemote(dir, name, url);
+  });
+
+  ipcMain.handle(GIT_CHANNELS.REMOVE_REMOTE, async (_event, { dir, name }: { dir: string; name: string }) => {
+    return gitManager.removeRemote(dir, name);
+  });
+
+  // Sync
+  ipcMain.handle(GIT_CHANNELS.PUSH, async (_event, { dir, remote, branch }: { dir: string; remote?: string; branch?: string }) => {
+    return gitManager.push(dir, remote, branch);
+  });
+
+  ipcMain.handle(GIT_CHANNELS.PULL, async (_event, { dir, remote, branch, author }: { dir: string; remote?: string; branch?: string; author?: { name: string; email: string } }) => {
+    return gitManager.pull(dir, remote, branch, author);
+  });
+
+  ipcMain.handle(GIT_CHANNELS.FETCH, async (_event, { dir, remote, branch }: { dir: string; remote?: string; branch?: string }) => {
+    return gitManager.fetch(dir, remote, branch);
+  });
+
+  // Credentials
+  ipcMain.handle(GIT_CHANNELS.SET_CREDENTIALS, (_event, credentials: { username: string; password: string } | null) => {
+    gitManager.setCredentials(credentials);
+    return { success: true };
+  });
+
+  // Utils
+  ipcMain.handle(GIT_CHANNELS.CREATE_GITIGNORE, async (_event, dir: string) => {
+    return gitManager.createGitignore(dir);
+  });
+
+  ipcMain.handle(GIT_CHANNELS.GET_FILE_FOR_DIFF, async (_event, { dir, filepath }: { dir: string; filepath: string }) => {
+    return gitManager.getFileForDiff(dir, filepath);
+  });
+
   // ==================== GitHub Handlers ====================
 
   // Authentication
@@ -701,11 +985,48 @@ function setupIpcHandlers(): void {
   ipcMain.handle(GITHUB_CHANNELS.PULL_LATEST, async (_event, { owner, repo, branch }: { owner: string; repo: string; branch: string }) => {
     return githubManager.pullLatest(owner, repo, branch);
   });
+
+  // ==================== Public Specs Handlers ====================
+
+  ipcMain.handle(PUBLIC_SPECS_CHANNELS.CHECK_SUBDOMAIN, async (_event, { subdomain, userId }: { subdomain: string; userId?: string }) => {
+    return s3UploadManager.checkSubdomainAvailability(subdomain, userId);
+  });
+
+  ipcMain.handle(PUBLIC_SPECS_CHANNELS.UPLOAD_SPEC, async (_event, options: UploadSpecOptions) => {
+    return s3UploadManager.uploadSpec(options);
+  });
+
+  ipcMain.handle(PUBLIC_SPECS_CHANNELS.GET_VERSIONS, async (_event, subdomain: string) => {
+    return s3UploadManager.getVersions(subdomain);
+  });
+
+  ipcMain.handle(PUBLIC_SPECS_CHANNELS.DELETE_VERSION, async (_event, { subdomain, version }: { subdomain: string; version: string }) => {
+    return s3UploadManager.deleteVersion(subdomain, version);
+  });
+
+  ipcMain.handle(PUBLIC_SPECS_CHANNELS.DELETE_ROOT_FILES, async (_event, subdomain: string) => {
+    return s3UploadManager.deleteRootFiles(subdomain);
+  });
+
+  ipcMain.handle(PUBLIC_SPECS_CHANNELS.GET_MANIFEST, async (_event, subdomain: string) => {
+    return s3UploadManager.getManifest(subdomain);
+  });
+
+  ipcMain.handle(PUBLIC_SPECS_CHANNELS.UPDATE_MANIFEST, async (_event, manifest: Parameters<typeof s3UploadManager.updateManifest>[0]) => {
+    return s3UploadManager.updateManifest(manifest);
+  });
 }
 
 // App ready
 app.whenReady().then(async () => {
+  checkAppLocation();
   setupIpcHandlers();
+  
+  // Register as default protocol handler for echolon://
+  // This is needed for development; in production, electron-builder handles it
+  if (isDev) {
+    app.setAsDefaultProtocolClient('echolon');
+  }
   
   // Initialize file storage before creating window
   await fileStorageManager.initialize();
@@ -713,11 +1034,23 @@ app.whenReady().then(async () => {
   createWindow();
   setupMenu(mainWindow);
   
+  // Handle any pending deep link URL after window is ready
+  if (pendingDeepLinkUrl && mainWindow) {
+    // Wait for renderer to be ready
+    mainWindow.webContents.once('did-finish-load', () => {
+      if (pendingDeepLinkUrl) {
+        handleDeepLink(pendingDeepLinkUrl);
+        pendingDeepLinkUrl = null;
+      }
+    });
+  }
+  
   // Setup auto-updater (always register handlers, but only auto-check in production)
   const config = await fileStorageManager.readConfig();
   setupUpdater(mainWindow, {
     // Only auto-check in production, and respect user setting
     autoCheckUpdates: !isDev && (config?.settings?.autoCheckUpdates ?? true),
+    //autoCheckUpdates: true
   });
 
   app.on('activate', () => {
@@ -725,6 +1058,20 @@ app.whenReady().then(async () => {
       createWindow();
     }
   });
+
+  setTimeout(() => {
+  /*onUpdateAvailable(mainWindow, {
+    version: '1.0.2',
+    releaseNotes: 'Initial release',
+    releaseDate: new Date().toISOString(),
+    releaseName: '1.0.2',
+    files: [],
+    path: '',
+    sha512: '',
+  });*/
+  }, 5000);
+
+
 });
 
 // Quit when all windows are closed (except on macOS)
@@ -748,3 +1095,30 @@ app.on('web-contents-created', (_, contents) => {
     }
   });
 });
+
+function checkAppLocation(): void {
+  // Only check on macOS and in production
+  if (process.platform !== 'darwin' || !app.isPackaged) {
+    return;
+  }
+
+  const appPath = app.getAppPath();
+  const isInApplications = appPath.startsWith('/Applications/');
+  const isTranslocated = appPath.includes('/AppTranslocation/');
+  
+  if (!isInApplications || isTranslocated) {
+    dialog.showMessageBox({
+      type: 'warning',
+      title: 'Move to Applications',
+      message: 'Echolon is not in your Applications folder',
+      detail: 'For the best experience (including automatic updates), please move Echolon to your Applications folder.\n\nWould you like to open the Applications folder now?',
+      buttons: ['Open Applications Folder', 'Continue Anyway'],
+      defaultId: 0,
+      cancelId: 1,
+    }).then((result) => {
+      if (result.response === 0) {
+        shell.openPath('/Applications');
+      }
+    });
+  }
+}

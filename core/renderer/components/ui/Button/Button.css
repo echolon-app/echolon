@@ -88,7 +88,11 @@
 /* Loading state */
 .btn--loading {
   position: relative;
-  color: transparent;
+}
+
+.btn--loading .btn__text,
+.btn--loading .btn__icon {
+  opacity: 0;
 }
 
 .btn--loading .btn__spinner {
@@ -96,7 +100,6 @@
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  color: currentColor;
 }
 
 .btn--loading .btn__spinner svg {

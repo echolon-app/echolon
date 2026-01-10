@@ -39,6 +39,7 @@ export interface ColorEmojiPickerProps {
   emoji?: string;
   onChange: (updates: { color?: string; emoji?: string }) => void;
   size?: 'sm' | 'md' | 'lg';
+  disabled?: boolean;
 }
 
 export const ColorEmojiPicker: React.FC<ColorEmojiPickerProps> = ({
@@ -46,6 +47,7 @@ export const ColorEmojiPicker: React.FC<ColorEmojiPickerProps> = ({
   emoji,
   onChange,
   size = 'md',
+  disabled = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'color' | 'emoji'>('color');
@@ -131,8 +133,9 @@ export const ColorEmojiPicker: React.FC<ColorEmojiPickerProps> = ({
       <button
         ref={triggerRef}
         type="button"
-        className={`color-emoji-picker__trigger color-emoji-picker__trigger--${size}`}
-        onClick={() => setIsOpen(!isOpen)}
+        className={`color-emoji-picker__trigger color-emoji-picker__trigger--${size}${disabled ? ' color-emoji-picker__trigger--disabled' : ''}`}
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        disabled={disabled}
         title={emoji ? `Emoji: ${emoji}` : color ? `Color: ${color}` : 'Choose color or emoji'}
       >
         {displayValue ? (

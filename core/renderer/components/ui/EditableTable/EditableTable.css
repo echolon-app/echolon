@@ -256,3 +256,127 @@
   width: 12px;
   height: 12px;
 }
+
+/* Secure column */
+.editable-table__cell--secure {
+  width: 40px;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.editable-table__cell--secure svg {
+  width: 14px;
+  height: 14px;
+}
+
+.editable-table__secure-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  opacity: 0.5;
+}
+
+.editable-table__row:hover .editable-table__secure-toggle {
+  opacity: 1;
+}
+
+.editable-table__secure-toggle:hover:not(:disabled) {
+  background-color: var(--bg-hover);
+  color: var(--color-warning);
+  border-color: var(--border-secondary);
+}
+
+.editable-table__secure-toggle--active {
+  color: var(--color-warning);
+  opacity: 1;
+  background-color: rgba(245, 158, 11, 0.1);
+}
+
+.editable-table__secure-toggle--active:hover:not(:disabled) {
+  background-color: rgba(245, 158, 11, 0.2);
+}
+
+.editable-table__secure-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.3;
+}
+
+.editable-table__secure-toggle svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Secure value display */
+.editable-table__secure-value {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: var(--input-height-sm);
+  padding: 0 var(--spacing-sm);
+  gap: var(--spacing-xs);
+}
+
+.editable-table__masked-value {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  letter-spacing: 0.1em;
+  user-select: none;
+}
+
+.editable-table__reveal-btn,
+.editable-table__hide-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.editable-table__reveal-btn:hover,
+.editable-table__hide-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.editable-table__reveal-btn svg,
+.editable-table__hide-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Value wrapper for secure items when revealed */
+.editable-table__value-wrapper {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: var(--spacing-xs);
+}
+
+.editable-table__value-wrapper .input-wrapper {
+  flex: 1;
+}
+
+.editable-table__value-wrapper .editable-table__hide-btn {
+  position: relative;
+  right: 0;
+}

@@ -49,11 +49,16 @@ export function useGlobalShortcuts(handlers: {
   onSendRequest?: () => void;
   onOpenSettings?: () => void;
   onNewRequest?: () => void;
+  onNewTab?: () => void;
+  onCloseTab?: () => void;
   onNewCollection?: () => void;
   onSaveRequest?: () => void;
   onOpenSearch?: () => void;
   onToggleSidebar?: () => void;
   onToggleConsole?: () => void;
+  onOpenShortcuts?: () => void;
+  onDownloadResponse?: () => void;
+  onCopyResponse?: () => void;
 }) {
   const shortcuts: Shortcut[] = [];
 
@@ -81,6 +86,22 @@ export function useGlobalShortcuts(handlers: {
     });
   }
 
+  if (handlers.onNewTab) {
+    shortcuts.push({
+      key: 'e',
+      meta: true,
+      handler: handlers.onNewTab,
+    });
+  }
+
+  if (handlers.onCloseTab) {
+    shortcuts.push({
+      key: 'd',
+      meta: true,
+      handler: handlers.onCloseTab,
+    });
+  }
+
   if (handlers.onNewCollection) {
     shortcuts.push({
       key: 'n',
@@ -92,7 +113,7 @@ export function useGlobalShortcuts(handlers: {
 
   if (handlers.onSaveRequest) {
     shortcuts.push({
-      key: 's',
+      key: 'z',
       meta: true,
       handler: handlers.onSaveRequest,
     });
@@ -119,6 +140,30 @@ export function useGlobalShortcuts(handlers: {
       key: '`',
       meta: true,
       handler: handlers.onToggleConsole,
+    });
+  }
+
+  if (handlers.onOpenShortcuts) {
+    shortcuts.push({
+      key: 'o',
+      meta: true,
+      handler: handlers.onOpenShortcuts,
+    });
+  }
+
+  if (handlers.onDownloadResponse) {
+    shortcuts.push({
+      key: 'j',
+      meta: true,
+      handler: handlers.onDownloadResponse,
+    });
+  }
+
+  if (handlers.onCopyResponse) {
+    shortcuts.push({
+      key: '.',
+      meta: true,
+      handler: handlers.onCopyResponse,
     });
   }
 

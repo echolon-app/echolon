@@ -100,6 +100,29 @@
   cursor: not-allowed;
 }
 
+.autocomplete__leading-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.autocomplete__leading-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.autocomplete--sm .autocomplete__leading-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.autocomplete--lg .autocomplete__leading-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
 .autocomplete__value {
   display: flex;
   align-items: center;

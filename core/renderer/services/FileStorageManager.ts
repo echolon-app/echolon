@@ -266,6 +266,53 @@ class FileStorageManager {
     return window.electronAPI?.writeDataFile(filename, data) ?? false;
   }
 
+  // ==================== Workspace Data File Operations ====================
+  // Workspace-specific data files for state like sync states, pending changes, etc.
+
+  /**
+   * Read a workspace-specific data file
+   */
+  async readWorkspaceDataFile<T>(workspaceName: string, filename: string): Promise<T | null> {
+    return window.electronAPI?.readWorkspaceDataFile<T>(workspaceName, filename) ?? null;
+  }
+
+  /**
+   * Write a workspace-specific data file
+   */
+  async writeWorkspaceDataFile<T>(workspaceName: string, filename: string, data: T): Promise<boolean> {
+    return window.electronAPI?.writeWorkspaceDataFile(workspaceName, filename, data) ?? false;
+  }
+
+  /**
+   * Delete a workspace-specific data file
+   */
+  async deleteWorkspaceDataFile(workspaceName: string, filename: string): Promise<boolean> {
+    return window.electronAPI?.deleteWorkspaceDataFile(workspaceName, filename) ?? false;
+  }
+
+  // ==================== Request History Operations ====================
+
+  /**
+   * Read request history from disk for a workspace
+   */
+  async readHistory<T>(workspaceName: string): Promise<T | null> {
+    return window.electronAPI?.readHistory<T>(workspaceName) ?? null;
+  }
+
+  /**
+   * Write request history to disk for a workspace
+   */
+  async writeHistory<T>(workspaceName: string, data: T): Promise<boolean> {
+    return window.electronAPI?.writeHistory(workspaceName, data) ?? false;
+  }
+
+  /**
+   * Clear history for a workspace
+   */
+  async clearHistory(workspaceName: string): Promise<boolean> {
+    return window.electronAPI?.clearHistory(workspaceName) ?? false;
+  }
+
   // ==================== Mocking Data Operations ====================
   // Workspace-based storage for captured requests
 

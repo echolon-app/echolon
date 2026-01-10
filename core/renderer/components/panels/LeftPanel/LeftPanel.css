@@ -293,10 +293,13 @@
   padding: var(--spacing-sm) var(--spacing-lg);
   background: var(--color-primary);
   color: white;
+  border: none;
   border-radius: var(--radius-md);
   font-size: var(--font-sm);
   font-weight: 500;
+  font-family: inherit;
   text-decoration: none;
+  cursor: pointer;
   transition: all 0.2s ease;
   margin-top: var(--spacing-sm);
 }
@@ -419,4 +422,26 @@
 /* WebSocket icon in standalone items */
 .left-panel__standalone-section .collapsible-list-item__icon svg {
   color: var(--color-primary);
+}
+
+/* Workspace items */
+.workspace-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+}
+
+.workspace-item__color {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.workspace-item__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

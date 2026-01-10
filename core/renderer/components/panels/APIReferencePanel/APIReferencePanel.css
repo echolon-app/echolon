@@ -207,6 +207,8 @@
 
 .request-card__url-input {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .request-card__url-input .input-wrapper {

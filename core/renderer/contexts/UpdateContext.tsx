@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { useToast } from './ToastContext';
 import { isElectron } from '@/utils';
 import { APP_VERSION } from '@/utils/environment';
@@ -66,46 +66,67 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'update' | 'changelog'>('update');
   
+  // Track if current check was manually triggered (should open modal directly)
+  const isManualCheckRef = useRef(false);
+
+  const onUpdateAvailable = (data: { version: string; releaseNotes: string | null; releaseDate: string; releaseName?: string }) => {
+    console.log('[UpdateContext] Update available:', data.version);
+    setStatus('available');
+    setUpdateInfo({
+      version: data.version,
+      releaseNotes: data.releaseNotes,
+      releaseDate: data.releaseDate,
+      releaseName: data.releaseName,
+    });
+    setError(null);
+    
+    // If manual check, open modal directly; otherwise show toast
+    if (isManualCheckRef.current) {
+      isManualCheckRef.current = false;
+      setModalMode('update');
+      setIsModalOpen(true);
+    } else {
+      // Show toast notification for background/auto checks
+      addToast({
+        type: 'info',
+        message: `Update v${data.version} available`,
+        description: 'Click to download',
+        duration: 10000,
+        onClick: () => {
+          setModalMode('update');
+          setIsModalOpen(true);
+        },
+        actionLabel: 'View update',
+      });
+    }
+  }
+  
   // Subscribe to update events from main process
   useEffect(() => {
     if (!isElectronApp || !window.electronAPI) return;
     
     const unsubscribers: (() => void)[] = [];
-    
     // Update available
     unsubscribers.push(
       window.electronAPI.onUpdateAvailable((data) => {
-        console.log('[UpdateContext] Update available:', data.version);
-        setStatus('available');
-        setUpdateInfo({
-          version: data.version,
-          releaseNotes: data.releaseNotes,
-          releaseDate: data.releaseDate,
-          releaseName: data.releaseName,
-        });
-        setError(null);
-        
-        // Show toast notification for background checks
-        addToast({
-          type: 'info',
-          message: `Update v${data.version} available`,
-          description: 'Click to download',
-          duration: 10000,
-          onClick: () => {
-            setModalMode('update');
-            setIsModalOpen(true);
-          },
-          actionLabel: 'View update',
-        });
+        onUpdateAvailable(data);
       })
     );
     
     // No update available
     unsubscribers.push(
-      window.electronAPI.onUpdateNotAvailable(() => {
-        console.log('[UpdateContext] No update available');
+      window.electronAPI.onUpdateNotAvailable((data) => {
+        console.log('[UpdateContext] No update available, current version:', data?.currentVersion || APP_VERSION);
+        isManualCheckRef.current = false;
         setStatus('not-available');
         setError(null);
+        
+        addToast({
+          type: 'success',
+          message: 'You\'re up to date!',
+          description: `Version ${APP_VERSION} is the latest`,
+          duration: 4000,
+        });
       })
     );
     
@@ -153,6 +174,7 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     unsubscribers.push(
       window.electronAPI.onUpdateError((data) => {
         console.error('[UpdateContext] Update error:', data.message);
+        isManualCheckRef.current = false;
         setStatus('error');
         setError(data.message);
         setDownloadProgress(null);
@@ -169,6 +191,19 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       unsubscribers.forEach((unsub) => unsub());
     };
   }, [isElectronApp, addToast]);
+
+  /*useEffect(() => {
+    console.log('[UpdateContext] Update context mounted');
+    setTimeout(() => {
+      onUpdateAvailable({
+        version: '1.0.2',
+        releaseNotes: 'Initial release',
+        releaseDate: new Date().toISOString(),
+        releaseName: '1.0.2',
+      });
+    }, 5000);
+ 
+  }, []);/**/
   
   // Check for updates
   const checkForUpdates = useCallback(async () => {
@@ -178,6 +213,7 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
     
     console.log('[UpdateContext] Starting update check...');
+    isManualCheckRef.current = true; // Mark as manual check to open modal directly
     setStatus('checking');
     setError(null);
     
@@ -186,7 +222,13 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setStatus((currentStatus) => {
         if (currentStatus === 'checking') {
           console.log('[UpdateContext] Update check timed out');
+          isManualCheckRef.current = false;
           setError('Update check timed out. Please try again.');
+          addToast({
+            type: 'error',
+            message: 'Update check timed out',
+            description: 'Please try again later',
+          });
           return 'error';
         }
         return currentStatus;
@@ -200,11 +242,21 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Clear timeout since we got a response
       clearTimeout(timeoutId);
       
-      // If no event fired, handle the result directly
+      // Give event listeners a moment to fire first
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // If no event fired, handle the result directly with toast
       if (result && !result.updateAvailable) {
-        // Set not-available if the event listener didn't already set it
         setStatus((currentStatus) => {
+          // Only show fallback toast if still in 'checking' state (event didn't fire)
           if (currentStatus === 'checking') {
+            isManualCheckRef.current = false;
+            addToast({
+              type: 'success',
+              message: 'You\'re up to date!',
+              description: `Version ${APP_VERSION} is the latest`,
+              duration: 4000,
+            });
             return 'not-available';
           }
           return currentStatus;
@@ -212,11 +264,29 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     } catch (err) {
       clearTimeout(timeoutId);
+      isManualCheckRef.current = false;
       console.error('[UpdateContext] Update check error:', err);
       setStatus('error');
       setError(err instanceof Error ? err.message : 'Failed to check for updates');
     }
-  }, [isElectronApp]);
+  }, [isElectronApp, addToast]);
+  
+  // Listen for menu bar "Check for Updates" command
+  useEffect(() => {
+    if (!isElectronApp || !window.electronAPI?.onCheckForUpdates) return;
+    
+    const unsubscribe = window.electronAPI.onCheckForUpdates(() => {
+      console.log('[UpdateContext] Menu check for updates triggered');
+      addToast({
+        type: 'info',
+        message: 'Checking for updates...',
+        duration: 3000,
+      });
+      checkForUpdates();
+    });
+    
+    return unsubscribe;
+  }, [isElectronApp, checkForUpdates, addToast]);
   
   // Download update
   const downloadUpdate = useCallback(async () => {

@@ -62,11 +62,15 @@ export const CodePanel: React.FC = () => {
                                !hasUserDefinedUserAgent &&
                                !hasCollectionUserAgent;
     
+    // Helper to filter out all override markers from headers
+    const filterOverrideMarkers = (headers: typeof request.headers) => 
+      headers.filter(h => !h.id?.startsWith('__user_agent_override__') && !h.id?.startsWith('__inherited_header_override__'));
+    
     if (!shouldAddUserAgent) {
-      // Filter out the override marker from headers before generating code
+      // Filter out the override markers from headers before generating code
       return {
         ...request,
-        headers: request.headers.filter(h => !h.id?.startsWith('__user_agent_override__')),
+        headers: filterOverrideMarkers(request.headers),
       };
     }
     
@@ -75,7 +79,7 @@ export const CodePanel: React.FC = () => {
       ...request,
       headers: [
         { id: uuidv4(), key: 'User-Agent', value: `Echolon/${APP_VERSION}`, enabled: true },
-        ...request.headers.filter(h => !h.id?.startsWith('__user_agent_override__')),
+        ...filterOverrideMarkers(request.headers),
       ],
     };
   }, [request, settings.sendUserAgent, requestCollection?.headers]);

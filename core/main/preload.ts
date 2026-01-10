@@ -1,120 +1,14 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
-
-// IPC channel constants (duplicated here to avoid cross-rootDir import issues)
-const IPC_CHANNELS = {
-  CHECK_FOR_UPDATES: 'check-for-updates',
-  UPDATE_AVAILABLE: 'update-available',
-  UPDATE_NOT_AVAILABLE: 'update-not-available',
-  UPDATE_DOWNLOADED: 'update-downloaded',
-  UPDATE_ERROR: 'update-error',
-  DOWNLOAD_UPDATE: 'download-update',
-  INSTALL_UPDATE: 'install-update',
-  QUIT_AND_INSTALL_LATER: 'quit-and-install-later',
-  GET_APP_VERSION: 'get-app-version',
-  UPDATE_DOWNLOAD_PROGRESS: 'update-download-progress',
-  MAKE_HTTP_REQUEST: 'make-http-request',
-  EXECUTE_SCRIPT: 'execute-script',
-  OPEN_EXTERNAL: 'open-external',
-  START_MOCK_SERVER: 'start-mock-server',
-  STOP_MOCK_SERVER: 'stop-mock-server',
-  GET_MOCK_SERVER_STATUS: 'get-mock-server-status',
-  MOCK_REQUEST_RECEIVED: 'mock-request-received',
-  UPDATE_MOCK_ROUTES: 'update-mock-routes',
-  GET_LOCAL_HOSTNAME: 'get-local-hostname',
-  // Spec Import
-  FETCH_URL_CONTENT: 'fetch-url-content',
-  // Cloud Proxy channels
-  CLOUD_PROXY_CONNECT: 'cloud-proxy-connect',
-  CLOUD_PROXY_DISCONNECT: 'cloud-proxy-disconnect',
-  CLOUD_PROXY_STATUS: 'cloud-proxy-status',
-  CLOUD_PROXY_STATUS_CHANGED: 'cloud-proxy-status-changed',
-  CLOUD_PROXY_REQUEST_RECEIVED: 'cloud-proxy-request-received',
-  CLOUD_PROXY_FORWARDED_RESPONSE: 'cloud-proxy-forwarded-response',
-  CLOUD_PROXY_SEND_RESPONSE: 'cloud-proxy-send-response',
-  CLOUD_PROXY_CHECK_NAMESPACE: 'cloud-proxy-check-namespace',
-  // Cloud Proxy Mock Management
-  CLOUD_PROXY_FETCH_MOCKS: 'cloud-proxy-fetch-mocks',
-  CLOUD_PROXY_UPLOAD_MOCK: 'cloud-proxy-upload-mock',
-  CLOUD_PROXY_DELETE_MOCK: 'cloud-proxy-delete-mock',
-  CLOUD_PROXY_SYNC_MOCKS: 'cloud-proxy-sync-mocks',
-} as const;
-
-// File Storage IPC channels
-const FILE_STORAGE_CHANNELS = {
-  // Initialization
-  INIT_FILE_STORAGE: 'file-storage-init',
-  GET_ECHOLON_PATH: 'file-storage-get-path',
-  SET_ECHOLON_PATH: 'file-storage-set-path',
-  SELECT_DIRECTORY: 'file-storage-select-directory',
-  OPEN_IN_FILE_MANAGER: 'file-storage-open-in-file-manager',
-  // Config
-  READ_CONFIG: 'file-storage-read-config',
-  WRITE_CONFIG: 'file-storage-write-config',
-  UPDATE_CONFIG: 'file-storage-update-config',
-  // Environments
-  READ_ENVIRONMENTS: 'file-storage-read-environments',
-  WRITE_ENVIRONMENTS: 'file-storage-write-environments',
-  // Workspaces
-  GET_ALL_WORKSPACES: 'file-storage-get-all-workspaces',
-  CREATE_WORKSPACE: 'file-storage-create-workspace',
-  READ_WORKSPACE: 'file-storage-read-workspace',
-  UPDATE_WORKSPACE: 'file-storage-update-workspace',
-  RENAME_WORKSPACE: 'file-storage-rename-workspace',
-  DELETE_WORKSPACE: 'file-storage-delete-workspace',
-  // Collections
-  GET_ALL_COLLECTIONS: 'file-storage-get-all-collections',
-  GET_ALL_COLLECTIONS_ALL_WORKSPACES: 'file-storage-get-all-collections-all-workspaces',
-  READ_COLLECTION: 'file-storage-read-collection',
-  WRITE_COLLECTION: 'file-storage-write-collection',
-  DELETE_COLLECTION: 'file-storage-delete-collection',
-  RENAME_COLLECTION: 'file-storage-rename-collection',
-  // File watching
-  WATCH_DIRECTORY: 'file-storage-watch-directory',
-  UNWATCH_DIRECTORY: 'file-storage-unwatch-directory',
-  FILE_CHANGED: 'file-storage-file-changed',
-  // Generic data files (for app state like pending changes, mocks, etc.)
-  READ_DATA_FILE: 'file-storage-read-data-file',
-  WRITE_DATA_FILE: 'file-storage-write-data-file',
-  // Mocking data (per workspace/endpoint)
-  READ_MOCK_REQUESTS: 'file-storage-read-mock-requests',
-  WRITE_MOCK_REQUESTS: 'file-storage-write-mock-requests',
-  READ_ALL_MOCK_REQUESTS: 'file-storage-read-all-mock-requests',
-  READ_ALL_MOCKING_DATA: 'file-storage-read-all-mocking-data',
-  DELETE_MOCK_API_DATA: 'file-storage-delete-mock-api-data',
-  DELETE_MOCK_ENDPOINT_DATA: 'file-storage-delete-mock-endpoint-data',
-  CLEAR_MOCKING_DATA: 'file-storage-clear-mocking-data',
-} as const;
-
-// GitHub IPC channels
-const GITHUB_CHANNELS = {
-  // Authentication
-  AUTH_WITH_PAT: 'github-auth-with-pat',
-  START_OAUTH: 'github-start-oauth',
-  LOGOUT: 'github-logout',
-  GET_CURRENT_USER: 'github-get-current-user',
-  IS_AUTHENTICATED: 'github-is-authenticated',
-  SET_ACCESS_TOKEN: 'github-set-access-token',
-  // Repositories
-  LIST_REPOS: 'github-list-repos',
-  GET_REPO: 'github-get-repo',
-  CREATE_REPO: 'github-create-repo',
-  // Branches
-  LIST_BRANCHES: 'github-list-branches',
-  GET_BRANCH: 'github-get-branch',
-  CREATE_BRANCH: 'github-create-branch',
-  // Commits
-  LIST_COMMITS: 'github-list-commits',
-  GET_COMMIT: 'github-get-commit',
-  // Contents
-  GET_CONTENTS: 'github-get-contents',
-  CREATE_OR_UPDATE_FILE: 'github-create-or-update-file',
-  DELETE_FILE: 'github-delete-file',
-  // Comparison
-  COMPARE_COMMITS: 'github-compare-commits',
-  // Batch operations
-  PUSH_CHANGES: 'github-push-changes',
-  PULL_LATEST: 'github-pull-latest',
-} as const;
+import {
+  UPDATE_CHANNELS,
+  APP_CHANNELS,
+  MOCK_SERVER_CHANNELS,
+  CLOUD_PROXY_CHANNELS,
+  FILE_STORAGE_CHANNELS,
+  GIT_CHANNELS,
+  GITHUB_CHANNELS,
+  PUBLIC_SPECS_CHANNELS,
+} from '../shared/ipc-channels';
 
 // HTTP Request options interface
 interface HttpRequestOptions {
@@ -131,6 +25,7 @@ interface HttpResponseResult {
   statusText?: string;
   headers?: Array<{ key: string; value: string }>;
   body?: string;
+  bodyBase64?: string; // Base64-encoded body for binary content (images, videos, PDFs, etc.)
   size?: number;
   duration: number;
   error?: string;
@@ -423,15 +318,96 @@ interface GitHubApiResponse<T> {
   statusCode?: number;
 }
 
+// Git types (isomorphic-git)
+interface GitStatus {
+  staged: GitFileStatus[];
+  unstaged: GitFileStatus[];
+  untracked: string[];
+}
+
+interface GitFileStatus {
+  path: string;
+  status: 'added' | 'modified' | 'deleted';
+}
+
+interface GitCommitInfo {
+  oid: string;
+  message: string;
+  author: {
+    name: string;
+    email: string;
+    timestamp: number;
+  };
+  parent: string[];
+}
+
+interface GitBranchInfo {
+  name: string;
+  current: boolean;
+  remote?: string;
+}
+
+interface GitRemote {
+  name: string;
+  url: string;
+}
+
+interface GitCredentials {
+  username: string;
+  password: string;
+}
+
+// Public Specs types
+interface SpecManifest {
+  subdomain: string;
+  collectionId: string;
+  collectionName: string;
+  createdAt: string;
+  updatedAt: string;
+  versions: SpecVersion[];
+}
+
+interface SpecVersion {
+  version: string;
+  publishedAt: string;
+  title?: string;
+  description?: string;
+}
+
+interface UploadSpecOptions {
+  subdomain: string;
+  version: string;
+  openapiJson: string;
+  echolonJson?: string; // Internal Echolon format with extended features
+  htmlContent: string;
+  collectionId: string;
+  collectionName: string;
+  title?: string;
+  description?: string;
+}
+
+interface UploadResult {
+  success: boolean;
+  error?: string;
+  specUrl?: string;
+  htmlUrl?: string;
+}
+
+interface CheckSubdomainResult {
+  available: boolean;
+  reason?: 'exists' | 'invalid' | 'reserved';
+  message?: string;
+}
+
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electronAPI', {
   // App info
-  getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_VERSION),
+  getAppVersion: () => ipcRenderer.invoke(APP_CHANNELS.GET_APP_VERSION),
 
   // HTTP Request - bypasses CORS by going through Node.js
   makeHttpRequest: (options: HttpRequestOptions): Promise<HttpResponseResult> => 
-    ipcRenderer.invoke(IPC_CHANNELS.MAKE_HTTP_REQUEST, options),
+    ipcRenderer.invoke(APP_CHANNELS.MAKE_HTTP_REQUEST, options),
 
   // Execute script - runs in main process to bypass CSP
   executeScript: (options: {
@@ -448,75 +424,106 @@ contextBridge.exposeInMainWorld('electronAPI', {
     duration: number;
     envVars: Record<string, string>;
     runtimeVars: Record<string, string>;
-  }> => ipcRenderer.invoke(IPC_CHANNELS.EXECUTE_SCRIPT, options),
+    modifiedResponse?: { status: number; statusText: string; headers: Record<string, string>; body: string; responseTime: number };
+  }> => ipcRenderer.invoke(APP_CHANNELS.EXECUTE_SCRIPT, options),
+
+  // Compute Digest Auth - computes MD5/SHA-256 hash for digest authentication
+  computeDigestAuth: (options: {
+    wwwAuthHeader: string;
+    username: string;
+    password: string;
+    method: string;
+    uri: string;
+  }): Promise<{
+    success: boolean;
+    header?: string;
+    error?: string;
+    challenge?: {
+      realm: string;
+      nonce: string;
+      algorithm?: string;
+      qop?: string;
+      opaque?: string;
+    };
+  }> => ipcRenderer.invoke(APP_CHANNELS.COMPUTE_DIGEST_AUTH, options),
 
   // Update functions
-  checkForUpdates: () => ipcRenderer.invoke(IPC_CHANNELS.CHECK_FOR_UPDATES),
-  downloadUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.DOWNLOAD_UPDATE),
-  installUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.INSTALL_UPDATE),
-  quitAndInstallLater: () => ipcRenderer.invoke(IPC_CHANNELS.QUIT_AND_INSTALL_LATER),
+  checkForUpdates: () => ipcRenderer.invoke(UPDATE_CHANNELS.CHECK_FOR_UPDATES),
+  downloadUpdate: () => ipcRenderer.invoke(UPDATE_CHANNELS.DOWNLOAD_UPDATE),
+  installUpdate: () => ipcRenderer.invoke(UPDATE_CHANNELS.INSTALL_UPDATE),
+  quitAndInstallLater: () => ipcRenderer.invoke(UPDATE_CHANNELS.QUIT_AND_INSTALL_LATER),
+  setUpdateServer: (url: string | null): Promise<{ success: boolean; feedUrl?: string; error?: string }> =>
+    ipcRenderer.invoke(UPDATE_CHANNELS.SET_UPDATE_SERVER, url),
 
   // Shell functions
   openExternal: (url: string): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.OPEN_EXTERNAL, url),
+    ipcRenderer.invoke(APP_CHANNELS.OPEN_EXTERNAL, url),
+
+  // App control
+  restartApp: (): Promise<void> =>
+    ipcRenderer.invoke(APP_CHANNELS.RESTART_APP),
+  wipeAllData: (): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(APP_CHANNELS.WIPE_ALL_DATA),
+  toggleDevTools: (): Promise<void> =>
+    ipcRenderer.invoke(APP_CHANNELS.TOGGLE_DEV_TOOLS),
 
   // Mock Server functions
   startMockServer: (config: MockServerConfig): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.START_MOCK_SERVER, config),
+    ipcRenderer.invoke(MOCK_SERVER_CHANNELS.START_MOCK_SERVER, config),
   stopMockServer: (id: string): Promise<boolean> =>
-    ipcRenderer.invoke(IPC_CHANNELS.STOP_MOCK_SERVER, id),
+    ipcRenderer.invoke(MOCK_SERVER_CHANNELS.STOP_MOCK_SERVER, id),
   getMockServerStatus: (id: string): Promise<boolean> =>
-    ipcRenderer.invoke(IPC_CHANNELS.GET_MOCK_SERVER_STATUS, id),
+    ipcRenderer.invoke(MOCK_SERVER_CHANNELS.GET_MOCK_SERVER_STATUS, id),
   updateMockRoutes: (id: string, routes: MockServerConfig['routes']): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_MOCK_ROUTES, { id, routes }),
+    ipcRenderer.invoke(MOCK_SERVER_CHANNELS.UPDATE_MOCK_ROUTES, { id, routes }),
   getLocalHostname: (): Promise<string> =>
-    ipcRenderer.invoke(IPC_CHANNELS.GET_LOCAL_HOSTNAME),
+    ipcRenderer.invoke(MOCK_SERVER_CHANNELS.GET_LOCAL_HOSTNAME),
   onMockRequestReceived: (callback: (request: CapturedRequest) => void) => {
     const handler = (_event: IpcRendererEvent, request: CapturedRequest) => callback(request);
-    ipcRenderer.on(IPC_CHANNELS.MOCK_REQUEST_RECEIVED, handler);
-    return () => ipcRenderer.removeListener(IPC_CHANNELS.MOCK_REQUEST_RECEIVED, handler);
+    ipcRenderer.on(MOCK_SERVER_CHANNELS.MOCK_REQUEST_RECEIVED, handler);
+    return () => ipcRenderer.removeListener(MOCK_SERVER_CHANNELS.MOCK_REQUEST_RECEIVED, handler);
   },
 
   // Cloud Proxy functions
   cloudProxyConnect: (config: CloudProxyConfig): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.CLOUD_PROXY_CONNECT, config),
+    ipcRenderer.invoke(CLOUD_PROXY_CHANNELS.CONNECT, config),
   cloudProxyDisconnect: (): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.CLOUD_PROXY_DISCONNECT),
+    ipcRenderer.invoke(CLOUD_PROXY_CHANNELS.DISCONNECT),
   cloudProxyGetStatus: (): Promise<{ status: CloudProxyConnectionStatus; namespace?: string }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.CLOUD_PROXY_STATUS),
+    ipcRenderer.invoke(CLOUD_PROXY_CHANNELS.STATUS),
   cloudProxySendResponse: (response: CloudProxyResponse): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.CLOUD_PROXY_SEND_RESPONSE, response),
+    ipcRenderer.invoke(CLOUD_PROXY_CHANNELS.SEND_RESPONSE, response),
   cloudProxyCheckNamespace: (serverUrl: string, namespace: string): Promise<{ available: boolean; connected: boolean }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.CLOUD_PROXY_CHECK_NAMESPACE, { serverUrl, namespace }),
+    ipcRenderer.invoke(CLOUD_PROXY_CHANNELS.CHECK_NAMESPACE, { serverUrl, namespace }),
   onCloudProxyStatusChanged: (callback: (event: CloudProxyStatusEvent) => void) => {
     const handler = (_event: IpcRendererEvent, data: CloudProxyStatusEvent) => callback(data);
-    ipcRenderer.on(IPC_CHANNELS.CLOUD_PROXY_STATUS_CHANGED, handler);
-    return () => ipcRenderer.removeListener(IPC_CHANNELS.CLOUD_PROXY_STATUS_CHANGED, handler);
+    ipcRenderer.on(CLOUD_PROXY_CHANNELS.STATUS_CHANGED, handler);
+    return () => ipcRenderer.removeListener(CLOUD_PROXY_CHANNELS.STATUS_CHANGED, handler);
   },
   onCloudProxyRequestReceived: (callback: (request: CloudProxyRequest) => void) => {
     const handler = (_event: IpcRendererEvent, request: CloudProxyRequest) => callback(request);
-    ipcRenderer.on(IPC_CHANNELS.CLOUD_PROXY_REQUEST_RECEIVED, handler);
-    return () => ipcRenderer.removeListener(IPC_CHANNELS.CLOUD_PROXY_REQUEST_RECEIVED, handler);
+    ipcRenderer.on(CLOUD_PROXY_CHANNELS.REQUEST_RECEIVED, handler);
+    return () => ipcRenderer.removeListener(CLOUD_PROXY_CHANNELS.REQUEST_RECEIVED, handler);
   },
   onCloudProxyForwardedResponse: (callback: (response: CloudProxyForwardedResponse) => void) => {
     const handler = (_event: IpcRendererEvent, response: CloudProxyForwardedResponse) => callback(response);
-    ipcRenderer.on(IPC_CHANNELS.CLOUD_PROXY_FORWARDED_RESPONSE, handler);
-    return () => ipcRenderer.removeListener(IPC_CHANNELS.CLOUD_PROXY_FORWARDED_RESPONSE, handler);
+    ipcRenderer.on(CLOUD_PROXY_CHANNELS.FORWARDED_RESPONSE, handler);
+    return () => ipcRenderer.removeListener(CLOUD_PROXY_CHANNELS.FORWARDED_RESPONSE, handler);
   },
 
   // Cloud Proxy Mock Management
   cloudProxyFetchMocks: (serverUrl: string, namespace: string): Promise<{ success: boolean; mocks: CloudStoredMock[]; error?: string }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.CLOUD_PROXY_FETCH_MOCKS, { serverUrl, namespace }),
+    ipcRenderer.invoke(CLOUD_PROXY_CHANNELS.FETCH_MOCKS, { serverUrl, namespace }),
   cloudProxySyncMocks: (serverUrl: string, namespace: string, mocks: CloudStoredMock[]): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.CLOUD_PROXY_SYNC_MOCKS, { serverUrl, namespace, mocks }),
+    ipcRenderer.invoke(CLOUD_PROXY_CHANNELS.SYNC_MOCKS, { serverUrl, namespace, mocks }),
   cloudProxyUploadMock: (serverUrl: string, namespace: string, mock: CloudStoredMock): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.CLOUD_PROXY_UPLOAD_MOCK, { serverUrl, namespace, mock }),
+    ipcRenderer.invoke(CLOUD_PROXY_CHANNELS.UPLOAD_MOCK, { serverUrl, namespace, mock }),
   cloudProxyDeleteMock: (serverUrl: string, namespace: string, mockId: string): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.CLOUD_PROXY_DELETE_MOCK, { serverUrl, namespace, mockId }),
+    ipcRenderer.invoke(CLOUD_PROXY_CHANNELS.DELETE_MOCK, { serverUrl, namespace, mockId }),
 
   // URL Content Fetch - bypasses CORS for spec import
   fetchUrlContent: (url: string): Promise<FetchUrlResult> =>
-    ipcRenderer.invoke(IPC_CHANNELS.FETCH_URL_CONTENT, url),
+    ipcRenderer.invoke(APP_CHANNELS.FETCH_URL_CONTENT, url),
 
   // ==================== File Storage ====================
   
@@ -607,6 +614,96 @@ contextBridge.exposeInMainWorld('electronAPI', {
   clearMockingData: (workspaceName: string): Promise<boolean> =>
     ipcRenderer.invoke(FILE_STORAGE_CHANNELS.CLEAR_MOCKING_DATA, workspaceName),
 
+  // OpenAPI export for public sharing
+  writeCollectionOpenAPI: (workspaceName: string, collectionId: string, openapiJson: string, version?: string): Promise<boolean> =>
+    ipcRenderer.invoke(FILE_STORAGE_CHANNELS.WRITE_COLLECTION_OPENAPI, { workspaceName, collectionId, openapiJson, version }),
+  readCollectionOpenAPI: (workspaceName: string, collectionId: string, version?: string): Promise<string | null> =>
+    ipcRenderer.invoke(FILE_STORAGE_CHANNELS.READ_COLLECTION_OPENAPI, { workspaceName, collectionId, version }),
+
+  // Request history (per workspace)
+  readHistory: <T>(workspaceName: string): Promise<T | null> =>
+    ipcRenderer.invoke(FILE_STORAGE_CHANNELS.READ_HISTORY, workspaceName),
+  writeHistory: <T>(workspaceName: string, data: T): Promise<boolean> =>
+    ipcRenderer.invoke(FILE_STORAGE_CHANNELS.WRITE_HISTORY, { workspaceName, data }),
+  clearHistory: (workspaceName: string): Promise<boolean> =>
+    ipcRenderer.invoke(FILE_STORAGE_CHANNELS.CLEAR_HISTORY, workspaceName),
+
+  // Workspace data files (workspace-specific state like sync states, pending changes)
+  readWorkspaceDataFile: <T>(workspaceName: string, filename: string): Promise<T | null> =>
+    ipcRenderer.invoke(FILE_STORAGE_CHANNELS.READ_WORKSPACE_DATA_FILE, { workspaceName, filename }),
+  writeWorkspaceDataFile: <T>(workspaceName: string, filename: string, data: T): Promise<boolean> =>
+    ipcRenderer.invoke(FILE_STORAGE_CHANNELS.WRITE_WORKSPACE_DATA_FILE, { workspaceName, filename, data }),
+  deleteWorkspaceDataFile: (workspaceName: string, filename: string): Promise<boolean> =>
+    ipcRenderer.invoke(FILE_STORAGE_CHANNELS.DELETE_WORKSPACE_DATA_FILE, { workspaceName, filename }),
+
+  // ==================== Git (isomorphic-git) ====================
+
+  // Repository operations
+  gitInit: (dir: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(GIT_CHANNELS.INIT, dir),
+  gitIsRepo: (dir: string): Promise<boolean> =>
+    ipcRenderer.invoke(GIT_CHANNELS.IS_REPO, dir),
+  gitClone: (url: string, dir: string, branch?: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(GIT_CHANNELS.CLONE, { url, dir, branch }),
+
+  // Status
+  gitStatus: (dir: string): Promise<{ success: boolean; status?: GitStatus; error?: string }> =>
+    ipcRenderer.invoke(GIT_CHANNELS.STATUS, dir),
+
+  // Staging
+  gitAdd: (dir: string, filepath: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(GIT_CHANNELS.ADD, { dir, filepath }),
+  gitAddAll: (dir: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(GIT_CHANNELS.ADD_ALL, dir),
+  gitUnstage: (dir: string, filepath: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(GIT_CHANNELS.UNSTAGE, { dir, filepath }),
+  gitDiscardChanges: (dir: string, filepath: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(GIT_CHANNELS.DISCARD_CHANGES, { dir, filepath }),
+
+  // Commits
+  gitCommit: (dir: string, message: string, author: { name: string; email: string }): Promise<{ success: boolean; oid?: string; error?: string }> =>
+    ipcRenderer.invoke(GIT_CHANNELS.COMMIT, { dir, message, author }),
+  gitLog: (dir: string, depth?: number): Promise<{ success: boolean; commits?: GitCommitInfo[]; error?: string }> =>
+    ipcRenderer.invoke(GIT_CHANNELS.LOG, { dir, depth }),
+
+  // Branches
+  gitListBranches: (dir: string): Promise<{ success: boolean; branches?: GitBranchInfo[]; error?: string }> =>
+    ipcRenderer.invoke(GIT_CHANNELS.LIST_BRANCHES, dir),
+  gitCurrentBranch: (dir: string): Promise<{ success: boolean; branch?: string; error?: string }> =>
+    ipcRenderer.invoke(GIT_CHANNELS.CURRENT_BRANCH, dir),
+  gitCreateBranch: (dir: string, name: string, checkout?: boolean): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(GIT_CHANNELS.CREATE_BRANCH, { dir, name, checkout }),
+  gitCheckout: (dir: string, ref: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(GIT_CHANNELS.CHECKOUT, { dir, ref }),
+  gitDeleteBranch: (dir: string, name: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(GIT_CHANNELS.DELETE_BRANCH, { dir, name }),
+
+  // Remotes
+  gitListRemotes: (dir: string): Promise<{ success: boolean; remotes?: GitRemote[]; error?: string }> =>
+    ipcRenderer.invoke(GIT_CHANNELS.LIST_REMOTES, dir),
+  gitAddRemote: (dir: string, name: string, url: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(GIT_CHANNELS.ADD_REMOTE, { dir, name, url }),
+  gitRemoveRemote: (dir: string, name: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(GIT_CHANNELS.REMOVE_REMOTE, { dir, name }),
+
+  // Sync
+  gitPush: (dir: string, remote?: string, branch?: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(GIT_CHANNELS.PUSH, { dir, remote, branch }),
+  gitPull: (dir: string, remote?: string, branch?: string, author?: { name: string; email: string }): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(GIT_CHANNELS.PULL, { dir, remote, branch, author }),
+  gitFetch: (dir: string, remote?: string, branch?: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(GIT_CHANNELS.FETCH, { dir, remote, branch }),
+
+  // Credentials
+  gitSetCredentials: (credentials: GitCredentials | null): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke(GIT_CHANNELS.SET_CREDENTIALS, credentials),
+
+  // Utils
+  gitCreateGitignore: (dir: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(GIT_CHANNELS.CREATE_GITIGNORE, dir),
+  gitGetFileForDiff: (dir: string, filepath: string): Promise<{ success: boolean; oldContent?: string; newContent?: string; error?: string }> =>
+    ipcRenderer.invoke(GIT_CHANNELS.GET_FILE_FOR_DIFF, { dir, filepath }),
+
   // ==================== GitHub ====================
 
   // Authentication
@@ -663,31 +760,47 @@ contextBridge.exposeInMainWorld('electronAPI', {
   githubPullLatest: (owner: string, repo: string, branch: string): Promise<GitHubApiResponse<{ sha: string; commit: GitHubCommit; tree: Array<{ path: string; type: string; sha: string }> }>> =>
     ipcRenderer.invoke(GITHUB_CHANNELS.PULL_LATEST, { owner, repo, branch }),
 
+  // ==================== Public Specs ====================
+  publicSpecsCheckSubdomain: (subdomain: string, userId?: string): Promise<CheckSubdomainResult> =>
+    ipcRenderer.invoke(PUBLIC_SPECS_CHANNELS.CHECK_SUBDOMAIN, { subdomain, userId }),
+  publicSpecsUpload: (options: UploadSpecOptions): Promise<UploadResult> =>
+    ipcRenderer.invoke(PUBLIC_SPECS_CHANNELS.UPLOAD_SPEC, options),
+  publicSpecsGetVersions: (subdomain: string): Promise<SpecVersion[]> =>
+    ipcRenderer.invoke(PUBLIC_SPECS_CHANNELS.GET_VERSIONS, subdomain),
+  publicSpecsDeleteVersion: (subdomain: string, version: string): Promise<boolean> =>
+    ipcRenderer.invoke(PUBLIC_SPECS_CHANNELS.DELETE_VERSION, { subdomain, version }),
+  publicSpecsDeleteRootFiles: (subdomain: string): Promise<boolean> =>
+    ipcRenderer.invoke(PUBLIC_SPECS_CHANNELS.DELETE_ROOT_FILES, subdomain),
+  publicSpecsGetManifest: (subdomain: string): Promise<SpecManifest | null> =>
+    ipcRenderer.invoke(PUBLIC_SPECS_CHANNELS.GET_MANIFEST, subdomain),
+  publicSpecsUpdateManifest: (manifest: SpecManifest): Promise<boolean> =>
+    ipcRenderer.invoke(PUBLIC_SPECS_CHANNELS.UPDATE_MANIFEST, manifest),
+
   // Event listeners
   onUpdateAvailable: (callback: (data: { version: string; releaseNotes: string | null; releaseDate: string; releaseName?: string }) => void) => {
     const handler = (_event: IpcRendererEvent, data: { version: string; releaseNotes: string | null; releaseDate: string; releaseName?: string }) => callback(data);
-    ipcRenderer.on(IPC_CHANNELS.UPDATE_AVAILABLE, handler);
-    return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_AVAILABLE, handler);
+    ipcRenderer.on(UPDATE_CHANNELS.UPDATE_AVAILABLE, handler);
+    return () => ipcRenderer.removeListener(UPDATE_CHANNELS.UPDATE_AVAILABLE, handler);
   },
   onUpdateNotAvailable: (callback: (data: { currentVersion: string }) => void) => {
     const handler = (_event: IpcRendererEvent, data: { currentVersion: string }) => callback(data);
-    ipcRenderer.on(IPC_CHANNELS.UPDATE_NOT_AVAILABLE, handler);
-    return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_NOT_AVAILABLE, handler);
+    ipcRenderer.on(UPDATE_CHANNELS.UPDATE_NOT_AVAILABLE, handler);
+    return () => ipcRenderer.removeListener(UPDATE_CHANNELS.UPDATE_NOT_AVAILABLE, handler);
   },
   onUpdateDownloaded: (callback: (data: { version: string; releaseNotes: string | null; releaseDate: string; releaseName?: string }) => void) => {
     const handler = (_event: IpcRendererEvent, data: { version: string; releaseNotes: string | null; releaseDate: string; releaseName?: string }) => callback(data);
-    ipcRenderer.on(IPC_CHANNELS.UPDATE_DOWNLOADED, handler);
-    return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_DOWNLOADED, handler);
+    ipcRenderer.on(UPDATE_CHANNELS.UPDATE_DOWNLOADED, handler);
+    return () => ipcRenderer.removeListener(UPDATE_CHANNELS.UPDATE_DOWNLOADED, handler);
   },
   onUpdateError: (callback: (data: { message: string }) => void) => {
     const handler = (_event: IpcRendererEvent, data: { message: string }) => callback(data);
-    ipcRenderer.on(IPC_CHANNELS.UPDATE_ERROR, handler);
-    return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_ERROR, handler);
+    ipcRenderer.on(UPDATE_CHANNELS.UPDATE_ERROR, handler);
+    return () => ipcRenderer.removeListener(UPDATE_CHANNELS.UPDATE_ERROR, handler);
   },
   onDownloadProgress: (callback: (data: { percent: number; transferred: number; total: number; bytesPerSecond: number }) => void) => {
     const handler = (_event: IpcRendererEvent, data: { percent: number; transferred: number; total: number; bytesPerSecond: number }) => callback(data);
-    ipcRenderer.on(IPC_CHANNELS.UPDATE_DOWNLOAD_PROGRESS, handler);
-    return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_DOWNLOAD_PROGRESS, handler);
+    ipcRenderer.on(UPDATE_CHANNELS.UPDATE_DOWNLOAD_PROGRESS, handler);
+    return () => ipcRenderer.removeListener(UPDATE_CHANNELS.UPDATE_DOWNLOAD_PROGRESS, handler);
   },
 
   // Menu event listeners
@@ -741,6 +854,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('toggle-console', handler);
     return () => ipcRenderer.removeListener('toggle-console', handler);
   },
+  onCheckForUpdates: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('check-for-updates', handler);
+    return () => ipcRenderer.removeListener('check-for-updates', handler);
+  },
+
+  // Deep link handler
+  onDeepLink: (callback: (data: { action: string; path: string; params: Record<string, string>; url: string }) => void) => {
+    const handler = (_event: IpcRendererEvent, data: { action: string; path: string; params: Record<string, string>; url: string }) => callback(data);
+    ipcRenderer.on(APP_CHANNELS.DEEP_LINK, handler);
+    return () => ipcRenderer.removeListener(APP_CHANNELS.DEEP_LINK, handler);
+  },
 });
 
 // Type definitions for the exposed API
@@ -763,13 +888,37 @@ declare global {
         duration: number;
         envVars: Record<string, string>;
         runtimeVars: Record<string, string>;
+        modifiedResponse?: { status: number; statusText: string; headers: Record<string, string>; body: string; responseTime: number };
+      }>;
+      computeDigestAuth: (options: {
+        wwwAuthHeader: string;
+        username: string;
+        password: string;
+        method: string;
+        uri: string;
+      }) => Promise<{
+        success: boolean;
+        header?: string;
+        error?: string;
+        challenge?: {
+          realm: string;
+          nonce: string;
+          algorithm?: string;
+          qop?: string;
+          opaque?: string;
+        };
       }>;
       checkForUpdates: () => Promise<{ updateAvailable: boolean; version?: string; releaseNotes?: string | null; releaseDate?: string }>;
       downloadUpdate: () => Promise<{ success: boolean }>;
       installUpdate: () => void;
       quitAndInstallLater: () => Promise<{ success: boolean; updatePending: boolean }>;
+      setUpdateServer: (url: string | null) => Promise<{ success: boolean; feedUrl?: string; error?: string }>;
       // Shell
       openExternal: (url: string) => Promise<void>;
+      // App control
+      restartApp: () => Promise<void>;
+      wipeAllData: () => Promise<{ success: boolean; error?: string }>;
+      toggleDevTools: () => Promise<void>;
       // Mock Server
       startMockServer: (config: MockServerConfig) => Promise<{ success: boolean; error?: string }>;
       stopMockServer: (id: string) => Promise<boolean>;
@@ -829,6 +978,42 @@ declare global {
       deleteMockApiData: (workspaceName: string, mockApiName: string) => Promise<boolean>;
       deleteMockEndpointData: (workspaceName: string, mockApiName: string, endpoint: string) => Promise<boolean>;
       clearMockingData: (workspaceName: string) => Promise<boolean>;
+      // OpenAPI export
+      writeCollectionOpenAPI: (workspaceName: string, collectionId: string, openapiJson: string, version?: string) => Promise<boolean>;
+      readCollectionOpenAPI: (workspaceName: string, collectionId: string, version?: string) => Promise<string | null>;
+      // Request history (per workspace)
+      readHistory: <T>(workspaceName: string) => Promise<T | null>;
+      writeHistory: <T>(workspaceName: string, data: T) => Promise<boolean>;
+      clearHistory: (workspaceName: string) => Promise<boolean>;
+      // Workspace data files (workspace-specific state)
+      readWorkspaceDataFile: <T>(workspaceName: string, filename: string) => Promise<T | null>;
+      writeWorkspaceDataFile: <T>(workspaceName: string, filename: string, data: T) => Promise<boolean>;
+      deleteWorkspaceDataFile: (workspaceName: string, filename: string) => Promise<boolean>;
+      // Git (isomorphic-git)
+      gitInit: (dir: string) => Promise<{ success: boolean; error?: string }>;
+      gitIsRepo: (dir: string) => Promise<boolean>;
+      gitClone: (url: string, dir: string, branch?: string) => Promise<{ success: boolean; error?: string }>;
+      gitStatus: (dir: string) => Promise<{ success: boolean; status?: GitStatus; error?: string }>;
+      gitAdd: (dir: string, filepath: string) => Promise<{ success: boolean; error?: string }>;
+      gitAddAll: (dir: string) => Promise<{ success: boolean; error?: string }>;
+      gitUnstage: (dir: string, filepath: string) => Promise<{ success: boolean; error?: string }>;
+      gitDiscardChanges: (dir: string, filepath: string) => Promise<{ success: boolean; error?: string }>;
+      gitCommit: (dir: string, message: string, author: { name: string; email: string }) => Promise<{ success: boolean; oid?: string; error?: string }>;
+      gitLog: (dir: string, depth?: number) => Promise<{ success: boolean; commits?: GitCommitInfo[]; error?: string }>;
+      gitListBranches: (dir: string) => Promise<{ success: boolean; branches?: GitBranchInfo[]; error?: string }>;
+      gitCurrentBranch: (dir: string) => Promise<{ success: boolean; branch?: string; error?: string }>;
+      gitCreateBranch: (dir: string, name: string, checkout?: boolean) => Promise<{ success: boolean; error?: string }>;
+      gitCheckout: (dir: string, ref: string) => Promise<{ success: boolean; error?: string }>;
+      gitDeleteBranch: (dir: string, name: string) => Promise<{ success: boolean; error?: string }>;
+      gitListRemotes: (dir: string) => Promise<{ success: boolean; remotes?: GitRemote[]; error?: string }>;
+      gitAddRemote: (dir: string, name: string, url: string) => Promise<{ success: boolean; error?: string }>;
+      gitRemoveRemote: (dir: string, name: string) => Promise<{ success: boolean; error?: string }>;
+      gitPush: (dir: string, remote?: string, branch?: string) => Promise<{ success: boolean; error?: string }>;
+      gitPull: (dir: string, remote?: string, branch?: string, author?: { name: string; email: string }) => Promise<{ success: boolean; error?: string }>;
+      gitFetch: (dir: string, remote?: string, branch?: string) => Promise<{ success: boolean; error?: string }>;
+      gitSetCredentials: (credentials: GitCredentials | null) => Promise<{ success: boolean }>;
+      gitCreateGitignore: (dir: string) => Promise<{ success: boolean; error?: string }>;
+      gitGetFileForDiff: (dir: string, filepath: string) => Promise<{ success: boolean; oldContent?: string; newContent?: string; error?: string }>;
       // GitHub
       githubAuthWithPAT: (token: string) => Promise<GitHubApiResponse<GitHubUser>>;
       githubStartOAuth: () => Promise<{ success: boolean; url?: string; error?: string }>;
@@ -850,6 +1035,13 @@ declare global {
       githubCompareCommits: (owner: string, repo: string, base: string, head: string) => Promise<GitHubApiResponse<{ status: string; ahead_by: number; behind_by: number; commits: Array<{ sha: string; commit: GitHubCommit }>; files: Array<{ filename: string; status: string; patch?: string }> }>>;
       githubPushChanges: (owner: string, repo: string, branch: string, message: string, changes: GitHubFileChange[]) => Promise<GitHubApiResponse<{ sha: string }>>;
       githubPullLatest: (owner: string, repo: string, branch: string) => Promise<GitHubApiResponse<{ sha: string; commit: GitHubCommit; tree: Array<{ path: string; type: string; sha: string }> }>>;
+      // Public Specs
+      publicSpecsCheckSubdomain: (subdomain: string, userId?: string) => Promise<CheckSubdomainResult>;
+      publicSpecsUpload: (options: UploadSpecOptions) => Promise<UploadResult>;
+      publicSpecsGetVersions: (subdomain: string) => Promise<SpecVersion[]>;
+      publicSpecsDeleteVersion: (subdomain: string, version: string) => Promise<boolean>;
+      publicSpecsGetManifest: (subdomain: string) => Promise<SpecManifest | null>;
+      publicSpecsUpdateManifest: (manifest: SpecManifest) => Promise<boolean>;
       // Updates
       onUpdateAvailable: (callback: (data: { version: string; releaseNotes: string | null; releaseDate: string; releaseName?: string }) => void) => () => void;
       onUpdateNotAvailable: (callback: (data: { currentVersion: string }) => void) => () => void;
@@ -866,6 +1058,9 @@ declare global {
       onDuplicateRequest: (callback: () => void) => () => void;
       onToggleSidebar: (callback: () => void) => () => void;
       onToggleConsole: (callback: () => void) => () => void;
+      onCheckForUpdates: (callback: () => void) => () => void;
+      // Deep link
+      onDeepLink: (callback: (data: { action: string; path: string; params: Record<string, string>; url: string }) => void) => () => void;
     };
   }
 }

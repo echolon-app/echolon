@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Environment, KeyValuePair, CollectionEnvironment, WorkspaceEnvironment } from '@/types';
-import { fileStorageManager } from '@/services';
+import { fileStorageManager, webFileSystemManager } from '@/services';
 import { echoConverter } from '@/services/EchoFileConverter';
 import { useDataLoader } from './DataLoaderContext';
 import { useWebModeOptional } from './WebModeContext';
+import { useFileStorageOptional } from './FileStorageContext';
 import { v4 as uuidv4 } from 'uuid';
 
 // Variable with source information
@@ -45,48 +46,88 @@ const EnvironmentsContext = createContext<EnvironmentsContextValue | null>(null)
 export const EnvironmentsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const webMode = useWebModeOptional();
   const isWebMode = webMode?.isWebMode ?? false;
+  const fileStorage = useFileStorageOptional();
+  const isWebFileSystemEnabled = fileStorage?.isWebFileSystemEnabled ?? false;
   const { data, isLoading: dataLoading, refresh: refreshData } = useDataLoader();
+  
+  // Get the appropriate storage manager based on mode
+  const getStorageManager = useCallback(() => {
+    if (isWebMode && isWebFileSystemEnabled) {
+      return webFileSystemManager;
+    }
+    if (isWebMode) {
+      return null; // No file storage in web mode without file system
+    }
+    return fileStorageManager;
+  }, [isWebMode, isWebFileSystemEnabled]);
+  
+  // Should skip file operations?
+  const shouldSkipFileOps = isWebMode && !isWebFileSystemEnabled;
   
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(!isWebMode);
-  const initializedRef = useRef(false);
+  // Track both initialization and the file system state at time of initialization
+  const initStateRef = useRef<{ initialized: boolean; withWebFs: boolean }>({ initialized: false, withWebFs: false });
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize from pre-loaded data
   useEffect(() => {
-    if (dataLoading || initializedRef.current) return;
+    if (dataLoading) return;
     
-    // In web mode, start with empty environments (will be populated via addWebModeEnvironment)
-    if (isWebMode) {
-      console.log('[EnvironmentsContext] Web mode - starting with empty environments');
+    // Check if we need to re-initialize due to web file system state change
+    const needsReInit = initStateRef.current.initialized && 
+      isWebMode && 
+      isWebFileSystemEnabled !== initStateRef.current.withWebFs;
+    
+    if (initStateRef.current.initialized && !needsReInit) return;
+    
+    // In web mode without file system, start with empty environments
+    // Restore selected environment from localStorage if available
+    if (isWebMode && !isWebFileSystemEnabled) {
+      console.log('[EnvironmentsContext] Web mode without file system - starting with empty environments');
+      const savedEnvId = localStorage.getItem('echolon_web_selected_env');
+      if (savedEnvId) {
+        setSelectedEnvironmentId(savedEnvId);
+      }
       setIsLoading(false);
-      initializedRef.current = true;
+      initStateRef.current = { initialized: true, withWebFs: false };
       return;
     }
     
-    console.log('[EnvironmentsContext] Initializing with pre-loaded data');
+    //console.log('[EnvironmentsContext] Initializing with pre-loaded data', { envCount: data.environments.length });
     setEnvironments(data.environments);
     setSelectedEnvironmentId(data.selectedEnvironmentId);
     setIsLoading(false);
-    initializedRef.current = true;
-  }, [dataLoading, data.environments, data.selectedEnvironmentId, isWebMode]);
+    initStateRef.current = { initialized: true, withWebFs: isWebFileSystemEnabled };
+  }, [dataLoading, data.environments, data.selectedEnvironmentId, isWebMode, isWebFileSystemEnabled]);
 
-  // Debounced save to file (skip in web mode)
+  // Debounced save to file (skip in web mode without file system)
   const saveEnvironmentsToFile = useCallback((envs: Environment[], selectedId: string | null) => {
-    // Skip file operations in web mode
-    if (isWebMode) return;
+    // Skip file operations in web mode without file system
+    if (shouldSkipFileOps) {
+      console.log('[EnvironmentsContext] Skipping save - file ops disabled');
+      return;
+    }
     
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
-      }
+    }
     
     saveTimeoutRef.current = setTimeout(async () => {
+      const manager = getStorageManager();
+      if (!manager) {
+        console.log('[EnvironmentsContext] Skipping save - no storage manager');
+        return;
+      }
+      
+      console.log('[EnvironmentsContext] Saving environments to file', { envCount: envs.length });
       const globalFile = echoConverter.environmentsToGlobalFile(envs, selectedId);
-      await fileStorageManager.writeEnvironments(globalFile);
+      await manager.writeEnvironments(globalFile);
+      console.log('[EnvironmentsContext] Environments saved successfully');
       saveTimeoutRef.current = null;
     }, 500);
-  }, [isWebMode]);
+  }, [shouldSkipFileOps, getStorageManager]);
 
   // Environments that are active (shown in dropdown)
   const activeEnvironments = useMemo(() => environments.filter(e => e.isActive), [environments]);
@@ -203,8 +244,18 @@ export const EnvironmentsProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const selectEnvironment = useCallback((id: string | null) => {
     setSelectedEnvironmentId(id);
-    saveEnvironmentsToFile(environments, id);
-  }, [environments, saveEnvironmentsToFile]);
+    
+    // In web mode, persist to localStorage
+    if (isWebMode) {
+      if (id) {
+        localStorage.setItem('echolon_web_selected_env', id);
+      } else {
+        localStorage.removeItem('echolon_web_selected_env');
+      }
+    } else {
+      saveEnvironmentsToFile(environments, id);
+    }
+  }, [environments, saveEnvironmentsToFile, isWebMode]);
 
   const setActiveEnvironment = selectEnvironment;
 

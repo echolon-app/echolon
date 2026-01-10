@@ -10,6 +10,7 @@ out/
 .idea/
 *.swp
 *.swo
+.vscode/
 .DS_Store
 
 # Environment
@@ -38,6 +39,7 @@ secrets/
 landing/
 sample-api/
 proxy-server/
+other/
 
 TODO.md
 

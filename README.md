@@ -56,8 +56,8 @@ npm run package:linux
 Usage
 To release a new version:
 1. Update version in core/package.json
-2. Commit and tag: git tag v1.0.2
-3. Push: git push origin v1.0.2
+2. Commit and tag: git tag v1.0.X
+3. Push: git push origin v1.0.X
 
 GitHub Actions will build and create a release
 
@@ -80,11 +80,16 @@ APPLE_APP_SPECIFIC_PASSWORD=xxxx-xxxx-xxxx-xxxx
 APPLE_TEAM_ID=XXXXXXXXXX
 ```
 
-For Windows code signing:
+For Windows code signing (optional, without you get a warning on install):
 
 ```bash
 CSC_LINK=/path/to/certificate.pfx
 CSC_KEY_PASSWORD=certificate_password
+```
+
+For linux builds:
+```bash
+brew install rpm  
 ```
 
 ## Tech Stack

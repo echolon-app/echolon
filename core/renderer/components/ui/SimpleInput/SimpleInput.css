@@ -1,0 +1,128 @@
+.simple-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+
+.simple-input-wrapper:hover {
+  border-color: var(--border-hover);
+}
+
+.simple-input-wrapper:focus-within {
+  border-color: var(--color-primary);
+}
+
+.simple-input-wrapper--error {
+  border-color: var(--color-error);
+}
+
+.simple-input-wrapper--error:focus-within {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+
+/* Sizes */
+.simple-input-wrapper--sm {
+  height: 28px;
+}
+
+.simple-input-wrapper--sm .simple-input {
+  font-size: var(--font-xs);
+  padding: 0 var(--spacing-sm);
+}
+
+.simple-input-wrapper--sm .simple-input__icon {
+  padding: 0 var(--spacing-xs);
+}
+
+.simple-input-wrapper--md {
+  height: 32px;
+}
+
+.simple-input-wrapper--md .simple-input {
+  font-size: var(--font-sm);
+  padding: 0 var(--spacing-md);
+}
+
+.simple-input-wrapper--md .simple-input__icon {
+  padding: 0 var(--spacing-sm);
+}
+
+.simple-input-wrapper--lg {
+  height: 40px;
+}
+
+.simple-input-wrapper--lg .simple-input {
+  font-size: var(--font-md);
+  padding: 0 var(--spacing-lg);
+}
+
+.simple-input-wrapper--lg .simple-input__icon {
+  padding: 0 var(--spacing-md);
+}
+
+/* Icon positioning */
+.simple-input-wrapper--icon-left .simple-input {
+  padding-left: 0;
+}
+
+.simple-input-wrapper--icon-right .simple-input {
+  padding-right: 0;
+}
+
+.simple-input {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  outline: none;
+}
+
+.simple-input::placeholder {
+  color: var(--input-placeholder);
+}
+
+.simple-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.simple-input__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.simple-input__icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.simple-input__icon[role="button"] {
+  cursor: pointer;
+}
+
+.simple-input__icon[role="button"]:hover {
+  color: var(--text-primary);
+}
+
+/* Hide number input spinners for cleaner look */
+.simple-input[type="number"]::-webkit-outer-spin-button,
+.simple-input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.simple-input[type="number"] {
+  -moz-appearance: textfield;
+}
+

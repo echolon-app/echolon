@@ -9,3 +9,4 @@ export { GitHubConnectModal } from './GitHubConnectModal';
 export { GitCommitModal } from './GitCommitModal';
 export { RequestHistoryModal } from './RequestHistoryModal';
 export { UpdateModal } from './UpdateModal';
+export { FunctionConfigModal } from './FunctionConfigModal';

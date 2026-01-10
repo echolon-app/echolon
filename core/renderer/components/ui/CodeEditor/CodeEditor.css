@@ -1,0 +1,11 @@
+/* Variable/function template highlighting in Ace Editor */
+.ace_variable.ace_template {
+  color: #5de4c7 !important;
+  font-style: italic;
+}
+
+/* Light theme variant */
+.ace-chrome .ace_variable.ace_template {
+  color: #0d9488 !important;
+}
+

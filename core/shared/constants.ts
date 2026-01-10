@@ -19,7 +19,6 @@ export const STORAGE_KEYS = {
   ACTIVE_MOCK_API_ID: 'echolonActiveMockApiId',
   USER_ID: 'echolonUserId',
   SIDEBAR_VIEW: 'echolonSidebarView',
-  SAMPLE_CREATED: 'echolonSampleCreated',
   CUSTOM_HTTP_METHODS: 'echolonCustomHttpMethods',
   PENDING_SPEC_CHANGES: 'echolonPendingSpecChanges',
 } as const;
@@ -144,31 +143,14 @@ export const AUTH_TYPES = [
   'aws-signature',
 ] as const;
 
-export const IPC_CHANNELS = {
-  CHECK_FOR_UPDATES: 'check-for-updates',
-  UPDATE_AVAILABLE: 'update-available',
-  UPDATE_NOT_AVAILABLE: 'update-not-available',
-  UPDATE_DOWNLOADED: 'update-downloaded',
-  DOWNLOAD_UPDATE: 'download-update',
-  INSTALL_UPDATE: 'install-update',
-  GET_APP_VERSION: 'get-app-version',
-  MAKE_HTTP_REQUEST: 'make-http-request',
-  // Mock Server
-  START_MOCK_SERVER: 'start-mock-server',
-  STOP_MOCK_SERVER: 'stop-mock-server',
-  GET_MOCK_SERVER_STATUS: 'get-mock-server-status',
-  MOCK_REQUEST_RECEIVED: 'mock-request-received',
-  UPDATE_MOCK_ROUTES: 'update-mock-routes',
-  GET_LOCAL_HOSTNAME: 'get-local-hostname',
-  // Spec Import
-  FETCH_URL_CONTENT: 'fetch-url-content',
-} as const;
+// IPC channels are now defined in ./ipc-channels.ts
+// Import from there: import { UPDATE_CHANNELS, APP_CHANNELS, ... } from './ipc-channels';
 
 
 // Sync frequency options in minutes (0 = manual only)
 export const SYNC_FREQUENCY_OPTIONS = [
   { value: 0, label: 'Manual only' },
-  __ENV__ === 'dev' ?  { value: 1, label: 'Every 1 minute' } : null,
+ // __ENV__ === 'dev' ?  { value: 1, label: 'Every 1 minute' } : null,
   { value: 15, label: 'Every 15 minutes' },
   { value: 30, label: 'Every 30 minutes' },
   { value: 60, label: 'Every hour' },
@@ -180,5 +162,5 @@ export const SYNC_FREQUENCY_OPTIONS = [
 export const SAMPLE_REQUEST = {
   name: 'Sample Todos',
   method: 'GET' as const,
-  url: 'https://api.logdog.app/v1/sample-todos',
+  url: 'https://sample-api.echolon.app/tasks',
 };

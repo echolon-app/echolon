@@ -1,10 +1,19 @@
 ---
 import DocsLayout from '../../layouts/DocsLayout.astro';
+import { Callout } from '../../components/ui/Callout';
+import { Steps, Step } from '../../components/ui/Steps';
 
 const headings = [
   { depth: 2, slug: 'overview', text: 'Overview' },
+  { depth: 2, slug: 'environment-types', text: 'Environment Types' },
+  { depth: 3, slug: 'global-environments', text: 'Global Environments' },
+  { depth: 3, slug: 'workspace-environments', text: 'Workspace Environments' },
+  { depth: 3, slug: 'collection-environments', text: 'Collection Environments' },
+  { depth: 2, slug: 'override-hierarchy', text: 'Override Hierarchy' },
   { depth: 2, slug: 'creating-environments', text: 'Creating Environments' },
   { depth: 2, slug: 'using-variables', text: 'Using Variables' },
+  { depth: 2, slug: 'switching-environments', text: 'Switching Environments' },
+  { depth: 2, slug: 'best-practices', text: 'Best Practices' },
 ];
 ---
 
@@ -12,37 +21,462 @@ const headings = [
   <div class="prose">
     <h1>Environments</h1>
     <p class="lead">
-      Switch between development, staging, and production configurations effortlessly.
+      Switch between development, staging, and production configurations effortlessly with Echolon's powerful multi-level environment system.
     </p>
     
     <h2 id="overview">Overview</h2>
     <p>
-      Environments let you define sets of variables that change based on your context. Switch between local development and production without modifying your requests.
+      Environments let you define sets of variables that change based on your context. 
+      Instead of manually updating URLs, API keys, and other values when switching between 
+      development and production, you can define these values once per environment and 
+      switch with a single click.
+    </p>
+    
+    <p>
+      Echolon supports three levels of environments, each with its own scope and purpose:
+    </p>
+    
+    <ul class="list">
+      <li><strong>Global Environments</strong> — Available across all workspaces and collections</li>
+      <li><strong>Workspace Environments</strong> — Scoped to a specific workspace</li>
+      <li><strong>Collection Environments</strong> — Scoped to a specific collection</li>
+    </ul>
+    
+    <h2 id="environment-types">Environment Types</h2>
+    
+    <h3 id="global-environments">Global Environments</h3>
+    <p>
+      Global environments are available everywhere in Echolon. They're perfect for 
+      variables that you need across all your projects, like personal API tokens, 
+      default headers, or company-wide settings.
+    </p>
+    
+    <p><strong>Where to create:</strong></p>
+    <ul class="list">
+      <li>Click the <strong>Environments</strong> icon in the left sidebar</li>
+      <li>Click <strong>New Environment</strong> to create a global environment</li>
+    </ul>
+    
+    <h3 id="workspace-environments">Workspace Environments</h3>
+    <p>
+      Workspace environments are scoped to a specific workspace. Use them when you have 
+      variables that should apply to all collections within a workspace but shouldn't 
+      affect other workspaces.
+    </p>
+    
+    <p><strong>Where to create:</strong></p>
+    <ul class="list">
+      <li>Click the <strong>Workspaces</strong> icon in the left sidebar</li>
+      <li>Select a workspace to open the workspace editor</li>
+      <li>Navigate to the <strong>Environments</strong> tab</li>
+      <li>Click <strong>New Environment</strong></li>
+    </ul>
+    
+    <h3 id="collection-environments">Collection Environments</h3>
+    <p>
+      Collection environments are the most specific. They only apply to requests within 
+      that collection. Perfect for project-specific settings like base URLs, test accounts, 
+      or feature flags.
+    </p>
+    
+    <p><strong>Where to create:</strong></p>
+    <ul class="list">
+      <li>Double-click a collection to open the collection editor</li>
+      <li>Navigate to the <strong>Environments</strong> tab</li>
+      <li>Click <strong>New Environment</strong></li>
+    </ul>
+    
+    <h2 id="override-hierarchy">Override Hierarchy</h2>
+    <p>
+      When the same variable is defined in multiple environments, Echolon uses a clear 
+      priority system to determine which value to use. More specific environments always 
+      override less specific ones.
+    </p>
+    
+    <!-- Infographic for override hierarchy -->
+    <div class="hierarchy-diagram">
+      <svg viewBox="0 0 600 400" xmlns="http://www.w3.org/2000/svg">
+        <!-- Background gradient -->
+        <defs>
+          <linearGradient id="bgGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:var(--color-bg-tertiary);stop-opacity:1" />
+            <stop offset="100%" style="stop-color:var(--color-bg-secondary);stop-opacity:1" />
+          </linearGradient>
+          <linearGradient id="collectionGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#22c55e;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#16a34a;stop-opacity:1" />
+          </linearGradient>
+          <linearGradient id="workspaceGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#2563eb;stop-opacity:1" />
+          </linearGradient>
+          <linearGradient id="globalGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#7c3aed;stop-opacity:1" />
+          </linearGradient>
+          <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.15"/>
+          </filter>
+        </defs>
+        
+        <!-- Priority label -->
+        <text x="30" y="50" fill="var(--color-text-secondary)" font-size="12" font-weight="500">PRIORITY</text>
+        <text x="30" y="70" fill="var(--color-text-muted)" font-size="11">Highest</text>
+        <text x="30" y="340" fill="var(--color-text-muted)" font-size="11">Lowest</text>
+        
+        <!-- Priority arrow -->
+        <line x1="45" y1="85" x2="45" y2="320" stroke="var(--color-border)" stroke-width="2" stroke-dasharray="4,4"/>
+        <polygon points="40,320 50,320 45,335" fill="var(--color-border)"/>
+        
+        <!-- Collection Environment (Top - Highest Priority) -->
+        <g transform="translate(100, 60)">
+          <rect x="0" y="0" width="450" height="80" rx="12" fill="url(#collectionGradient)" filter="url(#shadow)"/>
+          <text x="25" y="35" fill="white" font-size="18" font-weight="600">Collection Environment</text>
+          <text x="25" y="58" fill="rgba(255,255,255,0.85)" font-size="13">Highest priority • Overrides all other environments</text>
+          <text x="400" y="45" fill="white" font-size="24" font-weight="700">1</text>
+        </g>
+        
+        <!-- Workspace Environment (Middle) -->
+        <g transform="translate(100, 165)">
+          <rect x="0" y="0" width="450" height="80" rx="12" fill="url(#workspaceGradient)" filter="url(#shadow)"/>
+          <text x="25" y="35" fill="white" font-size="18" font-weight="600">Workspace Environment</text>
+          <text x="25" y="58" fill="rgba(255,255,255,0.85)" font-size="13">Middle priority • Overrides global, overridden by collection</text>
+          <text x="400" y="45" fill="white" font-size="24" font-weight="700">2</text>
+        </g>
+        
+        <!-- Global Environment (Bottom - Lowest Priority) -->
+        <g transform="translate(100, 270)">
+          <rect x="0" y="0" width="450" height="80" rx="12" fill="url(#globalGradient)" filter="url(#shadow)"/>
+          <text x="25" y="35" fill="white" font-size="18" font-weight="600">Global Environment</text>
+          <text x="25" y="58" fill="rgba(255,255,255,0.85)" font-size="13">Lowest priority • Base values used when not overridden</text>
+          <text x="400" y="45" fill="white" font-size="24" font-weight="700">3</text>
+        </g>
+        
+        <!-- Override arrows -->
+        <path d="M325 140 L325 155" stroke="white" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+        <path d="M325 245 L325 260" stroke="white" stroke-width="3" fill="none"/>
+        
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="white"/>
+          </marker>
+        </defs>
+      </svg>
+      <p class="diagram-caption">Environment override hierarchy: Collection overrides Workspace overrides Global</p>
+    </div>
+    
+    <Callout type="info" title="How Overrides Work" client:load>
+      When you use a variable like <code>{'{{baseUrl}}'}</code>, Echolon first checks if it exists in 
+      the active collection environment. If not found, it checks the workspace environment, 
+      and finally the global environment. The first match wins.
+    </Callout>
+    
+    <h3>Example Override Scenario</h3>
+    <p>
+      Imagine you have a variable <code>baseUrl</code> defined in all three environment levels:
+    </p>
+    
+    <table class="comparison-table">
+      <thead>
+        <tr>
+          <th>Environment</th>
+          <th>Variable</th>
+          <th>Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="badge badge--global">Global</span></td>
+          <td><code>baseUrl</code></td>
+          <td><code>https://api.company.com</code></td>
+        </tr>
+        <tr>
+          <td><span class="badge badge--workspace">Workspace</span></td>
+          <td><code>baseUrl</code></td>
+          <td><code>https://staging.company.com</code></td>
+        </tr>
+        <tr>
+          <td><span class="badge badge--collection">Collection</span></td>
+          <td><code>baseUrl</code></td>
+          <td><code>http://localhost:3000</code></td>
+        </tr>
+      </tbody>
+    </table>
+    
+    <p>
+      In this case, if all three environments are active, <code>{'{{baseUrl}}'}</code> will resolve 
+      to <code>http://localhost:3000</code> because the collection environment has the highest priority.
     </p>
     
     <h2 id="creating-environments">Creating Environments</h2>
-    <p>
-      Create environments from the Environments panel in the sidebar. Define variables like <code>baseUrl</code>, <code>apiKey</code>, or any custom values.
-    </p>
+    
+    <h3>Creating a Global Environment</h3>
+    <Steps client:load>
+      <Step number={1} title="Open Environments Panel" client:load>
+        Click the <strong>Environments</strong> icon in the left sidebar to open the environments panel.
+      </Step>
+      <Step number={2} title="Create New Environment" client:load>
+        Click the <strong>New Environment</strong> button at the top of the panel.
+      </Step>
+      <Step number={3} title="Add Variables" client:load>
+        Name your environment and add key-value pairs for your variables. You can also add descriptions for documentation.
+      </Step>
+    </Steps>
+    
+    <h3>Creating a Workspace Environment</h3>
+    <Steps client:load>
+      <Step number={1} title="Open Workspace" client:load>
+        Click the <strong>Workspaces</strong> icon in the left sidebar and select your workspace.
+      </Step>
+      <Step number={2} title="Navigate to Environments Tab" client:load>
+        In the workspace editor, click the <strong>Environments</strong> tab.
+      </Step>
+      <Step number={3} title="Create and Configure" client:load>
+        Click <strong>New Environment</strong>, name it, and add your workspace-specific variables.
+      </Step>
+    </Steps>
+    
+    <h3>Creating a Collection Environment</h3>
+    <Steps client:load>
+      <Step number={1} title="Open Collection" client:load>
+        Double-click a collection in the sidebar to open its editor.
+      </Step>
+      <Step number={2} title="Navigate to Environments Tab" client:load>
+        Click the <strong>Environments</strong> tab in the collection editor.
+      </Step>
+      <Step number={3} title="Create and Configure" client:load>
+        Click <strong>New Environment</strong> and add collection-specific variables like local URLs or test credentials.
+      </Step>
+    </Steps>
     
     <h2 id="using-variables">Using Variables</h2>
     <p>
-      Reference environment variables in your requests using double curly braces:
+      Reference environment variables anywhere in your requests using double curly braces:
     </p>
-    <pre><code>GET &#123;&#123;baseUrl&#125;&#125;/api/users</code></pre>
+    
+    <pre><code>GET {'{{baseUrl}}'}/api/users
+Authorization: Bearer {'{{apiToken}}'}</code></pre>
+    
+    <p>Variables can be used in:</p>
+    <ul class="list">
+      <li><strong>URLs</strong> — Full URLs or parts of paths</li>
+      <li><strong>Headers</strong> — Authorization tokens, API keys, custom headers</li>
+      <li><strong>Request Body</strong> — JSON payloads, form data</li>
+      <li><strong>Query Parameters</strong> — Dynamic query values</li>
+      <li><strong>Path Parameters</strong> — Resource IDs, slugs</li>
+    </ul>
+    
+    <Callout type="tip" title="Variable Preview" client:load>
+      Hover over a variable in the request editor to see its resolved value from the 
+      currently active environments.
+    </Callout>
+    
+    <h2 id="switching-environments">Switching Environments</h2>
+    <p>
+      Use the environment selector in the top toolbar to quickly switch between environments. 
+      The selector shows all active environments from each level and lets you toggle them 
+      independently.
+    </p>
+    
+    <p>
+      You can have one environment active at each level simultaneously:
+    </p>
+    <ul class="list">
+      <li>One global environment</li>
+      <li>One workspace environment (per workspace)</li>
+      <li>One collection environment (per collection)</li>
+    </ul>
+    
+    <h2 id="best-practices">Best Practices</h2>
+    
+    <h3>Use Global for Personal Settings</h3>
+    <p>
+      Keep personal API tokens, authentication credentials, and user-specific settings in 
+      global environments. This keeps them separate from shared project configurations.
+    </p>
+    
+    <h3>Use Workspace for Team Projects</h3>
+    <p>
+      For team projects, define shared staging and production URLs in workspace environments. 
+      This ensures consistency across all collections in the project.
+    </p>
+    
+    <h3>Use Collection for Local Development</h3>
+    <p>
+      Collection environments are perfect for local development settings like 
+      <code>http://localhost:3000</code>. They override everything else, making it easy 
+      to develop locally without affecting shared configurations.
+    </p>
+    
+    <h3>Name Environments Consistently</h3>
+    <p>
+      Use clear, consistent names like <strong>Development</strong>, <strong>Staging</strong>, 
+      and <strong>Production</strong> across all levels. This makes it easy to understand 
+      which configuration is active at a glance.
+    </p>
+    
+    <Callout type="warning" title="Sensitive Data" client:load>
+      Never commit sensitive data like API keys or passwords to shared collections. 
+      Keep sensitive values in your personal global environment instead.
+    </Callout>
   </div>
 </DocsLayout>
 
 <style>
-  .prose { color: var(--color-text-secondary); line-height: var(--line-height-relaxed); }
-  .prose h1 { font-size: var(--font-size-4xl); color: var(--color-text); margin-bottom: var(--spacing-4); }
-  .prose h2 { font-size: var(--font-size-2xl); color: var(--color-text); margin-top: var(--spacing-10); margin-bottom: var(--spacing-4); padding-top: var(--spacing-4); border-top: 1px solid var(--color-border-subtle); }
-  .prose h2:first-of-type { border-top: none; padding-top: 0; }
-  .prose p { margin-bottom: var(--spacing-4); }
-  .prose .lead { font-size: var(--font-size-lg); margin-bottom: var(--spacing-6); }
-  .prose code { padding: var(--spacing-1) var(--spacing-2); font-size: var(--font-size-sm); background: var(--color-bg-tertiary); border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
-  .prose pre { margin: var(--spacing-4) 0; padding: var(--spacing-4); background: var(--color-bg-tertiary); border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow-x: auto; }
-  .prose pre code { padding: 0; background: none; border: none; }
-  .prose a { color: var(--color-primary); text-decoration: underline; text-underline-offset: 2px; }
+  .prose {
+    color: var(--color-text-secondary);
+    line-height: var(--line-height-relaxed);
+  }
+  
+  .prose h1 {
+    font-size: var(--font-size-4xl);
+    color: var(--color-text);
+    margin-bottom: var(--spacing-4);
+  }
+  
+  .prose h2 {
+    font-size: var(--font-size-2xl);
+    color: var(--color-text);
+    margin-top: var(--spacing-10);
+    margin-bottom: var(--spacing-4);
+    padding-top: var(--spacing-4);
+    border-top: 1px solid var(--color-border-subtle);
+  }
+  
+  .prose h2:first-of-type {
+    border-top: none;
+    padding-top: 0;
+  }
+  
+  .prose h3 {
+    font-size: var(--font-size-xl);
+    color: var(--color-text);
+    margin-top: var(--spacing-6);
+    margin-bottom: var(--spacing-3);
+  }
+  
+  .prose p {
+    margin-bottom: var(--spacing-4);
+  }
+  
+  .prose .lead {
+    font-size: var(--font-size-lg);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-6);
+  }
+  
+  .prose code {
+    padding: var(--spacing-1) var(--spacing-2);
+    font-size: var(--font-size-sm);
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+  }
+  
+  .prose pre {
+    margin: var(--spacing-4) 0;
+    padding: var(--spacing-4);
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow-x: auto;
+  }
+  
+  .prose pre code {
+    padding: 0;
+    background: none;
+    border: none;
+  }
+  
+  .prose .list {
+    margin: var(--spacing-4) 0;
+    padding-left: var(--spacing-6);
+  }
+  
+  .prose .list li {
+    margin-bottom: var(--spacing-2);
+    list-style: disc;
+  }
+  
+  .prose strong {
+    color: var(--color-text);
+    font-weight: 600;
+  }
+  
+  /* Hierarchy Diagram */
+  .hierarchy-diagram {
+    margin: var(--spacing-8) 0;
+    padding: var(--spacing-6);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+  }
+  
+  .hierarchy-diagram svg {
+    width: 100%;
+    max-width: 600px;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+  }
+  
+  .diagram-caption {
+    text-align: center;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-4);
+    margin-bottom: 0;
+  }
+  
+  /* Comparison Table */
+  .comparison-table {
+    width: 100%;
+    margin: var(--spacing-6) 0;
+    border-collapse: collapse;
+    font-size: var(--font-size-sm);
+  }
+  
+  .comparison-table th,
+  .comparison-table td {
+    padding: var(--spacing-3) var(--spacing-4);
+    text-align: left;
+    border: 1px solid var(--color-border);
+  }
+  
+  .comparison-table th {
+    background: var(--color-bg-tertiary);
+    color: var(--color-text);
+    font-weight: 600;
+  }
+  
+  .comparison-table td {
+    background: var(--color-bg-secondary);
+  }
+  
+  .comparison-table code {
+    font-size: var(--font-size-xs);
+  }
+  
+  /* Badges */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--spacing-1) var(--spacing-2);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    color: white;
+  }
+  
+  .badge--global {
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  }
+  
+  .badge--workspace {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+  }
+  
+  .badge--collection {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+  }
 </style>
-

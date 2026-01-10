@@ -73,6 +73,17 @@ export const RequestCard: React.FC<RequestCardProps> = ({ request: initialReques
   // Collection-level headers
   const collectionHeaders = collection?.headers?.filter(h => h.enabled && h.key) || [];
 
+  // Get overrides for inherited collection headers (stored in request headers with special prefix)
+  const inheritedHeaderOverrides = useMemo(() => {
+    const overrides = new Map<string, boolean>();
+    request.headers
+      .filter(h => h.id?.startsWith('__inherited_header_override__'))
+      .forEach(h => {
+        overrides.set(h.key, h.enabled);
+      });
+    return overrides;
+  }, [request.headers]);
+
   // Update local request state
   const updateLocalRequest = useCallback((updates: Partial<Request>) => {
     setRequest(prev => ({ ...prev, ...updates }));
@@ -141,8 +152,28 @@ export const RequestCard: React.FC<RequestCardProps> = ({ request: initialReques
   };
 
   const handleHeadersChange = (headers: KeyValuePair[]) => {
-    // Filter out inherited headers
-    const requestHeaders = headers.filter(h => !h.inheritedFrom);
+    // Get request-level headers (filter out inherited headers)
+    let requestHeaders = headers.filter(h => !h.inheritedFrom);
+    
+    // Remove any existing override markers
+    requestHeaders = requestHeaders.filter(h => !h.id?.startsWith('__inherited_header_override__'));
+    
+    // Handle inherited header overrides
+    const inheritedHeaders = headers.filter(h => h.inheritedFrom);
+    inheritedHeaders.forEach(ih => {
+      const originalHeader = collectionHeaders.find(ch => ch.id === ih.id);
+      if (originalHeader && ih.enabled !== originalHeader.enabled) {
+        // Store override for inherited header
+        requestHeaders.push({
+          id: '__inherited_header_override__' + ih.id,
+          key: ih.id,
+          value: '',
+          enabled: ih.enabled,
+          description: `Override for inherited header: ${ih.key}`,
+        });
+      }
+    });
+    
     updateLocalRequest({ headers: requestHeaders });
   };
 
@@ -270,8 +301,9 @@ export const RequestCard: React.FC<RequestCardProps> = ({ request: initialReques
                     ...collectionHeaders.map(h => ({
                       ...h,
                       inheritedFrom: collection?.name,
+                      enabled: inheritedHeaderOverrides.has(h.id) ? (inheritedHeaderOverrides.get(h.id) ?? h.enabled) : h.enabled,
                     })),
-                    ...request.headers,
+                    ...request.headers.filter(h => !h.id?.startsWith('__inherited_header_override__')),
                   ]}
                   onChange={handleHeadersChange}
                   keyPlaceholder="Header"
@@ -313,6 +345,8 @@ export const RequestCard: React.FC<RequestCardProps> = ({ request: initialReques
                         placeholder={request.body.type === 'json' ? '{\n  "key": "value"\n}' : 'Enter request body'}
                         width="100%"
                         height="150px"
+                        supportVariables
+                        collectionEnvironment={selectedCollectionEnv}
                       />
                     </div>
                   )}

@@ -1,155 +1,279 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useGit } from '@/contexts/GitContext';
 import { useGitHub } from '@/contexts/GitHubContext';
-import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useApp } from '@/contexts/AppContext';
+import { useToast } from '@/contexts/ToastContext';
+import { useRequest } from '@/contexts/RequestContext';
+import { isElectron } from '@/utils';
 import { 
   GitBranchIcon, GitCommitIcon, GitPullRequestIcon, RefreshIcon, 
   UploadIcon, DownloadIcon, PlusIcon, XIcon, CheckIcon, 
-  GitHubIcon, LockIcon, ExternalLinkIcon 
+  GitHubIcon, RevertIcon, FolderIcon, TrashIcon
 } from '@/components/ui/icons';
-import { githubService } from '@/services/GitHubService';
 import './GitPanel.css';
 
 type TabType = 'changes' | 'history' | 'branches';
 
 interface GitPanelProps {
   onConnectClick: () => void;
+  onOpenDiff?: (filePath: string, status: string) => void;
 }
 
-export const GitPanel: React.FC<GitPanelProps> = ({ onConnectClick }) => {
+export const GitPanel: React.FC<GitPanelProps> = ({ onConnectClick, onOpenDiff }) => {
   const {
-    isAuthenticated,
-    isLoading: authLoading,
-    user,
-    linkedRepos,
-    getLinkedRepo,
-    unlinkRepository,
+    isInitialized,
+    isLoading,
+    error,
+    status,
+    commits,
     branches,
     currentBranch,
-    fetchBranches,
-    switchBranch,
-    commits,
-    fetchCommits,
-    pushChanges,
-    pullChanges,
-  } = useGitHub();
+    remotes,
+    workspacePath,
+    
+    initRepo,
+    refreshAll,
+    
+    stageFile,
+    stageAll,
+    unstageFile,
+    discardChanges,
+    
+    commit,
+    
+    createBranch,
+    checkoutBranch,
+    deleteBranch,
+    
+    addRemote,
+    removeRemote,
+    
+    push,
+    pull,
+    
+    getTotalChanges,
+    hasChanges,
+  } = useGit();
 
-  const { activeWorkspaceId } = useWorkspace();
+  const { isAuthenticated, user } = useGitHub();
+  const { setSidebarView } = useApp();
+  const { info, error: showError } = useToast();
+  const { addDiffTab } = useRequest();
 
   const [activeTab, setActiveTab] = useState<TabType>('changes');
-  const [isLoading, setIsLoading] = useState(false);
-  const [localChanges, setLocalChanges] = useState<Array<{ path: string; status: string }>>([]);
-
-  const linkedRepo = activeWorkspaceId ? getLinkedRepo(activeWorkspaceId) : undefined;
-
-  // Fetch data when repository is linked
-  useEffect(() => {
-    if (linkedRepo && isAuthenticated) {
-      setIsLoading(true);
-      Promise.all([
-        fetchBranches(linkedRepo.owner, linkedRepo.repo),
-        fetchCommits(linkedRepo.owner, linkedRepo.repo, linkedRepo.branch),
-      ]).finally(() => setIsLoading(false));
-    }
-  }, [linkedRepo, isAuthenticated, fetchBranches, fetchCommits]);
-
-  const handleRefresh = async () => {
-    if (!linkedRepo) return;
-    setIsLoading(true);
-    await Promise.all([
-      fetchBranches(linkedRepo.owner, linkedRepo.repo),
-      fetchCommits(linkedRepo.owner, linkedRepo.repo, currentBranch || linkedRepo.branch),
-    ]);
-    setIsLoading(false);
-  };
-
-  const handlePull = async () => {
-    setIsLoading(true);
-    await pullChanges();
-    setIsLoading(false);
-  };
-
-  const handlePush = async () => {
-    // In a real implementation, this would open a commit modal
-    // For now, just show we can push
-    setIsLoading(true);
-    // await pushChanges('Update collections', files);
-    setIsLoading(false);
-  };
-
-  const handleUnlink = async () => {
-    if (activeWorkspaceId && confirm('Are you sure you want to unlink this repository?')) {
-      await unlinkRepository(activeWorkspaceId);
+  
+  // Refresh data when switching to history tab
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    if (tab === 'history') {
+      refreshAll();
     }
   };
+  const [commitMessage, setCommitMessage] = useState('');
+  const [isCommitting, setIsCommitting] = useState(false);
+  const [isCommitPushing, setIsCommitPushing] = useState(false);
+  const [isPushing, setIsPushing] = useState(false);
+  const [isPulling, setIsPulling] = useState(false);
+  const [showNewBranchInput, setShowNewBranchInput] = useState(false);
+  const [newBranchName, setNewBranchName] = useState('');
+  const [showAddRemoteModal, setShowAddRemoteModal] = useState(false);
+  const [newRemoteName, setNewRemoteName] = useState('origin');
+  const [newRemoteUrl, setNewRemoteUrl] = useState('');
+  const [isEditingRemote, setIsEditingRemote] = useState(false);
 
-  const handleBranchSelect = (branchName: string) => {
-    switchBranch(branchName);
-    if (linkedRepo) {
-      fetchCommits(linkedRepo.owner, linkedRepo.repo, branchName);
+  // Open remote modal (for add or edit)
+  const openRemoteModal = useCallback((edit: boolean = false) => {
+    if (edit && remotes.length > 0) {
+      setNewRemoteName(remotes[0].name);
+      setNewRemoteUrl(remotes[0].url);
+      setIsEditingRemote(true);
+    } else {
+      setNewRemoteName('origin');
+      setNewRemoteUrl('');
+      setIsEditingRemote(false);
     }
+    setShowAddRemoteModal(true);
+  }, [remotes]);
+
+  // Handle init repo
+  const handleInitRepo = useCallback(async () => {
+    await initRepo();
+  }, [initRepo]);
+
+  // Handle refresh
+  const handleRefresh = useCallback(async () => {
+    await refreshAll();
+  }, [refreshAll]);
+
+  // Handle commit
+  const handleCommit = useCallback(async () => {
+    if (!commitMessage.trim()) return;
+    
+    setIsCommitting(true);
+    const result = await commit(commitMessage);
+    setIsCommitting(false);
+    
+    if (result.success) {
+      setCommitMessage('');
+    }
+  }, [commitMessage, commit]);
+
+  // Handle commit and push
+  const handleCommitAndPush = useCallback(async () => {
+    if (!commitMessage.trim()) return;
+    
+    setIsCommitPushing(true);
+    const commitResult = await commit(commitMessage);
+    
+    if (commitResult.success) {
+      setCommitMessage('');
+      await push();
+    }
+    setIsCommitPushing(false);
+  }, [commitMessage, commit, push]);
+
+  // Handle push
+  const handlePush = useCallback(async () => {
+    setIsPushing(true);
+    await push();
+    setIsPushing(false);
+  }, [push]);
+
+  // Handle pull
+  const handlePull = useCallback(async () => {
+    setIsPulling(true);
+    await pull();
+    setIsPulling(false);
+  }, [pull]);
+
+  // Handle stage all
+  const handleStageAll = useCallback(async () => {
+    await stageAll();
+  }, [stageAll]);
+
+  // Handle create branch
+  const handleCreateBranch = useCallback(async () => {
+    if (!newBranchName.trim()) return;
+    
+    const result = await createBranch(newBranchName, true);
+    if (result.success) {
+      setNewBranchName('');
+      setShowNewBranchInput(false);
+    }
+  }, [newBranchName, createBranch]);
+
+  // Handle add/edit remote
+  const handleAddRemote = useCallback(async () => {
+    if (!newRemoteName.trim() || !newRemoteUrl.trim()) return;
+    
+    // If editing and name changed, remove old remote first
+    if (isEditingRemote && remotes.length > 0 && remotes[0].name !== newRemoteName) {
+      await removeRemote(remotes[0].name);
+    } else if (isEditingRemote && remotes.length > 0) {
+      // If just URL changed, remove and re-add
+      await removeRemote(remotes[0].name);
+    }
+    
+    const result = await addRemote(newRemoteName, newRemoteUrl);
+    if (result.success) {
+      setNewRemoteName('origin');
+      setNewRemoteUrl('');
+      setShowAddRemoteModal(false);
+      setIsEditingRemote(false);
+    }
+  }, [newRemoteName, newRemoteUrl, addRemote, removeRemote, isEditingRemote, remotes]);
+
+  // Handle file click - open diff view
+  const handleFileClick = useCallback(async (filePath: string, fileStatus: string) => {
+    if (!isElectron() || !workspacePath) {
+      info('Diff viewer is only available in the desktop app');
+      return;
+    }
+
+    // Get file content for diff
+    try {
+      const result = await window.electronAPI.gitGetFileForDiff(workspacePath, filePath);
+      
+      if (result.success) {
+        const status = fileStatus === 'added' ? 'added' : 
+                      fileStatus === 'deleted' ? 'deleted' : 'modified';
+        addDiffTab(
+          filePath, 
+          result.oldContent || '', 
+          result.newContent || '', 
+          status as 'added' | 'modified' | 'deleted'
+        );
+      } else {
+        showError('Failed to load diff', result.error);
+      }
+    } catch (err) {
+      showError('Failed to load diff', err instanceof Error ? err.message : 'Unknown error');
+    }
+    
+    // Call the onOpenDiff callback if provided
+    if (onOpenDiff) {
+      onOpenDiff(filePath, fileStatus);
+    }
+  }, [workspacePath, addDiffTab, info, showError, onOpenDiff]);
+
+  // Format timestamp
+  const formatDate = (timestamp: number) => {
+    const date = new Date(timestamp * 1000);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    
+    if (diff < 60000) return 'just now';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+    if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`;
+    
+    return date.toLocaleDateString();
   };
 
-  // Not connected state
-  if (!isAuthenticated) {
+  // No workspace selected
+  if (!workspacePath) {
     return (
       <div className="git-panel">
         <div className="git-panel__header">
           <h3>
-            <GitHubIcon />
+            <GitBranchIcon />
             Git
           </h3>
         </div>
         <div className="git-panel__not-connected">
-          <GitHubIcon />
-          <h4>Connect to GitHub</h4>
+          <FolderIcon />
+          <h4>No Workspace Selected</h4>
           <p>
-            Connect your GitHub account to sync your API collections and track changes.
+            Select a workspace to use Git version control.
           </p>
-          <button className="git-panel__connect-btn" onClick={onConnectClick}>
-            <GitHubIcon />
-            Connect GitHub
-          </button>
         </div>
       </div>
     );
   }
 
-  // Loading state
-  if (authLoading) {
+  // Not initialized - show init button
+  if (!isInitialized) {
     return (
       <div className="git-panel">
         <div className="git-panel__header">
           <h3>
-            <GitHubIcon />
-            Git
-          </h3>
-        </div>
-        <div className="git-panel__loading">
-          <div className="spinner" />
-        </div>
-      </div>
-    );
-  }
-
-  // No repository linked
-  if (!linkedRepo) {
-    return (
-      <div className="git-panel">
-        <div className="git-panel__header">
-          <h3>
-            <GitHubIcon />
+            <GitBranchIcon />
             Git
           </h3>
         </div>
         <div className="git-panel__not-connected">
           <GitBranchIcon />
-          <h4>No Repository Linked</h4>
+          <h4>Initialize Repository</h4>
           <p>
-            Link a GitHub repository to this workspace to start syncing your collections.
+            This workspace is not a Git repository yet. Initialize it to start tracking changes.
           </p>
-          <button className="git-panel__connect-btn" onClick={onConnectClick}>
+          <button 
+            className="git-panel__connect-btn" 
+            onClick={handleInitRepo}
+            disabled={isLoading}
+          >
             <GitBranchIcon />
-            Link Repository
+            {isLoading ? 'Initializing...' : 'Initialize Git Repository'}
           </button>
         </div>
       </div>
@@ -160,7 +284,7 @@ export const GitPanel: React.FC<GitPanelProps> = ({ onConnectClick }) => {
     <div className="git-panel">
       <div className="git-panel__header">
         <h3>
-          <GitHubIcon />
+          <GitBranchIcon />
           Git
         </h3>
         <div className="git-panel__actions">
@@ -177,51 +301,77 @@ export const GitPanel: React.FC<GitPanelProps> = ({ onConnectClick }) => {
         </div>
       </div>
 
-      {/* Repository info */}
+      {/* Branch info */}
       <div className="git-panel__repo-info">
-        <img 
-          className="repo-avatar"
-          src={`https://github.com/${linkedRepo.owner}.png?size=64`}
-          alt={linkedRepo.owner}
-        />
+        <div className="repo-avatar">
+          <GitBranchIcon />
+        </div>
         <div className="repo-details">
-          <div className="repo-name">{linkedRepo.owner}/{linkedRepo.repo}</div>
+          <div className="repo-name">{currentBranch || 'main'}</div>
           <div className="repo-branch">
-            <GitBranchIcon />
-            {currentBranch || linkedRepo.branch}
+            {remotes.length > 0 ? (
+              <>
+                <span className="remote-indicator">●</span>
+                {remotes[0].name}
+                <button 
+                  className="remote-edit-btn"
+                  onClick={() => openRemoteModal(true)}
+                  title="Edit remote"
+                >
+                  Edit
+                </button>
+              </>
+            ) : (
+              <button 
+                className="no-remote-btn"
+                onClick={() => openRemoteModal(false)}
+              >
+                No remote configured
+              </button>
+            )}
           </div>
         </div>
+        {!isAuthenticated && remotes.length === 0 && (
         <button 
-          className="repo-unlink"
-          onClick={handleUnlink}
-          title="Unlink repository"
+            className="git-panel__connect-btn git-panel__connect-btn--small"
+            onClick={onConnectClick}
+            title="Connect GitHub to push/pull"
         >
-          <XIcon />
+            <GitHubIcon />
         </button>
+        )}
       </div>
+
+      {/* Error display */}
+      {error && (
+        <div className="git-panel__error">
+          <XIcon />
+          <span>{error}</span>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="git-panel__tabs">
         <button
           className={`git-panel__tab ${activeTab === 'changes' ? 'git-panel__tab--active' : ''}`}
-          onClick={() => setActiveTab('changes')}
+          onClick={() => handleTabChange('changes')}
         >
           <GitPullRequestIcon />
           Changes
-          {localChanges.length > 0 && (
-            <span className="badge">{localChanges.length}</span>
+          {getTotalChanges() > 0 && (
+            <span className="badge">{getTotalChanges()}</span>
           )}
         </button>
         <button
           className={`git-panel__tab ${activeTab === 'history' ? 'git-panel__tab--active' : ''}`}
-          onClick={() => setActiveTab('history')}
+          onClick={() => handleTabChange('history')}
         >
           <GitCommitIcon />
           History
         </button>
         <button
           className={`git-panel__tab ${activeTab === 'branches' ? 'git-panel__tab--active' : ''}`}
-          onClick={() => setActiveTab('branches')}
+          onClick={() => handleTabChange('branches')}
         >
           <GitBranchIcon />
           Branches
@@ -232,19 +382,155 @@ export const GitPanel: React.FC<GitPanelProps> = ({ onConnectClick }) => {
       <div className="git-panel__content">
         {activeTab === 'changes' && (
           <div className="git-panel__changes">
-            {localChanges.length === 0 ? (
+            {/* Staged files */}
+            {status && status.staged.length > 0 && (
+              <div className="git-panel__section">
+                <div className="git-panel__section-header">
+                  <span>Staged Changes ({status.staged.length})</span>
+                </div>
+                {status.staged.map((file) => (
+                  <div 
+                    key={file.path} 
+                    className="git-panel__change-file"
+                    onClick={() => handleFileClick(file.path, file.status)}
+                  >
+                    <span className={`file-status file-status--${file.status}`}>
+                      {file.status === 'added' ? 'A' : file.status === 'modified' ? 'M' : 'D'}
+                    </span>
+                    <span className="file-name">{file.path.split('/').pop()}</span>
+                    <span className="file-path">{file.path}</span>
+                    <button 
+                      className="file-action file-action--unstage"
+                      onClick={(e) => { e.stopPropagation(); unstageFile(file.path); }}
+                      title="Unstage"
+                    >
+                      Unstage
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Unstaged files */}
+            {status && status.unstaged.length > 0 && (
+              <div className="git-panel__section">
+                <div className="git-panel__section-header">
+                  <span>Changes ({status.unstaged.length})</span>
+                  <button 
+                    className="git-panel__stage-all-btn"
+                    onClick={handleStageAll}
+                    title="Stage All"
+                  >
+                    Stage All
+                  </button>
+                </div>
+                {status.unstaged.map((file) => (
+                  <div 
+                    key={file.path} 
+                    className="git-panel__change-file"
+                    onClick={() => handleFileClick(file.path, file.status)}
+                  >
+                    <span className={`file-status file-status--${file.status}`}>
+                      {file.status === 'added' ? 'A' : file.status === 'modified' ? 'M' : 'D'}
+                    </span>
+                    <span className="file-name">{file.path.split('/').pop()}</span>
+                    <span className="file-path">{file.path}</span>
+                    <div className="file-actions">
+                      <button 
+                        className="file-action file-action--stage"
+                        onClick={(e) => { e.stopPropagation(); stageFile(file.path); }}
+                        title="Stage"
+                      >
+                        Stage
+                      </button>
+                      <button 
+                        className="file-action file-action--discard"
+                        onClick={(e) => { e.stopPropagation(); discardChanges(file.path); }}
+                        title="Discard Changes"
+                      >
+                        <RevertIcon />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Untracked files */}
+            {status && status.untracked.length > 0 && (
+              <div className="git-panel__section">
+                <div className="git-panel__section-header">
+                  <span>Untracked Files ({status.untracked.length})</span>
+                  <button 
+                    className="git-panel__stage-all-btn"
+                    onClick={handleStageAll}
+                    title="Stage All"
+                  >
+                    Stage All
+                  </button>
+                </div>
+                {status.untracked.map((filepath) => (
+                  <div 
+                    key={filepath} 
+                    className="git-panel__change-file"
+                    onClick={() => handleFileClick(filepath, 'added')}
+                  >
+                    <span className="file-status file-status--untracked">?</span>
+                    <span className="file-name">{filepath.split('/').pop()}</span>
+                    <span className="file-path">{filepath}</span>
+                    <button 
+                      className="file-action file-action--stage"
+                      onClick={(e) => { e.stopPropagation(); stageFile(filepath); }}
+                      title="Stage"
+                    >
+                      Stage
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* No changes */}
+            {!hasChanges() && (
               <div className="git-panel__changes-empty">
                 <CheckIcon />
                 <p>No uncommitted changes</p>
               </div>
-            ) : (
-              localChanges.map((change, idx) => (
-                <div key={idx} className="git-panel__change-file">
-                  <span className={`file-status file-status--${change.status}`} />
-                  <span className="file-name">{change.path.split('/').pop()}</span>
-                  <span className="file-path">{change.path}</span>
+            )}
+
+            {/* Commit input */}
+            {status && status.staged.length > 0 && (
+              <div className="git-panel__commit-form">
+                <textarea
+                  className="git-panel__commit-input"
+                  placeholder="Commit message..."
+                  value={commitMessage}
+                  onChange={(e) => setCommitMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                      handleCommit();
+                    }
+                  }}
+                />
+                <button
+                  className="git-panel__commit-btn"
+                  onClick={handleCommit}
+                  disabled={!commitMessage.trim() || isCommitting || isCommitPushing}
+                >
+                  <GitCommitIcon />
+                  {isCommitting ? 'Committing...' : 'Commit'}
+                </button>
+                {remotes.length > 0 && (
+                  <button
+                    className="git-panel__commit-push-btn"
+                    onClick={handleCommitAndPush}
+                    disabled={!commitMessage.trim() || isCommitting || isCommitPushing}
+                  >
+                    <UploadIcon />
+                    {isCommitPushing ? 'Committing & Pushing...' : 'Commit & Push'}
+                  </button>
+                )}
                 </div>
-              ))
             )}
           </div>
         )}
@@ -255,25 +541,28 @@ export const GitPanel: React.FC<GitPanelProps> = ({ onConnectClick }) => {
               <div className="git-panel__loading">
                 <div className="spinner" />
               </div>
+            ) : commits.length === 0 ? (
+              <div className="git-panel__changes-empty">
+                <GitCommitIcon />
+                <p>No commits yet</p>
+              </div>
             ) : (
               commits.map((item) => (
                 <div 
-                  key={item.sha} 
+                  key={item.oid} 
                   className="git-panel__commit"
-                  onClick={() => window.open(item.html_url, '_blank')}
                 >
                   <div className="commit-avatar">
-                    {item.commit.author.name.charAt(0).toUpperCase()}
+                    {item.author.name.charAt(0).toUpperCase()}
                   </div>
                   <div className="commit-details">
-                    <div className="commit-message">{item.commit.message}</div>
+                    <div className="commit-message">{item.message.split('\n')[0]}</div>
                     <div className="commit-meta">
-                      <span className="commit-sha">{item.sha.substring(0, 7)}</span>
-                      <span>{item.commit.author.name}</span>
-                      <span>{githubService.getRelativeTime(item.commit.author.date)}</span>
+                      <span className="commit-sha">{item.oid.substring(0, 7)}</span>
+                      <span>{item.author.name}</span>
+                      <span>{formatDate(item.author.timestamp)}</span>
                     </div>
                   </div>
-                  <ExternalLinkIcon />
                 </div>
               ))
             )}
@@ -287,27 +576,110 @@ export const GitPanel: React.FC<GitPanelProps> = ({ onConnectClick }) => {
                 <button
                   key={branch.name}
                   className={`git-panel__branch ${
-                    branch.name === (currentBranch || linkedRepo.branch) 
-                      ? 'git-panel__branch--current' 
-                      : ''
+                    branch.current ? 'git-panel__branch--current' : ''
                   }`}
-                  onClick={() => handleBranchSelect(branch.name)}
+                  onClick={() => !branch.current && checkoutBranch(branch.name)}
+                  disabled={branch.current}
                 >
                   <GitBranchIcon />
                   <span className="branch-name">{branch.name}</span>
-                  {branch.name === linkedRepo.branch && (
-                    <span className="branch-badge">default</span>
+                  {branch.current && (
+                    <span className="branch-badge">current</span>
                   )}
-                  {branch.protected && (
-                    <span className="branch-protected"><LockIcon /></span>
+                  {!branch.current && (
+                    <button
+                      className="branch-delete"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`Delete branch "${branch.name}"?`)) {
+                          deleteBranch(branch.name);
+                        }
+                      }}
+                      title="Delete branch"
+                    >
+                      <TrashIcon />
+                    </button>
                   )}
                 </button>
               ))}
             </div>
-            <button className="git-panel__new-branch">
+            
+            {showNewBranchInput ? (
+              <div className="git-panel__new-branch-form">
+                <input
+                  type="text"
+                  placeholder="Branch name..."
+                  value={newBranchName}
+                  onChange={(e) => setNewBranchName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleCreateBranch();
+                    if (e.key === 'Escape') {
+                      setShowNewBranchInput(false);
+                      setNewBranchName('');
+                    }
+                  }}
+                  autoFocus
+                />
+                <button onClick={handleCreateBranch} disabled={!newBranchName.trim()}>
+                  <CheckIcon />
+                </button>
+                <button onClick={() => { setShowNewBranchInput(false); setNewBranchName(''); }}>
+                  <XIcon />
+                </button>
+              </div>
+            ) : (
+              <button 
+                className="git-panel__new-branch"
+                onClick={() => setShowNewBranchInput(true)}
+              >
               <PlusIcon />
               New Branch
             </button>
+            )}
+
+            {/* Remotes section */}
+            <div className="git-panel__section-header" style={{ marginTop: '16px' }}>
+              <span>Remotes</span>
+            </div>
+            {remotes.length === 0 ? (
+              <div className="git-panel__no-remotes">
+                <p>No remotes configured</p>
+                <button 
+                  className="git-panel__add-remote-btn"
+                  onClick={() => openRemoteModal(false)}
+                >
+                  <PlusIcon />
+                  Add Remote
+                </button>
+              </div>
+            ) : (
+              <div className="git-panel__remote-list">
+                {remotes.map((remote) => (
+                  <div key={remote.name} className="git-panel__remote">
+                    <span className="remote-name">{remote.name}</span>
+                    <span className="remote-url">{remote.url}</span>
+                    <button
+                      className="remote-delete"
+                      onClick={() => {
+                        if (confirm(`Remove remote "${remote.name}"?`)) {
+                          removeRemote(remote.name);
+                        }
+                      }}
+                      title="Remove remote"
+                    >
+                      <TrashIcon />
+                    </button>
+                  </div>
+                ))}
+                <button 
+                  className="git-panel__add-remote-btn"
+                  onClick={() => openRemoteModal(false)}
+                >
+                  <PlusIcon />
+                  Add Remote
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -317,23 +689,79 @@ export const GitPanel: React.FC<GitPanelProps> = ({ onConnectClick }) => {
         <button 
           className="git-panel__sync-btn git-panel__sync-btn--pull"
           onClick={handlePull}
-          disabled={isLoading}
+          disabled={isPulling || remotes.length === 0}
+          title={remotes.length === 0 ? 'Add a remote first' : 'Pull from remote'}
         >
           <DownloadIcon />
-          Pull
+          {isPulling ? 'Pulling...' : 'Pull'}
         </button>
         <button 
           className="git-panel__sync-btn git-panel__sync-btn--push"
           onClick={handlePush}
-          disabled={isLoading || localChanges.length === 0}
+          disabled={isPushing || remotes.length === 0}
+          title={remotes.length === 0 ? 'Add a remote first' : 'Push to remote'}
         >
           <UploadIcon />
-          Push
+          {isPushing ? 'Pushing...' : 'Push'}
         </button>
       </div>
+
+      {/* Add Remote Modal */}
+      {showAddRemoteModal && (
+        <div className="git-panel__modal-overlay" onClick={() => setShowAddRemoteModal(false)}>
+          <div className="git-panel__modal" onClick={(e) => e.stopPropagation()}>
+            <div className="git-panel__modal-header">
+              <h4>{isEditingRemote ? 'Edit Remote' : 'Add Remote'}</h4>
+              <button onClick={() => setShowAddRemoteModal(false)}>
+                <XIcon />
+              </button>
+            </div>
+            <div className="git-panel__modal-body">
+              <div className="git-panel__form-group">
+                <label>Name</label>
+                <input
+                  type="text"
+                  value={newRemoteName}
+                  onChange={(e) => setNewRemoteName(e.target.value)}
+                  placeholder="origin"
+                />
+              </div>
+              <div className="git-panel__form-group">
+                <label>URL</label>
+                <input
+                  type="text"
+                  value={newRemoteUrl}
+                  onChange={(e) => setNewRemoteUrl(e.target.value)}
+                  placeholder="https://github.com/user/repo.git"
+                />
+              </div>
+              {user && (
+                <p className="git-panel__hint">
+                  Tip: Use format https://github.com/{user.login}/repo-name.git
+                </p>
+              )}
+            </div>
+            <div className="git-panel__modal-footer">
+              <button 
+                className="git-panel__modal-cancel"
+                onClick={() => setShowAddRemoteModal(false)}
+              >
+                Cancel
+              </button>
+              <button 
+                className="git-panel__modal-confirm git-panel__modal-save"
+                onClick={handleAddRemote}
+                disabled={!newRemoteName.trim() || !newRemoteUrl.trim()}
+              >
+                <CheckIcon />
+                Save Remote
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default GitPanel;
-

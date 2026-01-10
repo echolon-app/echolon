@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { githubService, GitHubUser, GitHubRepository, GitHubBranch, GitHubCommit, LinkedRepository } from '@/services/GitHubService';
+import { githubSyncService, SyncStatus, FileChange } from '@/services/GitHubSyncService';
 import { fileStorageManager } from '@/services';
 import { useWorkspace } from './WorkspaceContext';
 import { useWebModeOptional } from './WebModeContext';
@@ -42,11 +43,19 @@ interface GitHubContextValue {
   // Commit actions
   fetchCommits: (owner: string, repo: string, branch?: string) => Promise<void>;
   
+  // Sync state
+  syncStatus: SyncStatus | null;
+  isSyncing: boolean;
+  
   // Sync actions
+  checkSyncStatus: () => Promise<SyncStatus | null>;
+  pushWorkspaceChanges: (message: string) => Promise<{ success: boolean; error?: string; sha?: string }>;
+  pullWorkspaceChanges: () => Promise<{ success: boolean; error?: string; conflicts?: FileChange[] }>;
+  initializeSync: () => Promise<{ success: boolean; error?: string }>;
+  
+  // Legacy sync actions (kept for compatibility)
   pushChanges: (message: string, files: Array<{ path: string; content: string }>) => Promise<{ success: boolean; error?: string }>;
   pullChanges: () => Promise<{ success: boolean; error?: string }>;
-  
-  // Comparison
   compareWithRemote: () => Promise<{ ahead: number; behind: number; files: Array<{ filename: string; status: string }> } | null>;
 }
 
@@ -55,7 +64,7 @@ const GitHubContext = createContext<GitHubContextValue | null>(null);
 export const GitHubProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const webMode = useWebModeOptional();
   const isWebMode = webMode?.isWebMode ?? false;
-  const { activeWorkspaceId } = useWorkspace();
+  const { activeWorkspaceId, activeWorkspace, getWorkspaceNameById } = useWorkspace();
   
   // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -74,6 +83,10 @@ export const GitHubProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Commit state
   const [commits, setCommits] = useState<Array<{ sha: string; commit: GitHubCommit; html_url: string }>>([]);
   
+  // Sync state
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  
   const initialLoadDone = useRef(false);
 
   // Load saved auth state on mount (skip in web mode)
@@ -87,6 +100,9 @@ export const GitHubProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const loadAuthState = async () => {
       try {
         setIsLoading(true);
+        
+        // Initialize sync service
+        await githubSyncService.initialize();
         
         // Load config to get saved token and linked repos
         const config = await fileStorageManager.readConfig();
@@ -172,6 +188,7 @@ export const GitHubProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setSelectedRepo(null);
     setBranches([]);
     setCommits([]);
+    setSyncStatus(null);
     
     // Clear token from config (skip in web mode)
     if (!isWebMode) {
@@ -220,27 +237,18 @@ export const GitHubProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Link repository to workspace
   const linkRepository = useCallback(async (workspaceId: string, owner: string, repo: string, branch: string) => {
+    const workspaceName = getWorkspaceNameById(workspaceId);
+    if (!workspaceName) {
+      console.error(`Cannot link repository: workspace ${workspaceId} not found`);
+      return;
+    }
+    
     const newLinked: LinkedRepository = { workspaceId, owner, repo, branch };
     const updated = [...linkedRepos.filter(r => r.workspaceId !== workspaceId), newLinked];
     setLinkedRepos(updated);
     
-    // Save to config (skip in web mode)
-    if (!isWebMode) {
-    const config = await fileStorageManager.readConfig();
-    const existingGitHub = config?.github || { authMethod: 'pat' as const };
-    await fileStorageManager.updateConfig({
-      github: {
-        ...existingGitHub,
-        linkedRepos: updated,
-      }
-    });
-    }
-  }, [linkedRepos, isWebMode]);
-
-  // Unlink repository from workspace
-  const unlinkRepository = useCallback(async (workspaceId: string) => {
-    const updated = linkedRepos.filter(r => r.workspaceId !== workspaceId);
-    setLinkedRepos(updated);
+    // Also register with sync service
+    await githubSyncService.linkRepository(workspaceId, workspaceName, owner, repo, branch);
     
     // Save to config (skip in web mode)
     if (!isWebMode) {
@@ -253,7 +261,33 @@ export const GitHubProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     });
     }
-  }, [linkedRepos, isWebMode]);
+  }, [linkedRepos, isWebMode, getWorkspaceNameById]);
+
+  // Unlink repository from workspace
+  const unlinkRepository = useCallback(async (workspaceId: string) => {
+    const workspaceName = getWorkspaceNameById(workspaceId);
+    
+    const updated = linkedRepos.filter(r => r.workspaceId !== workspaceId);
+    setLinkedRepos(updated);
+    
+    // Also unlink from sync service (only if we have the workspace name)
+    if (workspaceName) {
+      await githubSyncService.unlinkRepository(workspaceId, workspaceName);
+    }
+    setSyncStatus(null);
+    
+    // Save to config (skip in web mode)
+    if (!isWebMode) {
+    const config = await fileStorageManager.readConfig();
+    const existingGitHub = config?.github || { authMethod: 'pat' as const };
+    await fileStorageManager.updateConfig({
+      github: {
+        ...existingGitHub,
+        linkedRepos: updated,
+      }
+    });
+    }
+  }, [linkedRepos, isWebMode, getWorkspaceNameById]);
 
   // Get linked repo for a workspace
   const getLinkedRepo = useCallback((workspaceId: string): LinkedRepository | undefined => {
@@ -321,7 +355,112 @@ export const GitHubProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, []);
 
-  // Push changes
+  // Check sync status for current workspace
+  const checkSyncStatus = useCallback(async (): Promise<SyncStatus | null> => {
+    if (!activeWorkspaceId || !activeWorkspace?.name) {
+      setSyncStatus(null);
+      return null;
+    }
+    
+    const linked = linkedRepos.find(r => r.workspaceId === activeWorkspaceId);
+    if (!linked) {
+      setSyncStatus(null);
+      return null;
+    }
+    
+    setIsSyncing(true);
+    try {
+      const status = await githubSyncService.compareWithRemote(activeWorkspaceId, activeWorkspace.name);
+      setSyncStatus(status);
+      return status;
+    } catch (error) {
+      console.error('Error checking sync status:', error);
+      return null;
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [activeWorkspaceId, activeWorkspace?.name, linkedRepos]);
+
+  // Push workspace changes to GitHub
+  const pushWorkspaceChanges = useCallback(async (message: string): Promise<{ success: boolean; error?: string; sha?: string }> => {
+    if (!activeWorkspaceId || !activeWorkspace?.name) {
+      return { success: false, error: 'No active workspace' };
+    }
+    
+    const linked = linkedRepos.find(r => r.workspaceId === activeWorkspaceId);
+    if (!linked) {
+      return { success: false, error: 'No repository linked to this workspace' };
+    }
+    
+    setIsSyncing(true);
+    try {
+      const result = await githubSyncService.pushChanges(activeWorkspaceId, activeWorkspace.name, message);
+      
+      if (result.success) {
+        // Refresh commits and sync status
+        await fetchCommits(linked.owner, linked.repo, linked.branch);
+        await checkSyncStatus();
+      }
+      
+      return result;
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [activeWorkspaceId, activeWorkspace?.name, linkedRepos, fetchCommits, checkSyncStatus]);
+
+  // Pull workspace changes from GitHub
+  const pullWorkspaceChanges = useCallback(async (): Promise<{ success: boolean; error?: string; conflicts?: FileChange[] }> => {
+    if (!activeWorkspaceId || !activeWorkspace?.name) {
+      return { success: false, error: 'No active workspace' };
+    }
+    
+    const linked = linkedRepos.find(r => r.workspaceId === activeWorkspaceId);
+    if (!linked) {
+      return { success: false, error: 'No repository linked to this workspace' };
+    }
+    
+    setIsSyncing(true);
+    try {
+      const result = await githubSyncService.pullChanges(activeWorkspaceId, activeWorkspace.name);
+      
+      if (result.success) {
+        // Refresh sync status
+        await checkSyncStatus();
+      }
+      
+      return result;
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [activeWorkspaceId, activeWorkspace?.name, linkedRepos, checkSyncStatus]);
+
+  // Initialize sync (after first-time link)
+  const initializeSync = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
+    if (!activeWorkspaceId || !activeWorkspace?.name) {
+      return { success: false, error: 'No active workspace' };
+    }
+    
+    setIsSyncing(true);
+    try {
+      const result = await githubSyncService.initializeSyncFromRemote(activeWorkspaceId, activeWorkspace.name);
+      
+      if (result.success) {
+        await checkSyncStatus();
+      }
+      
+      return result;
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [activeWorkspaceId, activeWorkspace?.name, checkSyncStatus]);
+
+  // Legacy push changes (kept for compatibility)
   const pushChanges = useCallback(async (
     message: string,
     files: Array<{ path: string; content: string }>
@@ -361,7 +500,7 @@ export const GitHubProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [activeWorkspaceId, getLinkedRepo, fetchCommits]);
 
-  // Pull changes
+  // Legacy pull changes (kept for compatibility)
   const pullChanges = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
     if (!activeWorkspaceId) {
       return { success: false, error: 'No active workspace' };
@@ -388,30 +527,41 @@ export const GitHubProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [activeWorkspaceId, getLinkedRepo, fetchCommits]);
 
-  // Compare with remote
+  // Compare with remote (legacy - returns simple count format)
   const compareWithRemote = useCallback(async () => {
-    if (!activeWorkspaceId) return null;
+    if (!activeWorkspaceId || !activeWorkspace?.name) return null;
     
     const linked = getLinkedRepo(activeWorkspaceId);
     if (!linked) return null;
     
     try {
-      // Get the latest local and remote state
-      // This is a simplified comparison - a full implementation would track local changes
-      const branchResult = await githubService.getBranch(linked.owner, linked.repo, linked.branch);
+      const status = await githubSyncService.compareWithRemote(activeWorkspaceId, activeWorkspace.name);
       
-      if (!branchResult.success || !branchResult.data) return null;
+      if (!status) return null;
+      
+      // Convert to legacy format
+      const files = [
+        ...status.localChanges.map(c => ({ filename: c.path, status: c.type })),
+        ...status.remoteChanges.map(c => ({ filename: c.path, status: c.type })),
+      ];
       
       return {
-        ahead: 0, // Would need to track local commits
-        behind: 0, // Would need to compare with last sync
-        files: [],
+        ahead: status.localChanges.length,
+        behind: status.remoteChanges.length,
+        files,
       };
     } catch (error) {
       console.error('Error comparing with remote:', error);
       return null;
     }
-  }, [activeWorkspaceId, getLinkedRepo]);
+  }, [activeWorkspaceId, activeWorkspace?.name, getLinkedRepo]);
+
+  // Auto-check sync status when workspace changes
+  useEffect(() => {
+    if (activeWorkspaceId && isAuthenticated && !isWebMode) {
+      checkSyncStatus();
+    }
+  }, [activeWorkspaceId, isAuthenticated, isWebMode, checkSyncStatus]);
 
   return (
     <GitHubContext.Provider
@@ -437,6 +587,12 @@ export const GitHubProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         createBranch,
         commits,
         fetchCommits,
+        syncStatus,
+        isSyncing,
+        checkSyncStatus,
+        pushWorkspaceChanges,
+        pullWorkspaceChanges,
+        initializeSync,
         pushChanges,
         pullChanges,
         compareWithRemote,
@@ -456,4 +612,3 @@ export const useGitHub = () => {
 };
 
 export default GitHubContext;
-

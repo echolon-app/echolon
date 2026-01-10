@@ -1,7 +1,8 @@
 export { ThemeProvider, useTheme, COLOR_SCHEMES } from './ThemeContext';
-export { FileStorageProvider, useFileStorage } from './FileStorageContext';
+export { FileStorageProvider, useFileStorage, useFileStorageOptional } from './FileStorageContext';
 export { DataLoaderProvider, useDataLoader, type LoadedData, type LoadingTimings } from './DataLoaderContext';
 export { GitHubProvider, useGitHub } from './GitHubContext';
+export { GitProvider, useGit, useGitOptional } from './GitContext';
 export { WorkspaceProvider, useWorkspace } from './WorkspaceContext';
 export { CollectionsProvider, useCollections } from './CollectionsContext';
 export { EnvironmentsProvider, useEnvironments, type ResolvedVariable } from './EnvironmentsContext';

@@ -23,6 +23,7 @@ export interface KeyValuePair {
   enabled: boolean;
   inheritedFrom?: string; // Name of the source (e.g., collection name) if this is inherited
   isSystem?: boolean; // Whether this is a system-generated header (e.g., User-Agent from settings)
+  secure?: boolean; // If true, the value is hidden/masked like a password
 }
 
 export interface Folder {
@@ -37,7 +38,7 @@ export interface Folder {
 export type CollectionType = 'REST' | 'GraphQL' | 'WebSocket' | 'gRPC' | 'MQTT';
 
 // Spec source types for URL-based import and sync
-export type SpecFormat = 'openapi' | 'postman' | 'insomnia';
+export type SpecFormat = 'openapi' | 'postman' | 'insomnia' | 'echolon';
 export type SpecSourceType = 'file' | 'url';
 
 export interface SpecSource {
@@ -93,6 +94,21 @@ export interface WorkspaceEnvironment {
   emoji?: string;
 }
 
+// Public sharing configuration for collections
+export interface PublicSharingVersion {
+  version: string;
+  publishedAt: number;
+  title?: string;
+  description?: string;
+}
+
+export interface PublicSharing {
+  enabled: boolean;
+  subdomain?: string;
+  versions?: PublicSharingVersion[];
+  lastPublishedAt?: number;
+}
+
 export interface Collection {
   id: string;
   name: string;
@@ -115,6 +131,8 @@ export interface Collection {
   // Spec import/sync fields
   specSource?: SpecSource;
   importedAt?: number; // Timestamp when originally imported
+  // Public sharing
+  publicSharing?: PublicSharing;
 }
 
 export interface RequestBody {
@@ -188,8 +206,10 @@ export interface Request {
     pre: string;
     post: string;
   };
+  tags?: string[]; // Tags for categorizing and searching requests
   collectionId?: string;
   folderId?: string;
+  workspaceId?: string; // Workspace this request belongs to (for unsaved requests)
 }
 
 export interface ResponseHeader {
@@ -245,6 +265,7 @@ export interface Response {
   headers: ResponseHeader[];
   cookies: ResponseCookie[];
   body: string;
+  bodyBase64?: string; // Base64-encoded body for binary content (images, videos, PDFs, etc.)
   size: number;
   contentType: string;
   timing?: ResponseTiming;
@@ -271,10 +292,20 @@ export interface ScriptsOutput {
   post?: ScriptOutput;
 }
 
+/** Resolved request data after variable/function interpolation */
+export interface ResolvedRequest {
+  url: string;
+  method: string;
+  headers: Array<{ key: string; value: string }>;
+  body?: string | null;
+}
+
 export interface RequestExecution {
   id: string;
   requestId: string;
   request: Request;
+  /** The actual request sent after variable/function interpolation */
+  resolvedRequest?: ResolvedRequest;
   response: Response | null;
   error?: string;
   errorCode?: string;
@@ -294,15 +325,26 @@ export interface Environment {
 
 export interface Tab {
   id: string;
-  type: 'request' | 'collection' | 'environment' | 'websocket';
+  type: 'request' | 'collection' | 'environment' | 'websocket' | 'workspace' | 'diff';
   title: string;
   request?: Request;
   collectionId?: string;
   environmentId?: string;
+  workspaceId?: string;
   websocket?: WebSocketConnection;
   isDirty?: boolean;
   initialSubTab?: string; // For initially opening a specific sub-tab (e.g., 'auth' for collection)
   subTab?: string; // Currently selected sub-tab (persisted)
+  // Per-tab request execution state (independent per tab)
+  isLoading?: boolean;
+  execution?: RequestExecution;
+  // Diff tab properties
+  diff?: {
+    filePath: string;
+    oldContent: string;
+    newContent: string;
+    status: 'added' | 'modified' | 'deleted';
+  };
 }
 
 // WebSocket Types
@@ -365,6 +407,10 @@ export interface AppSettings {
   defaultSyncFrequencyMins?: number; // Default sync frequency for new URL imports
   sendUserAgent?: boolean; // Whether to send User-Agent header with requests (default: true)
   debugMode?: boolean; // Show debug information like startup time
+  customUpdateServerUrl?: string; // Custom update server URL (only used when debugMode is true)
+  sampleCreated?: boolean; // Whether the sample collection has been created on first app start
+  persistHistory?: boolean; // Whether to persist request history to disk (default: true)
+  historyMaxBinarySize?: number; // Max binary response size to store in history in KB (default: 50)
   // Mocking settings
   mockingMaxCapturedRequests?: number; // Maximum captured requests to store (default: 1000)
   mockingSaveDebounceMs?: number; // Debounce time for saving captured requests (default: 1000)
@@ -383,9 +429,15 @@ export interface ConsoleEntry {
 export interface HistoryEntry {
   id: string;
   request: Request;
+  /** The actual request sent after variable/function interpolation */
+  resolvedRequest?: ResolvedRequest;
   response: Response | null;
   timestamp: number;
   duration: number;
+  /** If true, the response body was omitted because it exceeded the size limit */
+  responseBodyOmitted?: boolean;
+  /** Original size of the omitted response body in bytes */
+  responseBodyOriginalSize?: number;
 }
 
 export interface Workspace {
@@ -509,6 +561,35 @@ export interface SwaggerPath {
         description: string;
       };
     };
+    security?: Array<{ [schemeName: string]: string[] }>;
+  };
+}
+
+export interface SwaggerSecurityScheme {
+  type: 'apiKey' | 'http' | 'oauth2' | 'openIdConnect';
+  description?: string;
+  name?: string;
+  in?: 'query' | 'header' | 'cookie';
+  scheme?: string;
+  bearerFormat?: string;
+  flows?: {
+    authorizationCode?: {
+      authorizationUrl: string;
+      tokenUrl: string;
+      scopes: { [scope: string]: string };
+    };
+    clientCredentials?: {
+      tokenUrl: string;
+      scopes: { [scope: string]: string };
+    };
+    password?: {
+      tokenUrl: string;
+      scopes: { [scope: string]: string };
+    };
+    implicit?: {
+      authorizationUrl: string;
+      scopes: { [scope: string]: string };
+    };
   };
 }
 
@@ -530,4 +611,17 @@ export interface SwaggerDocument {
   paths: {
     [path: string]: SwaggerPath;
   };
+  tags?: Array<{
+    name: string;
+    description?: string;
+  }>;
+  components?: {
+    securitySchemes?: {
+      [name: string]: SwaggerSecurityScheme;
+    };
+  };
+  securityDefinitions?: {
+    [name: string]: SwaggerSecurityScheme;
+  };
+  security?: Array<{ [schemeName: string]: string[] }>;
 }

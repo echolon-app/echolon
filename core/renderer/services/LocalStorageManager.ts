@@ -117,24 +117,28 @@ class LocalStorageManager {
     return this.getEnvironments().find(e => e.id === selectedId) || null;
   }
 
-  // History
+  // History - Now persisted to disk via FileStorageManager
+  // These methods are kept for backwards compatibility but defer to file storage
+  /** @deprecated History is now persisted to disk via FileStorageManager */
   getHistory(): HistoryEntry[] {
-    return this.get<HistoryEntry[]>(STORAGE_KEYS.HISTORY, []);
+    // Clear any existing history from localStorage (migrated to disk)
+    this.remove(STORAGE_KEYS.HISTORY);
+    return [];
   }
 
-  setHistory(history: HistoryEntry[]): void {
-    this.set(STORAGE_KEYS.HISTORY, history);
+  /** @deprecated History is now persisted to disk via FileStorageManager */
+  setHistory(_history: HistoryEntry[]): void {
+    // No-op - history stored on disk now
   }
 
-  addHistoryEntry(entry: HistoryEntry): void {
-    const history = this.getHistory();
-    // Keep only last 100 entries
-    const newHistory = [entry, ...history].slice(0, 100);
-    this.setHistory(newHistory);
+  /** @deprecated History is now persisted to disk via FileStorageManager */
+  addHistoryEntry(_entry: HistoryEntry): void {
+    // No-op - history stored on disk now
   }
 
+  /** @deprecated History is now persisted to disk via FileStorageManager */
   clearHistory(): void {
-    this.setHistory([]);
+    this.remove(STORAGE_KEYS.HISTORY);
   }
 
   // Settings
@@ -237,13 +241,14 @@ class LocalStorageManager {
     this.set(STORAGE_KEYS.SIDEBAR_VIEW, view);
   }
 
-  // Sample Collection Created Flag
+  // Sample Collection Created Flag (stored in settings)
   isSampleCreated(): boolean {
-    return this.get<boolean>(STORAGE_KEYS.SAMPLE_CREATED, false);
+    const settings = this.getSettings();
+    return settings.sampleCreated ?? false;
   }
 
   setSampleCreated(created: boolean): void {
-    this.set(STORAGE_KEYS.SAMPLE_CREATED, created);
+    this.updateSettings({ sampleCreated: created });
   }
 
   // Workspaces

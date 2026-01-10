@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { Button, Input, Dropdown, TabBar, EditableTable, Tooltip, CodeEditor } from '@/components/ui';
+import ace from 'ace-builds';
+import { Button, Input, Dropdown, TabBar, EditableTable, Tooltip, CodeEditor, TagInput } from '@/components/ui';
 import { SendIcon, CodeIcon, HistoryIcon, CopyIcon, CheckIcon, SocketIcon } from '@/components/ui/icons';
 import { useRequest, useEnvironments, useTheme, useCollections, useApp } from '@/contexts';
 import { storageManager } from '@/services';
@@ -11,6 +12,8 @@ import { ResponseViewer } from './ResponseViewer';
 import { EnvironmentEditor } from './EnvironmentEditor';
 import { CollectionEditor } from './CollectionEditor';
 import { WebSocketPanel } from './WebSocketPanel';
+import { WorkspaceEditor } from './WorkspaceEditor';
+import { DiffViewer } from '@/components/panels/DiffViewer/DiffViewer';
 import { RequestHistoryModal } from '@/components/modals';
 import './CenterPanel.css';
 
@@ -226,7 +229,7 @@ console.log('Body preview:', res.body.substring(0, 500));`,
   },
 ];
 
-type RequestTab = 'params' | 'auth' | 'headers' | 'body' | 'scripts' | 'settings';
+type RequestTab = 'params' | 'auth' | 'headers' | 'body' | 'scripts' | 'tags' | 'settings';
 
 const requestTabs = [
   { id: 'params', title: 'Params' },
@@ -234,6 +237,7 @@ const requestTabs = [
   { id: 'headers', title: 'Headers' },
   { id: 'body', title: 'Body' },
   { id: 'scripts', title: 'Scripts' },
+  { id: 'tags', title: 'Tags' },
  // { id: 'settings', title: 'Settings' },
 ];
 
@@ -244,7 +248,8 @@ interface CenterPanelProps {
 export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => {
   const { resolvedTheme } = useTheme();
   const { 
-    tabs, 
+    workspaceTabs: tabs, 
+    tabs: allTabs,
     activeTab, 
     activeTabId, 
     setActiveTab, 
@@ -265,7 +270,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
   const [activeRequestTab, setActiveRequestTabState] = useState<RequestTab>(() => {
     // Restore active request tab from localStorage
     const saved = localStorage.getItem('echolon_active_request_tab');
-    if (saved && ['params', 'auth', 'headers', 'body', 'scripts', 'settings'].includes(saved)) {
+    if (saved && ['params', 'auth', 'headers', 'body', 'scripts', 'tags', 'settings'].includes(saved)) {
       return saved as RequestTab;
     }
     return 'params';
@@ -322,6 +327,18 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
   // Get collection-level headers that will be injected
   const collectionHeaders = requestCollection?.headers?.filter(h => h.enabled && h.key) || [];
 
+  // Get overrides for inherited collection headers (stored in request headers with special prefix)
+  const inheritedHeaderOverrides = useMemo(() => {
+    const overrides = new Map<string, boolean>();
+    (request?.headers ?? [])
+      .filter(h => h.id?.startsWith('__inherited_header_override__'))
+      .forEach(h => {
+        // The key stores the original inherited header ID
+        overrides.set(h.key, h.enabled);
+      });
+    return overrides;
+  }, [request?.headers]);
+
   // Check if user has overridden the system User-Agent header in this request
   const userAgentOverride = useMemo(() => 
     request?.headers.find(
@@ -356,14 +373,19 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
         isSystem: true,
       }] : []),
       // Inherited headers from collection (shown second with marker)
+      // Apply any request-level overrides for disabled state
       ...collectionHeaders.map(h => ({
         ...h,
         inheritedFrom: requestCollection?.name,
+        enabled: inheritedHeaderOverrides.has(h.id) ? (inheritedHeaderOverrides.get(h.id) ?? h.enabled) : h.enabled,
       })),
-      // Request-level headers (excluding system override markers)
-      ...request.headers.filter(h => !h.id?.startsWith('__user_agent_override__')),
+      // Request-level headers (excluding system and inherited override markers)
+      ...(request.headers ?? []).filter(h => 
+        !h.id?.startsWith('__user_agent_override__') && 
+        !h.id?.startsWith('__inherited_header_override__')
+      ),
     ];
-  }, [request, showSystemUserAgent, userAgentOverride, collectionHeaders, requestCollection?.name]);
+  }, [request, showSystemUserAgent, userAgentOverride, collectionHeaders, requestCollection?.name, inheritedHeaderOverrides]);
 
   // Handle navigation to a variable definition when user double-clicks on a variable
   const handleNavigateToVariable = useCallback((
@@ -419,6 +441,11 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
       const upperMethod = method.toUpperCase();
       updateRequest(activeTabId, { method: upperMethod as HttpMethod });
       
+      // Also sync to collection
+      if (request.collectionId) {
+        updateCollectionRequest(request.collectionId, request.id, { method: upperMethod as HttpMethod });
+      }
+      
       // Save custom method if it's not a standard HTTP method
       if (!HTTP_METHODS.includes(upperMethod as typeof HTTP_METHODS[number])) {
         addCustomHttpMethod(upperMethod);
@@ -469,12 +496,23 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
     }
   }, []);
 
-  // Extract path variables from URL (e.g., :id, :userId)
+  // Extract path variables from URL (e.g., :id, :userId, {id}, {userId})
   const extractPathVariables = useCallback((url: string): string[] => {
-    // Match :paramName patterns (not inside {{ }} which are environment variables)
-    const matches = url.match(/(?<!\{):([a-zA-Z_][a-zA-Z0-9_]*)/g);
-    if (!matches) return [];
-    return [...new Set(matches.map(m => m.slice(1)))]; // Remove : prefix and dedupe
+    const results: string[] = [];
+    
+    // Match :paramName patterns (Express-style, not inside {{ }} which are environment variables)
+    const colonMatches = url.match(/(?<!\{):([a-zA-Z_][a-zA-Z0-9_]*)/g);
+    if (colonMatches) {
+      results.push(...colonMatches.map(m => m.slice(1))); // Remove : prefix
+    }
+    
+    // Match {paramName} patterns (OpenAPI-style, single braces only, not {{var}})
+    const braceMatches = url.match(/(?<!\{)\{([a-zA-Z_][a-zA-Z0-9_]*)\}(?!\})/g);
+    if (braceMatches) {
+      results.push(...braceMatches.map(m => m.slice(1, -1))); // Remove { and } 
+    }
+    
+    return [...new Set(results)]; // Dedupe
   }, []);
 
   // Get path variables from the current URL
@@ -550,6 +588,14 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
     } else {
       updateRequest(activeTabId, { url: newUrl });
     }
+    
+    // Also sync to collection if this request belongs to one
+    if (request?.collectionId) {
+      const updates = newUrl.includes('?') && newParams.length > 0
+        ? { url: newUrl, queryParams: newParams }
+        : { url: newUrl };
+      updateCollectionRequest(request.collectionId, request.id, updates);
+    }
   };
 
   const handleQueryParamsChange = (params: KeyValuePair[]) => {
@@ -561,15 +607,27 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
       queryParams: params,
       url: newUrl 
     });
+    
+    // Also sync to collection
+    if (request.collectionId) {
+      updateCollectionRequest(request.collectionId, request.id, { 
+        queryParams: params,
+        url: newUrl 
+      });
+    }
   };
 
   const handleHeadersChange = (headers: KeyValuePair[]) => {
     if (activeTabId) {
       updateRequest(activeTabId, { headers });
+      // Also sync to collection
+      if (request?.collectionId) {
+        updateCollectionRequest(request.collectionId, request.id, { headers });
+      }
     }
   };
 
-  // Memoized onChange handler for headers table (handles system User-Agent toggling)
+  // Memoized onChange handler for headers table (handles system User-Agent toggling and inherited header overrides)
   const handleHeadersTableChange = useCallback((allHeaders: KeyValuePair[]) => {
     if (!request) return;
     
@@ -579,12 +637,14 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
     // Get request-level headers (filter out inherited and system display headers)
     let requestHeaders = allHeaders.filter(h => !h.inheritedFrom && !(h as any).isSystem);
     
-    // If system header exists and was toggled, save its state in the request
+    // Remove any existing override markers (we'll re-add them based on current state)
+    requestHeaders = requestHeaders.filter(h => 
+      !h.id?.startsWith('__user_agent_override__') && 
+      !h.id?.startsWith('__inherited_header_override__')
+    );
+    
+    // Handle system User-Agent override
     if (systemHeader && showSystemUserAgent) {
-      // Remove any existing override
-      requestHeaders = requestHeaders.filter(h => !h.id?.startsWith('__user_agent_override__'));
-      
-      // Add the override state (we store it to remember if user disabled it)
       if (!systemHeader.enabled) {
         // User disabled the system header - store this preference
         requestHeaders.unshift({
@@ -597,14 +657,40 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
       }
     }
     
+    // Handle inherited header overrides
+    // Find inherited headers that have been toggled off (different from their original state)
+    const inheritedHeaders = allHeaders.filter(h => h.inheritedFrom && !h.isSystem);
+    inheritedHeaders.forEach(ih => {
+      // Find the original collection header
+      const originalHeader = collectionHeaders.find(ch => ch.id === ih.id);
+      if (originalHeader) {
+        // If the enabled state differs from original, store an override
+        if (ih.enabled !== originalHeader.enabled) {
+          requestHeaders.push({
+            id: '__inherited_header_override__' + ih.id,
+            key: ih.id, // Store the original header ID in the key field
+            value: '',
+            enabled: ih.enabled,
+            description: `Override for inherited header: ${ih.key}`,
+          });
+        }
+      }
+    });
+    
     handleHeadersChange(requestHeaders);
-  }, [request, showSystemUserAgent, handleHeadersChange]);
+  }, [request, showSystemUserAgent, handleHeadersChange, collectionHeaders]);
 
   const handleBodyChange = (content: string) => {
     if (activeTabId && request) {
       updateRequest(activeTabId, { 
         body: { ...request.body, content } 
       });
+      // Also sync to collection
+      if (request.collectionId) {
+        updateCollectionRequest(request.collectionId, request.id, { 
+        body: { ...request.body, content } 
+      });
+      }
     }
   };
 
@@ -720,8 +806,11 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
         onTabChange={setActiveTab}
         onTabClose={closeTab}
         onTabReorder={(newTabs) => {
-          const reorderedTabs = newTabs.map(t => tabs.find(tab => tab.id === t.id)!);
-          reorderTabs(reorderedTabs);
+          // Build new tabs order: workspace tabs in new order, other tabs unchanged
+          const workspaceTabIds = new Set(tabs.map(t => t.id));
+          const otherTabs = allTabs.filter(t => !workspaceTabIds.has(t.id));
+          const reorderedWorkspaceTabs = newTabs.map(t => tabs.find(tab => tab.id === t.id)!);
+          reorderTabs([...reorderedWorkspaceTabs, ...otherTabs]);
         }}
         onTabRename={handleTabRename}
         onNewTab={() => addTab()}
@@ -732,10 +821,19 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
       {/* Environment Editor */}
       {activeTab?.type === 'environment' && activeTab.environmentId ? (
         <EnvironmentEditor environmentId={activeTab.environmentId} />
-      ) : activeTab?.type === 'collection' && activeTab.collectionId ? (
+      ) : activeTab?.type === 'collection' && activeTab.collectionId && collections.some(c => c.id === activeTab.collectionId) ? (
         <CollectionEditor collectionId={activeTab.collectionId} />
       ) : activeTab?.type === 'websocket' && activeTab.websocket ? (
         <WebSocketPanel websocket={activeTab.websocket} tabId={activeTab.id} />
+      ) : activeTab?.type === 'workspace' && activeTab.workspaceId ? (
+        <WorkspaceEditor workspaceId={activeTab.workspaceId} />
+      ) : activeTab?.type === 'diff' && activeTab.diff ? (
+        <DiffViewer
+          filePath={activeTab.diff.filePath}
+          oldContent={activeTab.diff.oldContent}
+          newContent={activeTab.diff.newContent}
+          status={activeTab.diff.status}
+        />
       ) : request ? (
         <div 
           className={`center-panel__content ${isResponseExpanded ? 'center-panel__content--horizontal' : ''}`}
@@ -773,7 +871,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                 icon={<SendIcon />}
                 className="center-panel__send"
               >
-                Send
+                Send <kbd className="center-panel__send-shortcut">⌘↩</kbd>
               </Button>
               <div className="center-panel__url-actions">
                 <Tooltip content={urlCopied ? "Copied!" : "Copy URL (resolved)"}>
@@ -826,6 +924,11 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                     {tab.id === 'headers' && request.headers.filter(h => h.key).length > 0 && (
                       <span className="center-panel__option-badge">
                         {request.headers.filter(h => h.key).length}
+                      </span>
+                    )}
+                    {tab.id === 'tags' && (request.tags?.length || 0) > 0 && (
+                      <span className="center-panel__option-badge">
+                        {request.tags?.length || 0}
                       </span>
                     )}
                   </button>
@@ -1595,6 +1698,8 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                         placeholder={request.body.type === 'json' ? '{\n  "key": "value"\n}' : 'Enter request body'}
                         width="100%"
                         height="200px"
+                        supportVariables
+                        collectionEnvironment={selectedCollectionEnv}
                       />
                     </div>
                   )}
@@ -1634,9 +1739,12 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                             const newScript = currentScript
                               ? `${currentScript}\n\n${sample.code}`
                               : sample.code;
-                            updateRequest(activeTabId, {
-                              scripts: { ...request.scripts, pre: newScript },
-                            });
+                            const scriptsUpdate = { scripts: { ...request.scripts, pre: newScript } };
+                            updateRequest(activeTabId, scriptsUpdate);
+                            // Sync to collection for file persistence
+                            if (request.collectionId) {
+                              updateCollectionRequest(request.collectionId, request.id, scriptsUpdate);
+                            }
                           }
                         }}
                         size="sm"
@@ -1649,15 +1757,19 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                         value={request.scripts.pre}
                         onChange={(value) => {
                           if (activeTabId) {
-                            updateRequest(activeTabId, {
-                              scripts: { ...request.scripts, pre: value },
-                            });
+                            const scriptsUpdate = { scripts: { ...request.scripts, pre: value } };
+                            updateRequest(activeTabId, scriptsUpdate);
+                            // Sync to collection for file persistence
+                            if (request.collectionId) {
+                              updateCollectionRequest(request.collectionId, request.id, scriptsUpdate);
+                            }
                           }
                         }}
                         onLoad={handleEditorLoad}
                         placeholder="// JavaScript code to run before request"
                         width="100%"
                         height="150px"
+                        scriptContext="pre"
                       />
                     </div>
                   </div>
@@ -1674,9 +1786,12 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                             const newScript = currentScript
                               ? `${currentScript}\n\n${sample.code}`
                               : sample.code;
-                            updateRequest(activeTabId, {
-                              scripts: { ...request.scripts, post: newScript },
-                            });
+                            const scriptsUpdate = { scripts: { ...request.scripts, post: newScript } };
+                            updateRequest(activeTabId, scriptsUpdate);
+                            // Sync to collection for file persistence
+                            if (request.collectionId) {
+                              updateCollectionRequest(request.collectionId, request.id, scriptsUpdate);
+                            }
                           }
                         }}
                         size="sm"
@@ -1689,18 +1804,53 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                         value={request.scripts.post}
                         onChange={(value) => {
                           if (activeTabId) {
-                            updateRequest(activeTabId, {
-                              scripts: { ...request.scripts, post: value },
-                            });
+                            const scriptsUpdate = { scripts: { ...request.scripts, post: value } };
+                            updateRequest(activeTabId, scriptsUpdate);
+                            // Sync to collection for file persistence
+                            if (request.collectionId) {
+                              updateCollectionRequest(request.collectionId, request.id, scriptsUpdate);
+                            }
                           }
                         }}
                         onLoad={handleEditorLoad}
                         placeholder="// JavaScript code to run after request"
                         width="100%"
                         height="150px"
+                        scriptContext="post"
                       />
                     </div>
                   </div>
+                </div>
+              )}
+
+              {activeRequestTab === 'tags' && (
+                <div className="center-panel__tags">
+                  <div className="center-panel__tags-description">
+                    <p>Add tags to categorize and organize your requests. Tags are searchable and exported to OpenAPI specs.</p>
+                  </div>
+                  <TagInput
+                    tags={request.tags || []}
+                    onChange={(tags) => {
+                      console.log('[CenterPanel] Tags changed:', { 
+                        tags, 
+                        requestId: request.id, 
+                        requestName: request.name,
+                        collectionId: request.collectionId,
+                        activeTabId 
+                      });
+                      if (activeTabId) {
+                        updateRequest(activeTabId, { tags });
+                        // Also sync to collection
+                        if (request.collectionId) {
+                          console.log('[CenterPanel] Syncing tags to collection:', request.collectionId);
+                          updateCollectionRequest(request.collectionId, request.id, { tags });
+                        } else {
+                          console.warn('[CenterPanel] Request has no collectionId - tags not synced to collection');
+                        }
+                      }
+                    }}
+                    placeholder="Type a tag and press Enter..."
+                  />
                 </div>
               )}
 
@@ -1767,11 +1917,78 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
           </div>
         </div>
       ) : (
-        <div className="center-panel__empty">
-          <p>Select a request or create a new one</p>
-          <Button variant="primary" onClick={() => addTab()}>
-            New Request
-          </Button>
+        <div className="center-panel__welcome">
+          <div className="center-panel__welcome-content">
+            {/* Logo */}
+            <div className="center-panel__welcome-logo">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="64" height="64">
+                <defs>
+                  <linearGradient id="welcome-gradient" x1="4" y1="6" x2="20" y2="18" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#77F08B"/>
+                    <stop offset="1" stopColor="#4FE06C"/>
+                  </linearGradient>
+                </defs>
+                <path d="M 4 7 L 10 12 L 4 17" stroke="url(#welcome-gradient)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                <line x1="13" y1="17" x2="20" y2="17" stroke="url(#welcome-gradient)" strokeWidth="2.5" strokeLinecap="round"/>
+              </svg>
+              <h1 className="center-panel__welcome-title">Echolon</h1>
+              <p className="center-panel__welcome-subtitle">Modern API Development Platform</p>
+            </div>
+
+            {/* Feature Grid */}
+            <div className="center-panel__welcome-features">
+              <div className="center-panel__welcome-feature">
+                <div className="center-panel__welcome-feature-icon">
+                  <SendIcon />
+                </div>
+                <div className="center-panel__welcome-feature-text">
+                  <h3>API Requests</h3>
+                  <p>Send HTTP requests with full control over headers, body, and authentication</p>
+                </div>
+              </div>
+              
+              <div className="center-panel__welcome-feature">
+                <div className="center-panel__welcome-feature-icon">
+                  <SocketIcon />
+                </div>
+                <div className="center-panel__welcome-feature-text">
+                  <h3>WebSocket</h3>
+                  <p>Real-time bidirectional communication testing with message history</p>
+                </div>
+              </div>
+              
+              <div className="center-panel__welcome-feature">
+                <div className="center-panel__welcome-feature-icon">
+                  <CodeIcon />
+                </div>
+                <div className="center-panel__welcome-feature-text">
+                  <h3>Code Generation</h3>
+                  <p>Export requests to cURL, JavaScript, Python, and more</p>
+                </div>
+              </div>
+              
+              <div className="center-panel__welcome-feature">
+                <div className="center-panel__welcome-feature-icon">
+                  <HistoryIcon />
+                </div>
+                <div className="center-panel__welcome-feature-text">
+                  <h3>Request History</h3>
+                  <p>Track and replay your previous API calls with full context</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="center-panel__welcome-actions">
+              <Button variant="primary" size="lg" onClick={() => addTab()}>
+                <SendIcon />
+                New Request
+              </Button>
+              <span className="center-panel__welcome-hint">
+                or press <kbd>⌘</kbd> + <kbd>E</kbd>
+              </span>
+            </div>
+          </div>
         </div>
       )}
 

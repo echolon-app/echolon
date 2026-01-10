@@ -1,6 +1,6 @@
 import React from 'react';
 import { Modal, Button, ProgressBar } from '@/components/ui';
-import { useUpdate } from '@/contexts';
+import { useUpdateOptional } from '@/contexts';
 import { DownloadIcon, RefreshIcon, CheckCircleIcon, RocketIcon, ClockIcon } from '@/components/ui/icons';
 import './UpdateModal.css';
 
@@ -78,6 +78,13 @@ function renderReleaseNotes(notes: string | null): React.ReactNode {
 }
 
 export const UpdateModal: React.FC = () => {
+  const update = useUpdateOptional();
+  
+  // Don't render in web mode (no update provider)
+  if (!update) {
+    return null;
+  }
+
   const {
     currentVersion,
     status,
@@ -91,7 +98,7 @@ export const UpdateModal: React.FC = () => {
     installUpdate,
     installOnNextRestart,
     closeModal,
-  } = useUpdate();
+  } = update;
   
   const isChecking = status === 'checking';
   const isDownloading = status === 'downloading';

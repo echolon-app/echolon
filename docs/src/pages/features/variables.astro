@@ -5,33 +5,452 @@ const headings = [
   { depth: 2, slug: 'overview', text: 'Overview' },
   { depth: 2, slug: 'variable-types', text: 'Variable Types' },
   { depth: 2, slug: 'syntax', text: 'Syntax' },
+  { depth: 2, slug: 'dynamic-functions', text: 'Dynamic Functions' },
+  { depth: 3, slug: 'random-functions', text: 'Random Functions' },
+  { depth: 3, slug: 'uuid-functions', text: 'UUID Functions' },
+  { depth: 3, slug: 'hash-functions', text: 'Hash Functions' },
+  { depth: 3, slug: 'timestamp-functions', text: 'Timestamp Functions' },
+  { depth: 3, slug: 'encoding-functions', text: 'Encoding Functions' },
+  { depth: 3, slug: 'json-functions', text: 'JSON Functions' },
+  { depth: 3, slug: 'context-functions', text: 'Context Functions' },
+  { depth: 2, slug: 'function-modal', text: 'Function Configuration' },
+  { depth: 2, slug: 'use-cases', text: 'Use Cases' },
 ];
 ---
 
-<DocsLayout title="Variables" headings={headings}>
+<DocsLayout title="Variables & Dynamic Functions" headings={headings}>
   <div class="prose">
-    <h1>Variables</h1>
+    <h1>Variables & Dynamic Functions</h1>
     <p class="lead">
-      Use variables to make your requests dynamic and reusable.
+      Use variables and dynamic functions to make your requests dynamic, generate test data, and create powerful API workflows.
     </p>
     
     <h2 id="overview">Overview</h2>
     <p>
-      Variables allow you to store and reuse values across your requests. They can be defined at different scopes and referenced using the <code>&#123;&#123;variableName&#125;&#125;</code> syntax.
+      Echolon provides a powerful variable system that goes beyond simple environment variables. You can use the <code>&#123;&#123;expression&#125;&#125;</code> syntax to:
+    </p>
+    <ul class="list">
+      <li>Reference environment variables</li>
+      <li>Generate random data (names, emails, numbers, etc.)</li>
+      <li>Create unique identifiers (UUIDs)</li>
+      <li>Generate timestamps in various formats</li>
+      <li>Encode/decode values (Base64, URL encoding)</li>
+      <li>Create hashes (MD5, SHA-256, etc.)</li>
+      <li>Access context information (workspace, collection IDs)</li>
+    </ul>
+    <p>
+      Variables and functions can be used in URLs, query parameters, headers, request bodies, and scripts.
     </p>
     
     <h2 id="variable-types">Variable Types</h2>
+    <p>
+      Environment variables are defined at different scopes with the following priority (highest to lowest):
+    </p>
     <ul class="list">
-      <li><strong>Environment Variables:</strong> Scoped to the selected environment</li>
+      <li><strong>Collection Environment Variables:</strong> Scoped to a collection's environment (e.g., "Production", "Staging")</li>
       <li><strong>Collection Variables:</strong> Scoped to a specific collection</li>
-      <li><strong>Global Variables:</strong> Available everywhere</li>
+      <li><strong>Global Environment Variables:</strong> Available everywhere in the active global environment</li>
     </ul>
+    <p>
+      If a variable name exists in multiple scopes, the higher-priority scope takes precedence. This allows you to override global variables with collection-specific values.
+    </p>
     
     <h2 id="syntax">Syntax</h2>
     <p>
-      Reference variables anywhere in your requests:
+      Reference variables using double curly braces:
     </p>
     <pre><code>&#123;&#123;baseUrl&#125;&#125;/users/&#123;&#123;userId&#125;&#125;</code></pre>
+    <p>
+      For functions with parameters, use named arguments:
+    </p>
+    <pre><code>&#123;&#123;random.range(min=1, max=100)&#125;&#125;
+&#123;&#123;timestamp.format(format="YYYY-MM-DD")&#125;&#125;</code></pre>
+    <p>
+      Functions without parameters can be called directly:
+    </p>
+    <pre><code>&#123;&#123;uuid.v4&#125;&#125;
+&#123;&#123;timestamp.iso8601&#125;&#125;</code></pre>
+    
+    <h2 id="dynamic-functions">Dynamic Functions</h2>
+    <p>
+      Dynamic functions generate values at request time. They are organized into categories and can be discovered by typing <code>&#123;&#123;</code> in any input field.
+    </p>
+    
+    <h3 id="random-functions">Random Functions</h3>
+    <p>Generate random data for testing and mock scenarios.</p>
+    <table class="function-table">
+      <thead>
+        <tr><th>Function</th><th>Description</th><th>Example Output</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>random.range(min, max, decimals?)</code></td>
+          <td>Random number between min and max</td>
+          <td><code>42</code></td>
+        </tr>
+        <tr>
+          <td><code>random.integer(min?, max?)</code></td>
+          <td>Random integer</td>
+          <td><code>847</code></td>
+        </tr>
+        <tr>
+          <td><code>random.float(min?, max?, decimals?)</code></td>
+          <td>Random floating-point number</td>
+          <td><code>0.73</code></td>
+        </tr>
+        <tr>
+          <td><code>random.boolean</code></td>
+          <td>Random true/false</td>
+          <td><code>true</code></td>
+        </tr>
+        <tr>
+          <td><code>random.firstName</code></td>
+          <td>Random first name</td>
+          <td><code>Emma</code></td>
+        </tr>
+        <tr>
+          <td><code>random.lastName</code></td>
+          <td>Random last name</td>
+          <td><code>Johnson</code></td>
+        </tr>
+        <tr>
+          <td><code>random.fullName</code></td>
+          <td>Random full name</td>
+          <td><code>James Wilson</code></td>
+        </tr>
+        <tr>
+          <td><code>random.email(domain?)</code></td>
+          <td>Random email address</td>
+          <td><code>john.doe42@example.com</code></td>
+        </tr>
+        <tr>
+          <td><code>random.phone(format?)</code></td>
+          <td>Random phone number</td>
+          <td><code>(555) 123-4567</code></td>
+        </tr>
+        <tr>
+          <td><code>random.username</code></td>
+          <td>Random username</td>
+          <td><code>cool_ninja42</code></td>
+        </tr>
+        <tr>
+          <td><code>random.password(length?)</code></td>
+          <td>Random password</td>
+          <td><code>xK9#mP2@nL5$</code></td>
+        </tr>
+        <tr>
+          <td><code>random.alphanumeric(length?)</code></td>
+          <td>Random alphanumeric string</td>
+          <td><code>a7Bk9mNp</code></td>
+        </tr>
+        <tr>
+          <td><code>random.word</code></td>
+          <td>Random word</td>
+          <td><code>ocean</code></td>
+        </tr>
+        <tr>
+          <td><code>random.sentence(words?)</code></td>
+          <td>Random sentence</td>
+          <td><code>Quick brown fox jumps.</code></td>
+        </tr>
+        <tr>
+          <td><code>random.paragraph(sentences?)</code></td>
+          <td>Random paragraph</td>
+          <td><code>Lorem ipsum dolor sit amet...</code></td>
+        </tr>
+        <tr>
+          <td><code>random.company</code></td>
+          <td>Random company name</td>
+          <td><code>Tech Solutions</code></td>
+        </tr>
+        <tr>
+          <td><code>random.address</code></td>
+          <td>Random street address</td>
+          <td><code>123 Main Street</code></td>
+        </tr>
+        <tr>
+          <td><code>random.city</code></td>
+          <td>Random city name</td>
+          <td><code>Seattle</code></td>
+        </tr>
+        <tr>
+          <td><code>random.country</code></td>
+          <td>Random country name</td>
+          <td><code>Canada</code></td>
+        </tr>
+        <tr>
+          <td><code>random.hexColor</code></td>
+          <td>Random hex color</td>
+          <td><code>#3a7bd5</code></td>
+        </tr>
+        <tr>
+          <td><code>random.ipv4</code></td>
+          <td>Random IPv4 address</td>
+          <td><code>192.168.1.42</code></td>
+        </tr>
+        <tr>
+          <td><code>random.ipv6</code></td>
+          <td>Random IPv6 address</td>
+          <td><code>2001:0db8:85a3:...</code></td>
+        </tr>
+        <tr>
+          <td><code>random.url</code></td>
+          <td>Random URL</td>
+          <td><code>https://example.com/api</code></td>
+        </tr>
+        <tr>
+          <td><code>random.date(start?, end?)</code></td>
+          <td>Random date</td>
+          <td><code>2024-06-15</code></td>
+        </tr>
+        <tr>
+          <td><code>random.creditCard</code></td>
+          <td>Random test card number</td>
+          <td><code>4532 1234 5678 9012</code></td>
+        </tr>
+      </tbody>
+    </table>
+    
+    <h3 id="uuid-functions">UUID Functions</h3>
+    <p>Generate universally unique identifiers.</p>
+    <table class="function-table">
+      <thead>
+        <tr><th>Function</th><th>Description</th><th>Example Output</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>uuid.v1</code></td>
+          <td>Time-based UUID (v1)</td>
+          <td><code>6ba7b810-9dad-11d1-80b4-...</code></td>
+        </tr>
+        <tr>
+          <td><code>uuid.v4</code></td>
+          <td>Random UUID (v4)</td>
+          <td><code>550e8400-e29b-41d4-a716-...</code></td>
+        </tr>
+      </tbody>
+    </table>
+    
+    <h3 id="hash-functions">Hash Functions</h3>
+    <p>Generate cryptographic hashes. If no input is provided, a random string is hashed.</p>
+    <table class="function-table">
+      <thead>
+        <tr><th>Function</th><th>Description</th><th>Example Output</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>hash.md5(input?)</code></td>
+          <td>MD5 hash</td>
+          <td><code>d41d8cd98f00b204e980...</code></td>
+        </tr>
+        <tr>
+          <td><code>hash.sha1(input?)</code></td>
+          <td>SHA-1 hash</td>
+          <td><code>da39a3ee5e6b4b0d3255...</code></td>
+        </tr>
+        <tr>
+          <td><code>hash.sha256(input?)</code></td>
+          <td>SHA-256 hash</td>
+          <td><code>e3b0c44298fc1c149afb...</code></td>
+        </tr>
+        <tr>
+          <td><code>hash.sha512(input?)</code></td>
+          <td>SHA-512 hash</td>
+          <td><code>cf83e1357eefb8bdf154...</code></td>
+        </tr>
+      </tbody>
+    </table>
+    
+    <h3 id="timestamp-functions">Timestamp Functions</h3>
+    <p>Generate timestamps in various formats.</p>
+    <table class="function-table">
+      <thead>
+        <tr><th>Function</th><th>Description</th><th>Example Output</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>timestamp.now</code></td>
+          <td>Current timestamp (ms)</td>
+          <td><code>1704067200000</code></td>
+        </tr>
+        <tr>
+          <td><code>timestamp.unix</code></td>
+          <td>Unix timestamp (seconds)</td>
+          <td><code>1704067200</code></td>
+        </tr>
+        <tr>
+          <td><code>timestamp.unixMillis</code></td>
+          <td>Unix timestamp (milliseconds)</td>
+          <td><code>1704067200000</code></td>
+        </tr>
+        <tr>
+          <td><code>timestamp.iso8601</code></td>
+          <td>ISO 8601 format</td>
+          <td><code>2024-01-01T00:00:00.000Z</code></td>
+        </tr>
+        <tr>
+          <td><code>timestamp.date</code></td>
+          <td>Date only (YYYY-MM-DD)</td>
+          <td><code>2024-01-01</code></td>
+        </tr>
+        <tr>
+          <td><code>timestamp.time</code></td>
+          <td>Time only (HH:mm:ss)</td>
+          <td><code>14:30:45</code></td>
+        </tr>
+        <tr>
+          <td><code>timestamp.format(format?)</code></td>
+          <td>Custom format</td>
+          <td><code>2024-01-01 14:30:45</code></td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      <strong>Format tokens for <code>timestamp.format</code>:</strong>
+    </p>
+    <ul class="list">
+      <li><code>YYYY</code> - 4-digit year</li>
+      <li><code>MM</code> - 2-digit month (01-12)</li>
+      <li><code>DD</code> - 2-digit day (01-31)</li>
+      <li><code>HH</code> - 2-digit hour (00-23)</li>
+      <li><code>mm</code> - 2-digit minutes (00-59)</li>
+      <li><code>ss</code> - 2-digit seconds (00-59)</li>
+      <li><code>SSS</code> - 3-digit milliseconds</li>
+    </ul>
+    
+    <h3 id="encoding-functions">Encoding Functions</h3>
+    <p>Encode and decode strings.</p>
+    <table class="function-table">
+      <thead>
+        <tr><th>Function</th><th>Description</th><th>Example</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>base64.encode(value)</code></td>
+          <td>Base64 encode</td>
+          <td><code>hello</code> → <code>aGVsbG8=</code></td>
+        </tr>
+        <tr>
+          <td><code>base64.decode(value)</code></td>
+          <td>Base64 decode</td>
+          <td><code>aGVsbG8=</code> → <code>hello</code></td>
+        </tr>
+        <tr>
+          <td><code>url.encode(value)</code></td>
+          <td>URL encode</td>
+          <td><code>hello world</code> → <code>hello%20world</code></td>
+        </tr>
+        <tr>
+          <td><code>url.decode(value)</code></td>
+          <td>URL decode</td>
+          <td><code>hello%20world</code> → <code>hello world</code></td>
+        </tr>
+      </tbody>
+    </table>
+    
+    <h3 id="json-functions">JSON Functions</h3>
+    <p>Manipulate JSON data.</p>
+    <table class="function-table">
+      <thead>
+        <tr><th>Function</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>json.minify(json)</code></td>
+          <td>Remove whitespace from JSON</td>
+        </tr>
+        <tr>
+          <td><code>json.escape(value)</code></td>
+          <td>Escape string for JSON</td>
+        </tr>
+        <tr>
+          <td><code>json.stringify(value)</code></td>
+          <td>Convert to JSON string</td>
+        </tr>
+      </tbody>
+    </table>
+    
+    <h3 id="context-functions">Context Functions</h3>
+    <p>Access information about the current context.</p>
+    <table class="function-table">
+      <thead>
+        <tr><th>Function</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>ctx.workspace</code></td>
+          <td>Current workspace ID</td>
+        </tr>
+        <tr>
+          <td><code>ctx.environment</code></td>
+          <td>Current environment ID</td>
+        </tr>
+        <tr>
+          <td><code>ctx.collection</code></td>
+          <td>Current collection ID</td>
+        </tr>
+        <tr>
+          <td><code>ctx.request</code></td>
+          <td>Current request ID</td>
+        </tr>
+      </tbody>
+    </table>
+    
+    <h2 id="function-modal">Function Configuration</h2>
+    <p>
+      When you click on a function in the autocomplete dropdown, a configuration modal opens where you can:
+    </p>
+    <ul class="list">
+      <li>Set parameter values using input fields</li>
+      <li>See a live preview of the generated value</li>
+      <li>Regenerate the preview to see different random values</li>
+      <li>Insert the configured function into your request</li>
+    </ul>
+    <p>
+      Double-clicking on an existing function in a field will reopen the configuration modal, allowing you to modify its parameters.
+    </p>
+    
+    <h2 id="use-cases">Use Cases</h2>
+    
+    <h4>1. Generate Unique User Data for Testing</h4>
+    <pre><code>POST /api/users
+Content-Type: application/json
+
+&#123;
+  "id": "&#123;&#123;uuid.v4&#125;&#125;",
+  "firstName": "&#123;&#123;random.firstName&#125;&#125;",
+  "lastName": "&#123;&#123;random.lastName&#125;&#125;",
+  "email": "&#123;&#123;random.email&#125;&#125;",
+  "createdAt": "&#123;&#123;timestamp.iso8601&#125;&#125;"
+&#125;</code></pre>
+    
+    <h4>2. Create Authenticated Requests with Timestamps</h4>
+    <pre><code>GET /api/data
+Authorization: Bearer &#123;&#123;apiToken&#125;&#125;
+X-Request-ID: &#123;&#123;uuid.v4&#125;&#125;
+X-Timestamp: &#123;&#123;timestamp.unix&#125;&#125;</code></pre>
+    
+    <h4>3. Generate Random Test Data</h4>
+    <pre><code>POST /api/orders
+Content-Type: application/json
+
+&#123;
+  "orderId": "ORD-&#123;&#123;random.alphanumeric(length=8)&#125;&#125;",
+  "amount": &#123;&#123;random.range(min=10, max=500, decimals=2)&#125;&#125;,
+  "items": &#123;&#123;random.integer(min=1, max=10)&#125;&#125;,
+  "shippingAddress": "&#123;&#123;random.address&#125;&#125;, &#123;&#123;random.city&#125;&#125;"
+&#125;</code></pre>
+    
+    <h4>4. URL-Encoded Query Parameters</h4>
+    <pre><code>GET /api/search?q=&#123;&#123;url.encode(value="hello world")&#125;&#125;&amp;timestamp=&#123;&#123;timestamp.unix&#125;&#125;</code></pre>
+    
+    <h4>5. Generate API Signatures</h4>
+    <pre><code>POST /api/webhook
+X-Signature: &#123;&#123;hash.sha256(input="&#123;&#123;secretKey&#125;&#125;&#123;&#123;timestamp.unix&#125;&#125;")&#125;&#125;
+X-Timestamp: &#123;&#123;timestamp.unix&#125;&#125;</code></pre>
+    
+    <h4>6. Base64-Encoded Credentials</h4>
+    <pre><code>Authorization: Basic &#123;&#123;base64.encode(value="&#123;&#123;username&#125;&#125;:&#123;&#123;password&#125;&#125;")&#125;&#125;</code></pre>
   </div>
 </DocsLayout>
 
@@ -40,13 +459,21 @@ const headings = [
   .prose h1 { font-size: var(--font-size-4xl); color: var(--color-text); margin-bottom: var(--spacing-4); }
   .prose h2 { font-size: var(--font-size-2xl); color: var(--color-text); margin-top: var(--spacing-10); margin-bottom: var(--spacing-4); padding-top: var(--spacing-4); border-top: 1px solid var(--color-border-subtle); }
   .prose h2:first-of-type { border-top: none; padding-top: 0; }
+  .prose h3 { font-size: var(--font-size-xl); color: var(--color-text); margin-top: var(--spacing-8); margin-bottom: var(--spacing-3); }
+  .prose h4 { font-size: var(--font-size-lg); color: var(--color-text); margin-top: var(--spacing-6); margin-bottom: var(--spacing-2); }
   .prose p { margin-bottom: var(--spacing-4); }
   .prose .lead { font-size: var(--font-size-lg); margin-bottom: var(--spacing-6); }
   .prose .list { margin: var(--spacing-4) 0; padding-left: var(--spacing-6); }
   .prose .list li { margin-bottom: var(--spacing-2); list-style: disc; }
   .prose strong { color: var(--color-text); font-weight: 600; }
-  .prose code { padding: var(--spacing-1) var(--spacing-2); font-size: var(--font-size-sm); background: var(--color-bg-tertiary); border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
+  .prose code { padding: var(--spacing-1) var(--spacing-2); font-size: var(--font-size-sm); background: var(--color-bg-tertiary); border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-family: var(--font-mono); }
   .prose pre { margin: var(--spacing-4) 0; padding: var(--spacing-4); background: var(--color-bg-tertiary); border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow-x: auto; }
   .prose pre code { padding: 0; background: none; border: none; }
+  
+  .function-table { width: 100%; border-collapse: collapse; margin: var(--spacing-4) 0; font-size: var(--font-size-sm); }
+  .function-table th, .function-table td { padding: var(--spacing-2) var(--spacing-3); text-align: left; border: 1px solid var(--color-border); }
+  .function-table th { background: var(--color-bg-tertiary); color: var(--color-text); font-weight: 600; }
+  .function-table td { background: var(--color-bg-secondary); }
+  .function-table td:first-child { font-family: var(--font-mono); font-size: var(--font-size-xs); white-space: nowrap; }
+  .function-table code { font-size: var(--font-size-xs); padding: 1px 4px; }
 </style>
-

@@ -1,0 +1,5 @@
+#provider: github
+#owner: echolon-app
+#repo: echolon
+provider: generic
+url: http://localhost:3505

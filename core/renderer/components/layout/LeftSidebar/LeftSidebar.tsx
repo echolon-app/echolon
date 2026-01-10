@@ -2,16 +2,18 @@ import React from 'react';
 import { Tooltip } from '@/components/ui';
 import { 
   CollectionsIcon, EnvironmentsIcon, HistoryIcon, MockingIcon, 
-  SocketIcon, GraphQLIcon, GitIcon 
+  SocketIcon, GraphQLIcon, GitIcon, WorkspacesIcon 
 } from '@/components/ui/icons';
 import { useApp } from '@/contexts';
+import { isWebStandalone } from '@/utils';
 import './LeftSidebar.css';
 
-type SidebarView = 'collections' | 'environments' | 'history' | 'mocking' | 'socket' | 'graphql' | 'git';
+type SidebarView = 'collections' | 'environments' | 'history' | 'mocking' | 'socket' | 'graphql' | 'git' | 'workspaces';
 
-const menuItems: { id: SidebarView; icon: React.FC; label: string; electronOnly?: boolean }[] = [
+const menuItems: { id: SidebarView; icon: React.FC; label: string; electronOnly?: boolean; standaloneOnly?: boolean }[] = [
   { id: 'collections', icon: CollectionsIcon, label: 'Collections' },
-  { id: 'environments', icon: EnvironmentsIcon, label: 'Environments' },
+  { id: 'environments', icon: EnvironmentsIcon, label: 'Global Environments', standaloneOnly: true },
+  { id: 'workspaces', icon: WorkspacesIcon, label: 'Workspaces', electronOnly: true },
   { id: 'history', icon: HistoryIcon, label: 'History' },
   { id: 'mocking', icon: MockingIcon, label: 'Mocking', electronOnly: true },
   { id: 'git', icon: GitIcon, label: 'Git', electronOnly: true },
@@ -21,8 +23,17 @@ const menuItems: { id: SidebarView; icon: React.FC; label: string; electronOnly?
 export const LeftSidebar: React.FC = () => {
   const { sidebarView, setSidebarView, sidebarState, isWebMode } = useApp();
   
-  // Filter out electron-only items when in web mode
-  const visibleMenuItems = menuItems.filter(item => !isWebMode || !item.electronOnly);
+  // Check if we're in standalone web mode (web.echolon.app) vs embedded
+  const webStandalone = isWebStandalone();
+  
+  // Filter out items based on mode:
+  // - electronOnly: hide in web mode
+  // - standaloneOnly: hide in embedded web mode (show in Electron and standalone web)
+  const visibleMenuItems = menuItems.filter(item => {
+    if (isWebMode && item.electronOnly) return false;
+    if (isWebMode && !webStandalone && item.standaloneOnly) return false;
+    return true;
+  });
   
   const isExpanded = sidebarState === 'expanded';
 

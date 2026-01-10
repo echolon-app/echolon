@@ -1,0 +1,194 @@
+.diff-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-primary);
+}
+
+.diff-viewer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.diff-viewer__file-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.diff-viewer__file-info svg {
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+}
+
+.diff-viewer__file-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.diff-viewer__file-path {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.diff-viewer__stats {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.diff-viewer__status {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.diff-viewer__status--added {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.diff-viewer__status--modified {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.diff-viewer__status--deleted {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.diff-viewer__stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.diff-viewer__stat svg {
+  width: 12px;
+  height: 12px;
+}
+
+.diff-viewer__stat--add {
+  color: var(--success);
+}
+
+.diff-viewer__stat--delete {
+  color: var(--danger);
+}
+
+.diff-viewer__content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.diff-viewer__panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.diff-viewer__panel--full {
+  flex: 1;
+}
+
+.diff-viewer__panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.diff-viewer__panel-header--old {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger);
+  border-bottom: 2px solid var(--danger);
+}
+
+.diff-viewer__panel-header--new {
+  background: rgba(34, 197, 94, 0.1);
+  color: var(--success);
+  border-bottom: 2px solid var(--success);
+}
+
+.diff-viewer__divider {
+  width: 1px;
+  background: var(--border-color);
+}
+
+.diff-viewer__editor {
+  flex: 1;
+  overflow: hidden;
+}
+
+.diff-viewer__editor .ace_editor {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Line highlighting for diff - using Ace marker classes */
+.diff-line-deleted {
+  position: absolute;
+  background: rgba(239, 68, 68, 0.2) !important;
+  border-left: 3px solid #ef4444;
+}
+
+.diff-line-added {
+  position: absolute;
+  background: rgba(34, 197, 94, 0.2) !important;
+  border-left: 3px solid #22c55e;
+}
+
+/* Ensure markers are visible in the editor */
+.diff-viewer__editor .ace_marker-layer .diff-line-deleted,
+.diff-viewer__editor .ace_marker-layer .diff-line-added {
+  z-index: 1;
+}
+
+/* Light mode adjustments */
+:root[data-theme="light"] .diff-viewer__panel-header--old {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+:root[data-theme="light"] .diff-viewer__panel-header--new {
+  background: rgba(34, 197, 94, 0.08);
+}
+
+:root[data-theme="light"] .diff-viewer__status--added {
+  background: rgba(34, 197, 94, 0.1);
+}
+
+:root[data-theme="light"] .diff-viewer__status--modified {
+  background: rgba(245, 158, 11, 0.1);
+}
+
+:root[data-theme="light"] .diff-viewer__status--deleted {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* Light mode - stronger line highlighting */
+:root[data-theme="light"] .diff-line-deleted {
+  background: rgba(239, 68, 68, 0.15) !important;
+}
+
+:root[data-theme="light"] .diff-line-added {
+  background: rgba(34, 197, 94, 0.15) !important;
+}
+

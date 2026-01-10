@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom';
 import { Input } from '@/components/ui';
 import { SearchIcon, FolderIcon, HistoryIcon } from '@/components/ui/icons';
-import { useApp, useCollections, useRequest } from '@/contexts';
+import { useApp, useCollections, useRequest, useWorkspace } from '@/contexts';
 import { Request, Collection, Folder, HistoryEntry } from '@/types';
 import { METHOD_COLORS } from '../../../../shared/constants';
 import './GlobalSearchModal.css';
@@ -14,23 +14,25 @@ const getMethodColor = (method: string): string => {
 interface SearchResult {
   type: 'collection' | 'request' | 'folder' | 'history';
   item: Collection | Request | Folder | HistoryEntry;
+  collectionId?: string;
   collectionName?: string;
   folderName?: string;
 }
 
-// Helper to find collection name for a request (including nested folders)
-const findCollectionForRequest = (collections: Collection[], requestId: string): { collectionName?: string; folderName?: string } => {
+// Helper to find collection info for a request (including nested folders)
+const findCollectionForRequest = (collections: Collection[], requestId: string): { collectionId?: string; collectionName?: string; folderName?: string } => {
   for (const collection of collections) {
     // Check direct requests
     if (collection.requests.some(r => r.id === requestId)) {
-      return { collectionName: collection.name };
+      return { collectionId: collection.id, collectionName: collection.name };
     }
     
     // Check folders recursively
-    const checkFolders = (folders: Folder[], path: string[] = []): { collectionName?: string; folderName?: string } | null => {
+    const checkFolders = (folders: Folder[], path: string[] = []): { collectionId?: string; collectionName?: string; folderName?: string } | null => {
       for (const folder of folders) {
         if (folder.requests.some(r => r.id === requestId)) {
           return { 
+            collectionId: collection.id,
             collectionName: collection.name, 
             folderName: [...path, folder.name].join(' / ')
           };
@@ -51,6 +53,7 @@ export const GlobalSearchModal: React.FC = () => {
   const { globalSearchOpen, closeGlobalSearch } = useApp();
   const { collections, searchCollections } = useCollections();
   const { addTab, history } = useRequest();
+  const { activeWorkspaceId } = useWorkspace();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -74,20 +77,25 @@ export const GlobalSearchModal: React.FC = () => {
     const { collections: matchedCollections, requests: matchedRequests, folders: matchedFolders } = searchCollections(query);
     const lowerQuery = query.toLowerCase();
     
-    // Search history
-    const matchedHistory = history.filter(h => 
+    // Search history (filtered by active workspace)
+    const workspaceHistory = activeWorkspaceId
+      ? history.filter(h => h.request.workspaceId === activeWorkspaceId)
+      : history;
+    const matchedHistory = workspaceHistory.filter(h => 
       h.request.name.toLowerCase().includes(lowerQuery) ||
       h.request.url.toLowerCase().includes(lowerQuery) ||
-      h.request.method.toLowerCase().includes(lowerQuery)
+      h.request.method.toLowerCase().includes(lowerQuery) ||
+      (h.request.tags?.some(tag => tag.toLowerCase().includes(lowerQuery)) ?? false)
     ).slice(0, 5);
     
     const newResults: SearchResult[] = [
       // Requests first (most commonly searched)
       ...matchedRequests.map(r => {
-        const { collectionName, folderName } = findCollectionForRequest(collections, r.id);
+        const { collectionId, collectionName, folderName } = findCollectionForRequest(collections, r.id);
         return { 
           type: 'request' as const, 
           item: r,
+          collectionId,
           collectionName,
           folderName
         };
@@ -105,7 +113,7 @@ export const GlobalSearchModal: React.FC = () => {
 
     setResults(newResults.slice(0, 15));
     setSelectedIndex(0);
-  }, [query, searchCollections, collections, history]);
+  }, [query, searchCollections, collections, history, activeWorkspaceId]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
@@ -124,7 +132,12 @@ export const GlobalSearchModal: React.FC = () => {
 
   const handleSelect = (result: SearchResult) => {
     if (result.type === 'request') {
-      addTab(result.item as Request);
+      const request = result.item as Request;
+      // Ensure collectionId is set on the request for proper variable resolution
+      const requestWithCollection = result.collectionId && !request.collectionId
+        ? { ...request, collectionId: result.collectionId }
+        : request;
+      addTab(requestWithCollection);
     } else if (result.type === 'history') {
       const historyEntry = result.item as HistoryEntry;
       addTab(historyEntry.request);
@@ -143,7 +156,7 @@ export const GlobalSearchModal: React.FC = () => {
           <input
             ref={inputRef}
             className="global-search__input"
-            placeholder="Search collections, requests..."
+            placeholder="Search collections, requests, tags..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}

@@ -20,7 +20,7 @@
   flex: 1;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   font-size: var(--font-xs);
   color: var(--text-tertiary);
 }
@@ -61,6 +61,23 @@
 .bottom-bar__status {
   font-size: var(--font-xs);
   color: var(--text-secondary);
+}
+
+/* Business link */
+.bottom-bar__business-link {
+  padding: 2px 8px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.bottom-bar__business-link:hover {
+  background-color: var(--bg-hover);
+  color: var(--color-primary);
 }
 
 /* Version indicator */

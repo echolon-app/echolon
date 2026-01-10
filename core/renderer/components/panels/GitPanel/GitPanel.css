@@ -277,42 +277,36 @@
 .git-panel__change-file {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  margin-bottom: 8px;
+  gap: 8px;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  margin-bottom: 1px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background 0.1s ease;
 }
 
 .git-panel__change-file:hover {
-  border-color: var(--accent-primary);
+  background: var(--bg-tertiary);
 }
 
-.git-panel__change-file .file-status {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.git-panel__change-file .file-status--added {
-  background: var(--success);
-}
-
-.git-panel__change-file .file-status--modified {
-  background: var(--warning);
-}
-
-.git-panel__change-file .file-status--deleted {
-  background: var(--danger);
-}
 
 .git-panel__change-file .file-name {
-  flex: 1;
   font-size: 13px;
+  font-weight: 500;
   color: var(--text-primary);
+  white-space: nowrap;
+  line-height: 20px;
+}
+
+.git-panel__change-file .file-path {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .git-panel__change-file .file-path {
@@ -558,4 +552,870 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+/* Repo info enhancements */
+.git-panel__repo-info .repo-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-primary-alpha);
+  color: var(--accent-primary);
+}
+
+.git-panel__repo-info .repo-avatar svg {
+  width: 18px;
+  height: 18px;
+}
+
+.git-panel__repo-info .remote-indicator {
+  color: var(--success);
+}
+
+.git-panel__repo-info .no-remote {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.git-panel__connect-btn--small {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+/* Section styling */
+.git-panel__section {
+  margin-bottom: 12px;
+}
+
+.git-panel__section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.git-panel__stage-all {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: var(--accent-primary);
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.git-panel__stage-all svg {
+  width: 12px;
+  height: 12px;
+}
+
+.git-panel__stage-all:hover {
+  background: var(--accent-primary-hover);
+}
+
+/* File status indicators - colored text like Cursor */
+.git-panel__change-file .file-status {
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-mono, monospace);
+  flex-shrink: 0;
+  width: 16px;
+  height: 20px;
+  line-height: 20px;
+  text-align: center;
+}
+
+.git-panel__change-file .file-status--added {
+  color: #22c55e;
+}
+
+.git-panel__change-file .file-status--modified {
+  color: #d4a017;
+}
+
+.git-panel__change-file .file-status--deleted {
+  color: #ef4444;
+}
+
+.git-panel__change-file .file-status--untracked {
+  color: #22c55e;
+}
+
+/* File actions */
+.git-panel__change-file .file-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+  margin-left: auto;
+}
+
+.git-panel__change-file:hover .file-actions,
+.git-panel__change-file:hover .file-action {
+  opacity: 1;
+}
+
+.git-panel__change-file .file-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.1s ease;
+  opacity: 0;
+  padding: 0;
+}
+
+.git-panel__change-file .file-action svg {
+  width: 14px;
+  height: 14px;
+}
+
+.git-panel__change-file .file-action:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.git-panel__change-file .file-action--discard:hover {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+}
+
+.git-panel__change-file .file-action--stage {
+  font-size: 11px;
+  width: auto;
+  padding: 2px 6px;
+}
+
+.git-panel__change-file .file-action--stage:hover {
+  background: var(--accent-primary);
+  color: white;
+}
+
+/* Commit form */
+.git-panel__commit-form {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.git-panel__commit-input {
+  width: 100%;
+  min-height: 60px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  margin-bottom: 8px;
+}
+
+.git-panel__commit-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.git-panel__commit-input::placeholder {
+  color: var(--text-muted);
+}
+
+.git-panel__commit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 16px;
+  background: var(--accent-primary);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.git-panel__commit-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.git-panel__commit-btn:hover {
+  background: var(--accent-primary-hover);
+}
+
+.git-panel__commit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* New branch form */
+.git-panel__new-branch-form {
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  margin: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.git-panel__new-branch-form input {
+  flex: 1;
+  padding: 6px 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.git-panel__new-branch-form input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.git-panel__new-branch-form button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.git-panel__new-branch-form button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.git-panel__new-branch-form button:hover {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: white;
+}
+
+.git-panel__new-branch-form button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Branch delete button */
+.git-panel__branch .branch-delete {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.git-panel__branch:hover .branch-delete {
+  display: flex;
+}
+
+.git-panel__branch .branch-delete svg {
+  width: 12px;
+  height: 12px;
+}
+
+.git-panel__branch .branch-delete:hover {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+/* Remote list */
+.git-panel__no-remotes {
+  padding: 16px;
+  text-align: center;
+}
+
+.git-panel__no-remotes p {
+  margin: 0 0 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.git-panel__add-remote-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.git-panel__add-remote-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.git-panel__add-remote-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.git-panel__remote-list {
+  padding: 8px;
+}
+
+.git-panel__remote {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.git-panel__remote .remote-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.git-panel__remote .remote-url {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.git-panel__remote .remote-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.git-panel__remote .remote-delete svg {
+  width: 12px;
+  height: 12px;
+}
+
+.git-panel__remote .remote-delete:hover {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+/* Error display */
+.git-panel__error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: 12px;
+  border-bottom: 1px solid var(--danger);
+}
+
+.git-panel__error svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* Modal */
+.git-panel__modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.git-panel__modal {
+  width: 400px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.git-panel__modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.git-panel__modal-header h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.git-panel__modal-header button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.git-panel__modal-header button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.git-panel__modal-header button:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.git-panel__modal-body {
+  padding: 20px;
+}
+
+.git-panel__form-group {
+  margin-bottom: 16px;
+}
+
+.git-panel__form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.git-panel__form-group input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.git-panel__form-group input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.git-panel__hint {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.git-panel__modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 20px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+}
+
+.git-panel__modal-cancel {
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.git-panel__modal-cancel:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.git-panel__modal-confirm {
+  padding: 8px 16px;
+  background: var(--accent-primary);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.git-panel__modal-confirm:hover {
+  background: var(--accent-primary-hover);
+}
+
+.git-panel__modal-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Save button in modal */
+.git-panel__modal-save {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.git-panel__modal-save svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Spin animation for refresh button */
+.spin {
+  animation: git-panel-spin 1s linear infinite;
+}
+
+/* No remote button - clickable */
+.no-remote-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-underline-offset: 2px;
+}
+
+.no-remote-btn:hover {
+  color: var(--accent-primary);
+}
+
+/* Remote edit button */
+.remote-edit-btn {
+  background: none;
+  border: none;
+  padding: 2px 6px;
+  margin-left: 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.15s ease;
+}
+
+.remote-edit-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--accent-primary);
+}
+
+/* Stage All button (text version) */
+.git-panel__stage-all-btn {
+  padding: 4px 10px;
+  background: var(--accent-primary);
+  border: none;
+  border-radius: 4px;
+  color: white;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.git-panel__stage-all-btn:hover {
+  background: var(--accent-primary-hover);
+}
+
+/* File action text buttons (Stage, Unstage) */
+.git-panel__change-file .file-action--stage,
+.git-panel__change-file .file-action--unstage {
+  width: auto;
+  height: auto;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+}
+
+.git-panel__change-file .file-action--stage:hover {
+  background: var(--success);
+  border-color: var(--success);
+  color: white;
+}
+
+.git-panel__change-file .file-action--unstage:hover {
+  background: var(--warning);
+  border-color: var(--warning);
+  color: white;
+}
+
+/* Commit & Push button */
+.git-panel__commit-push-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 16px;
+  margin-top: 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.git-panel__commit-push-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.git-panel__commit-push-btn:hover {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary);
+  color: white;
+}
+
+.git-panel__commit-push-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ==================== Light Mode Fixes ==================== */
+
+/* Light mode - Commit button needs better contrast - FORCE explicit colors */
+:root[data-theme="light"] .git-panel__commit-btn {
+  background: #6366f1 !important;
+  color: #ffffff !important;
+  border: none !important;
+}
+
+:root[data-theme="light"] .git-panel__commit-btn:hover {
+  background: #4f46e5 !important;
+}
+
+:root[data-theme="light"] .git-panel__sync-btn--push {
+  background: #6366f1 !important;
+  color: #ffffff !important;
+}
+
+:root[data-theme="light"] .git-panel__sync-btn--push:hover {
+  background: #4f46e5 !important;
+}
+
+:root[data-theme="light"] .git-panel__modal-confirm {
+  background: #6366f1 !important;
+  color: #ffffff !important;
+}
+
+:root[data-theme="light"] .git-panel__connect-btn {
+  background: #6366f1 !important;
+  color: #ffffff !important;
+}
+
+:root[data-theme="light"] .git-panel__stage-all-btn {
+  background: #6366f1 !important;
+  color: #ffffff !important;
+}
+
+:root[data-theme="light"] .git-panel__tab .badge {
+  background: #6366f1 !important;
+  color: #ffffff !important;
+}
+
+/* Light mode - improve button visibility */
+:root[data-theme="light"] .git-panel__commit-push-btn {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+}
+
+:root[data-theme="light"] .git-panel__commit-push-btn:hover {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: white;
+}
+
+/* Light mode - file actions */
+:root[data-theme="light"] .git-panel__change-file .file-action--stage,
+:root[data-theme="light"] .git-panel__change-file .file-action--unstage {
+  background: var(--bg-secondary);
+}
+
+/* Light mode - sync buttons */
+:root[data-theme="light"] .git-panel__sync-btn--pull {
+  background: var(--bg-secondary);
+}
+
+/* Light mode - inputs and forms */
+:root[data-theme="light"] .git-panel__commit-input {
+  background: white;
+  border-color: var(--border-color);
+}
+
+:root[data-theme="light"] .git-panel__form-group input {
+  background: white;
+}
+
+:root[data-theme="light"] .git-panel__new-branch-form input {
+  background: white;
+}
+
+/* Light mode - better contrast for section headers */
+:root[data-theme="light"] .git-panel__section-header {
+  color: var(--text-primary);
+}
+
+/* Light mode - commit history items */
+:root[data-theme="light"] .git-panel__commit:hover {
+  background: var(--bg-tertiary);
+}
+
+/* Light mode - file cards */
+:root[data-theme="light"] .git-panel__change-file:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+/* Light mode - branch items */
+:root[data-theme="light"] .git-panel__branch:hover {
+  background: var(--bg-tertiary);
+}
+
+/* Light mode - remote items */
+:root[data-theme="light"] .git-panel__remote {
+  background: white;
+}
+
+/* Light mode - modal */
+:root[data-theme="light"] .git-panel__modal {
+  background: white;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+}
+
+/* Light mode - fix hover states to prevent white-on-light text */
+:root[data-theme="light"] .git-panel__change-file .file-action--stage:hover,
+:root[data-theme="light"] .git-panel__change-file .file-action--unstage:hover {
+  color: #ffffff !important;
+}
+
+:root[data-theme="light"] .git-panel__action-btn:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+:root[data-theme="light"] .git-panel__tab:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+:root[data-theme="light"] .remote-edit-btn:hover {
+  background: #f3f4f6;
+  color: #6366f1;
+}
+
+:root[data-theme="light"] .no-remote-btn:hover {
+  color: #6366f1;
+}
+
+/* Light mode - sync buttons hover */
+:root[data-theme="light"] .git-panel__sync-btn--pull:hover {
+  background: #f3f4f6;
+  border-color: #6366f1;
+  color: #374151;
+}
+
+/* Light mode - new branch button */
+:root[data-theme="light"] .git-panel__new-branch:hover {
+  border-color: #6366f1;
+  color: #6366f1;
+}
+
+/* Light mode - add remote button */
+:root[data-theme="light"] .git-panel__add-remote-btn:hover {
+  border-color: #6366f1;
+  color: #6366f1;
+}
+
+/* Light mode - discard button */
+:root[data-theme="light"] .git-panel__change-file .file-action--discard:hover {
+  background: rgba(217, 119, 6, 0.15);
+  color: #b45309 !important;
+}
+
+/* Light mode - file action icon buttons hover */
+:root[data-theme="light"] .git-panel__change-file .file-action:hover {
+  background: #e5e7eb;
+  color: #374151 !important;
+}
+
+/* Light mode - Stage button hover */
+:root[data-theme="light"] .git-panel__change-file .file-action--stage:hover {
+  background: #e0e7ff;
+  color: #4f46e5 !important;
+}
+
+/* Light mode - Stage All button hover */
+:root[data-theme="light"] .git-panel__stage-all-btn:hover {
+  color: #ffffff;
+}
+
+/* Light mode - branch delete button */
+:root[data-theme="light"] .git-panel__branch .branch-delete-btn:hover {
+  background: #fef2f2;
+  color: #dc2626 !important;
 }

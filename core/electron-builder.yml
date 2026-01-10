@@ -1,6 +1,6 @@
 appId: com.echolon.app
 productName: Echolon
-copyright: Copyright © 2024 Echolon Team
+copyright: Copyright © 2026 Echolon Team
 
 directories:
   output: release
@@ -13,23 +13,34 @@ files:
 extraMetadata:
   main: dist/main/index.js
 
+# Custom URL Protocol (deep links)
+protocols:
+  - name: "Echolon URL"
+    schemes:
+      - echolon
+
 # macOS Configuration
 mac:
   category: public.app-category.developer-tools
   target:
-    - target: dmg
-      arch:
-        - x64
-        - arm64
+    #- target: dmg
+    #  arch:
+       # - x64
+   #     - arm64
     - target: zip
       arch:
-        - x64
+      #  - x64
         - arm64
-  icon: resources/icon.png
+  icon: assets/app-icon/logo@512.png
   hardenedRuntime: true
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    CFBundleURLTypes:
+      - CFBundleURLName: Echolon URL
+        CFBundleURLSchemes:
+          - echolon
   # Code signing - set these environment variables:
   # CSC_LINK: path to your .p12 certificate
   # CSC_KEY_PASSWORD: certificate password
@@ -59,7 +70,7 @@ win:
     - target: portable
       arch:
         - x64
-  icon: resources/icon.png
+  icon: assets/app-icon/logo.ico
   # Code signing - set these environment variables:
   # CSC_LINK: path to your .pfx certificate
   # CSC_KEY_PASSWORD: certificate password
@@ -71,9 +82,9 @@ nsis:
   perMachine: false
   allowToChangeInstallationDirectory: true
   deleteAppDataOnUninstall: false
-  installerIcon: resources/icon.png
-  uninstallerIcon: resources/icon.png
-  installerHeaderIcon: resources/icon.png
+  installerIcon: assets/app-icon/logo.ico
+  uninstallerIcon: assets/app-icon/logo.ico
+  installerHeaderIcon: assets/app-icon/logo.ico
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: Echolon
@@ -81,16 +92,18 @@ nsis:
 # Linux Configuration
 linux:
   target:
-    - target: AppImage
-      arch:
-        - x64
+    #- target: AppImage
+    #  arch:
+    #    - x64
     - target: deb
       arch:
         - x64
-    - target: rpm
-      arch:
-        - x64
-  icon: resources/icon.png
+        - arm64
+  # Not supported on osx builds      
+  #  - target: rpm
+  #    arch:
+  #      - x64
+  icon: assets/app-icon/logo@512.png
   category: Development
   maintainer: Echolon Team
   vendor: Echolon

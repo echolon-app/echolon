@@ -1,9 +1,8 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { EditableTable, Input, Switch, Tooltip, ColorEmojiPicker } from '@/components/ui';
 import { GlobeIcon } from '@/components/ui/icons';
-import { useEnvironments, useRequest } from '@/contexts';
+import { useEnvironments, useRequest, useApp } from '@/contexts';
 import { KeyValuePair } from '@/types';
-import { v4 as uuidv4 } from 'uuid';
 import './EnvironmentEditor.css';
 
 interface EnvironmentEditorProps {
@@ -13,6 +12,7 @@ interface EnvironmentEditorProps {
 export const EnvironmentEditor: React.FC<EnvironmentEditorProps> = ({ environmentId }) => {
   const { environments, updateEnvironment, toggleEnvironmentActive } = useEnvironments();
   const { updateTab, activeTabId, renameTab } = useRequest();
+  const { settings } = useApp();
   
   const environment = environments.find(e => e.id === environmentId);
   
@@ -40,11 +40,11 @@ export const EnvironmentEditor: React.FC<EnvironmentEditorProps> = ({ environmen
   const handleVariablesChange = useCallback((variables: KeyValuePair[]) => {
     updateEnvironment(environmentId, { variables });
     
-    // Mark tab as dirty
-    if (activeTabId) {
+    // Mark tab as dirty (only if auto-save is disabled)
+    if (activeTabId && !settings.autoSave) {
       updateTab(activeTabId, { isDirty: true });
     }
-  }, [environmentId, updateEnvironment, updateTab, activeTabId]);
+  }, [environmentId, updateEnvironment, updateTab, activeTabId, settings.autoSave]);
 
   const handleToggleActive = useCallback(() => {
     toggleEnvironmentActive(environmentId);
@@ -54,10 +54,12 @@ export const EnvironmentEditor: React.FC<EnvironmentEditorProps> = ({ environmen
     updateEnvironment(environmentId, updates);
   }, [environmentId, updateEnvironment]);
 
-  // Ensure there's at least one empty row
-  const variablesWithEmpty = environment.variables.length === 0
-    ? [{ id: uuidv4(), key: '', value: '', enabled: true }]
-    : environment.variables;
+  // Ensure there's at least one empty row - use stable ID to prevent cursor jumping
+  const variablesWithEmpty = useMemo(() => {
+    return environment.variables.length === 0
+      ? [{ id: `empty-${environmentId}`, key: '', value: '', enabled: true }]
+      : environment.variables;
+  }, [environment.variables, environmentId]);
 
   return (
     <div className="environment-editor">
@@ -103,6 +105,7 @@ export const EnvironmentEditor: React.FC<EnvironmentEditorProps> = ({ environmen
           valuePlaceholder="Value"
           descriptionPlaceholder="Description (optional)"
           showDescription={true}
+          showSecureToggle={true}
         />
       </div>
     </div>

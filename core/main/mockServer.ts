@@ -4,13 +4,8 @@ import zlib from 'zlib';
 import { BrowserWindow } from 'electron';
 import os from 'os';
 import { v4 as uuidv4 } from 'uuid';
-import { execFile } from 'node:child_process'
-
-
-// IPC channel constant (duplicated here to avoid cross-rootDir import issues)
-const IPC_CHANNELS = {
-  MOCK_REQUEST_RECEIVED: 'mock-request-received',
-} as const;
+import { execFile } from 'node:child_process';
+import { MOCK_SERVER_CHANNELS } from '../shared/ipc-channels';
 
 interface MockRoute {
   id: string;
@@ -321,7 +316,7 @@ class MockServerManager {
 
     // Send captured request to renderer
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send(IPC_CHANNELS.MOCK_REQUEST_RECEIVED, capturedRequest);
+      this.mainWindow.webContents.send(MOCK_SERVER_CHANNELS.MOCK_REQUEST_RECEIVED, capturedRequest);
     }
   }
 

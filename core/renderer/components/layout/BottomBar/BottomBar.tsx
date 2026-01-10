@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button, Tooltip } from '@/components/ui';
-import { SidebarIcon, PanelLeftIcon, ConsoleIcon, ClearIcon, ThunderboltIcon, MailIcon } from '@/components/ui/icons';
-import { useApp, useMocking, useUpdateOptional } from '@/contexts';
+import { SidebarIcon, PanelLeftIcon, ConsoleIcon, ClearIcon, ThunderboltIcon, MailIcon, BookIcon } from '@/components/ui/icons';
+import { useApp, useMocking, useUpdateOptional, useWebModeOptional } from '@/contexts';
 import { APP_VERSION } from '@/utils/environment';
 import './BottomBar.css';
 
@@ -16,11 +16,14 @@ export const BottomBar: React.FC = () => {
     toggleConsole,
     consoleEntries,
     clearConsole,
-    openShortcutsModal
+    openShortcutsModal,
+    openSettingsModal
   } = useApp();
   
   const { capturedRequests, activeMockApiId } = useMocking();
   const update = useUpdateOptional();
+  const webMode = useWebModeOptional();
+  const isWebMode = webMode?.isWebMode ?? false;
 
   const handleSupportClick = async () => {
     const version = APP_VERSION || 'unknown';
@@ -77,8 +80,25 @@ Please describe the issue you're experiencing:
   };
 
   const handleVersionClick = () => {
-    if (update) {
-      update.openModal('changelog');
+    // Open settings modal with Updates tab
+    openSettingsModal('updates');
+  };
+
+  const handleBusinessClick = async () => {
+    const url = 'https://echolon.app/pricing?utm-source=app-footer';
+    if (window.electronAPI?.openExternal) {
+      await window.electronAPI.openExternal(url);
+    } else {
+      window.open(url, '_blank');
+    }
+  };
+
+  const handleDocsClick = async () => {
+    const url = 'https://docs.echolon.app';
+    if (window.electronAPI?.openExternal) {
+      await window.electronAPI.openExternal(url);
+    } else {
+      window.open(url, '_blank');
     }
   };
   
@@ -136,12 +156,29 @@ Please describe the issue you're experiencing:
             {activeRequests.length} {activeRequests.length === 1 ? 'request' : 'requests'}
           </span>
         )}
+        {isWebMode ? (
+          <a 
+            className="bottom-bar__business-link"
+            href="https://echolon.app?utm_source=web-viewer"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Publish your own specs?
+          </a>
+        ) : (
+          <button 
+            className="bottom-bar__business-link"
+            onClick={handleBusinessClick}
+          >
+            🚀 Echolon Business
+          </button>
+        )}
       </div>
 
       <div className="bottom-bar__right">
         {/* Version indicator */}
         <Tooltip 
-          content={hasUpdateAvailable ? `Update v${update.updateInfo?.version} available` : 'View changelog'} 
+          content={hasUpdateAvailable ? `Update v${update.updateInfo?.version} available` : 'Update settings'} 
           position="top"
         >
           <button 
@@ -173,6 +210,11 @@ Please describe the issue you're experiencing:
             </Button>
           </Tooltip>
         )}
+        <Tooltip content="Documentation" position="top">
+          <Button variant="ghost" size="sm" onClick={handleDocsClick}>
+            <BookIcon />
+          </Button>
+        </Tooltip>
         <Tooltip content="Keyboard shortcuts" position="top">
           <Button variant="ghost" size="sm" onClick={openShortcutsModal}>
             <ThunderboltIcon />

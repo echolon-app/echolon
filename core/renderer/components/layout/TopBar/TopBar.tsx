@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Button, Tooltip, AutoComplete, AutoCompleteOption } from '@/components/ui';
 import { 
-  ChevronLeftIcon, ChevronRightIcon, SearchIcon, SettingsIcon, 
+  ChevronLeftIcon, ChevronRightIcon, SearchIcon, SettingsIcon, DevToolsIcon,
   ChevronDownIcon, CheckIcon, PlusIcon, EditIcon, TrashIcon, GlobeIcon,
-  TabsIcon, ListIcon 
+  TabsIcon, ListIcon, GitHubIcon, ArrowUpIcon, ArrowDownIcon, RefreshIcon, GitBranchIcon
 } from '@/components/ui/icons';
-import { useApp, useRequest, useWorkspace, useEnvironments, useCollections, useWebMode, useFileStorage } from '@/contexts';
+import { useApp, useRequest, useWorkspace, useEnvironments, useCollections, useWebMode, useFileStorage, useGitHub, useGitOptional } from '@/contexts';
 import './TopBar.css';
 
 interface WorkspaceModalProps {
@@ -166,44 +166,81 @@ const EcholonLogo = () => (
 );
 
 export const TopBar: React.FC = () => {
-  const { openSettingsModal, openGlobalSearch, openNewEnvironmentModal, viewMode, setViewMode } = useApp();
+  const { openSettingsModal, openGlobalSearch, openNewEnvironmentModal, viewMode, setViewMode, settings, setSidebarView } = useApp();
   const { canGoBack, canGoForward, goBack, goForward, activeTab } = useRequest();
   const { workspaces, activeWorkspace, setActiveWorkspace, addWorkspace, updateWorkspace, deleteWorkspace, selectedWorkspaceEnvironment, selectWorkspaceEnvironment } = useWorkspace();
   const { activeEnvironments, selectedEnvironment, selectEnvironment, addEnvironment } = useEnvironments();
   const { collections, setActiveCollectionEnvironment } = useCollections();
-  const { readonly, isWebMode } = useWebMode();
+  const { readonly, isWebMode, availableVersions, currentVersion, setCurrentVersion, versionsLoading, selectedEnvironmentId, setSelectedEnvironmentId } = useWebMode();
   const { echolonPath } = useFileStorage();
+  const { 
+    isAuthenticated: isGitHubAuthenticated, 
+    getLinkedRepo, 
+    syncStatus, 
+    isSyncing, 
+    checkSyncStatus, 
+    pushWorkspaceChanges, 
+    pullWorkspaceChanges 
+  } = useGitHub();
+  const git = useGitOptional();
+  const gitInitialized = git?.isInitialized ?? false;
+  const gitHasChanges = git?.hasChanges ?? (() => false);
+  const gitTotalChanges = git?.getTotalChanges ?? (() => 0);
+  const gitStatus = git?.status ?? null;
   
   const [workspaceDropdownOpen, setWorkspaceDropdownOpen] = useState(false);
   const [workspaceModalOpen, setWorkspaceModalOpen] = useState(false);
   const [workspaceModalMode, setWorkspaceModalMode] = useState<'create' | 'edit'>('create');
   const [editingWorkspace, setEditingWorkspace] = useState<{ id: string; name: string; description?: string; color?: string } | undefined>();
+  const [gitHubDropdownOpen, setGitHubDropdownOpen] = useState(false);
+  const [pushModalOpen, setPushModalOpen] = useState(false);
+  const [commitMessage, setCommitMessage] = useState('');
+  const [pushError, setPushError] = useState<string | null>(null);
+  const [versionDropdownOpen, setVersionDropdownOpen] = useState(false);
   
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const versionDropdownRef = useRef<HTMLDivElement>(null);
+  const gitHubDropdownRef = useRef<HTMLDivElement>(null);
+  
+  // Get linked repo for current workspace
+  const linkedRepo = activeWorkspace?.id ? getLinkedRepo(activeWorkspace.id) : undefined;
 
   // Get the current collection based on active tab
-  // First try collectionId, then fall back to finding collection containing this request
+  // Handles: collection tabs, request tabs with collectionId, or fallback search
   const currentCollection = useMemo(() => {
-    if (!activeTab?.request) return null;
+    if (!activeTab) return null;
     
-    // First, try direct collectionId lookup
-    if (activeTab.request.collectionId) {
+    // If this is a collection tab, use its collectionId directly
+    if (activeTab.type === 'collection' && activeTab.collectionId) {
+      return collections.find(c => c.id === activeTab.collectionId) || null;
+    }
+    
+    // For request tabs, try direct collectionId lookup
+    if (activeTab.request?.collectionId) {
       return collections.find(c => c.id === activeTab.request?.collectionId) || null;
     }
     
     // Fallback: find collection containing this request by ID
-    const requestId = activeTab.request.id;
+    const requestId = activeTab.request?.id;
     if (!requestId) return null;
+    
+    // Helper to recursively search folders for a request
+    const searchFolders = (folders: typeof collections[0]['folders']): boolean => {
+      if (!folders) return false;
+      for (const folder of folders) {
+        if (folder.requests?.some(r => r.id === requestId)) return true;
+        if (searchFolders(folder.folders)) return true;
+      }
+      return false;
+    };
     
     for (const collection of collections) {
       // Check direct requests
       if (collection.requests?.some(r => r.id === requestId)) {
         return collection;
       }
-      // Check requests in folders
-      if (collection.folders?.some(folder => 
-        folder.requests?.some(r => r.id === requestId)
-      )) {
+      // Check requests in folders (recursively)
+      if (searchFolders(collection.folders)) {
         return collection;
       }
     }
@@ -256,7 +293,9 @@ export const TopBar: React.FC = () => {
         label: env.name + (env.isActive === false ? ' (hidden)' : ''),
         description: `Collection • ${env.variables.length} var${env.variables.length !== 1 ? 's' : ''}`,
         icon: env.emoji ? <span className="autocomplete__emoji">{env.emoji}</span> : undefined,
-        color: env.isActive === false ? '#6b7280' : (!env.emoji ? (env.color || '#f59e0b') : undefined), // Gray for hidden, custom color or orange for visible
+        // In web mode (OpenAPI specs), don't show default color since OpenAPI doesn't support it
+        // In desktop mode, show custom color or default orange for visible environments
+        color: env.isActive === false ? '#6b7280' : (!env.emoji ? (isWebMode ? env.color : (env.color || '#f59e0b')) : undefined),
       }));
       options.push(...collEnvs);
     }
@@ -265,6 +304,11 @@ export const TopBar: React.FC = () => {
   }, [activeEnvironments, activeWorkspace?.environments, activeWorkspace?.id, currentCollection]);
 
   const handleEnvironmentChange = (envId: string | null) => {
+    // In web mode, persist the selection to localStorage
+    if (isWebMode) {
+      setSelectedEnvironmentId(envId);
+    }
+    
     if (envId?.startsWith('collection:')) {
       // Handle collection environment selection (highest priority)
       const parts = envId.split(':');
@@ -305,16 +349,76 @@ export const TopBar: React.FC = () => {
     selectEnvironment(newEnv.id);
   };
 
-  // Close dropdown when clicking outside
+  // Restore saved environment selection in web mode when collection loads
+  useEffect(() => {
+    if (!isWebMode || !selectedEnvironmentId || !currentCollection) return;
+    
+    // Check if the saved environment ID matches a collection environment
+    if (selectedEnvironmentId.startsWith('collection:')) {
+      const parts = selectedEnvironmentId.split(':');
+      const savedCollectionId = parts[1];
+      const savedEnvId = parts[2];
+      
+      // Verify this environment exists in the current collection
+      if (currentCollection.id === savedCollectionId || savedCollectionId === currentCollection.id) {
+        const envExists = currentCollection.environments?.some(env => env.id === savedEnvId);
+        if (envExists) {
+          setActiveCollectionEnvironment(currentCollection.id, savedEnvId);
+        }
+      }
+    }
+  }, [isWebMode, selectedEnvironmentId, currentCollection, setActiveCollectionEnvironment]);
+
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setWorkspaceDropdownOpen(false);
       }
+      if (gitHubDropdownRef.current && !gitHubDropdownRef.current.contains(e.target as Node)) {
+        setGitHubDropdownOpen(false);
+      }
+      if (versionDropdownRef.current && !versionDropdownRef.current.contains(e.target as Node)) {
+        setVersionDropdownOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // GitHub sync handlers
+  const handlePush = async () => {
+    if (!commitMessage.trim()) {
+      setPushError('Please enter a commit message');
+      return;
+    }
+    
+    setPushError(null);
+    const result = await pushWorkspaceChanges(commitMessage.trim());
+    
+    if (result.success) {
+      setPushModalOpen(false);
+      setCommitMessage('');
+      setGitHubDropdownOpen(false);
+    } else {
+      setPushError(result.error || 'Push failed');
+    }
+  };
+
+  const handlePull = async () => {
+    const result = await pullWorkspaceChanges();
+    
+    if (!result.success) {
+      // Could show error toast here
+      console.error('Pull failed:', result.error);
+    }
+    
+    setGitHubDropdownOpen(false);
+  };
+
+  const handleRefreshStatus = () => {
+    checkSyncStatus();
+  };
 
   const handleCreateWorkspace = () => {
     setWorkspaceModalMode('create');
@@ -351,11 +455,53 @@ export const TopBar: React.FC = () => {
       <div className="top-bar">
         <div className="top-bar__left">
           {readonly ? (
-            /* Show Echolon logo in readonly mode */
+            /* Show Echolon logo and version dropdown in readonly mode */
+            <>
             <div className="top-bar__logo">
               <EcholonLogo />
               <span className="top-bar__logo-text">Echolon</span>
             </div>
+              
+              {/* Version Dropdown for public specs */}
+              {availableVersions.length > 1 && !versionsLoading && (
+                <div className="top-bar__version" ref={versionDropdownRef}>
+                  <button 
+                    className="top-bar__version-trigger"
+                    onClick={() => setVersionDropdownOpen(!versionDropdownOpen)}
+                  >
+                    <span className="top-bar__version-label">v{currentVersion || availableVersions[0]?.version}</span>
+                    <ChevronDownIcon />
+                  </button>
+                  
+                  {versionDropdownOpen && (
+                    <div className="top-bar__version-dropdown">
+                      <div className="top-bar__version-list">
+                        {availableVersions.map(version => (
+                          <div 
+                            key={version.version}
+                            className={`top-bar__version-item ${version.version === currentVersion ? 'top-bar__version-item--active' : ''}`}
+                            onClick={() => {
+                              setCurrentVersion(version.version);
+                              setVersionDropdownOpen(false);
+                            }}
+                          >
+                            <span className="top-bar__version-number">v{version.version}</span>
+                            {version.publishedAt && (
+                              <span className="top-bar__version-date">
+                                {new Date(version.publishedAt).toLocaleDateString()}
+                              </span>
+                            )}
+                            {version.version === currentVersion && (
+                              <span className="top-bar__version-check"><CheckIcon /></span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
           ) : (
             <>
               <div className="top-bar__nav">
@@ -440,37 +586,160 @@ export const TopBar: React.FC = () => {
         </div>
 
         <div className="top-bar__right">
-          <div className="top-bar__environment">
-            <Tooltip content="Select environment" position="bottom">
-              <span className="top-bar__environment-icon">
-                <GlobeIcon />
-              </span>
+          {/* GitHub Sync Controls - show when workspace is linked to a repo */}
+          {!isWebMode && linkedRepo && isGitHubAuthenticated && (
+            <div className="top-bar__github" ref={gitHubDropdownRef}>
+              <button 
+                className={`top-bar__github-trigger ${syncStatus?.hasLocalChanges ? 'top-bar__github-trigger--has-changes' : ''}`}
+                onClick={() => setGitHubDropdownOpen(!gitHubDropdownOpen)}
+                disabled={isSyncing}
+              >
+                <GitBranchIcon />
+                <span className="top-bar__github-repo">{linkedRepo.repo}</span>
+                {syncStatus?.hasLocalChanges && (
+                  <span className="top-bar__github-badge top-bar__github-badge--local">
+                    {syncStatus.localChanges.length}↑
+                  </span>
+                )}
+                {syncStatus?.hasRemoteChanges && (
+                  <span className="top-bar__github-badge top-bar__github-badge--remote">
+                    {syncStatus.remoteChanges.length}↓
+                  </span>
+                )}
+                {isSyncing && <span className="top-bar__github-spinner" />}
+                <ChevronDownIcon />
+              </button>
+              
+              {gitHubDropdownOpen && (
+                <div className="top-bar__github-dropdown">
+                  <div className="top-bar__github-header">
+                    <GitHubIcon />
+                    <div className="top-bar__github-info">
+                      <span className="top-bar__github-fullname">{linkedRepo.owner}/{linkedRepo.repo}</span>
+                      <span className="top-bar__github-branch">{linkedRepo.branch}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="top-bar__github-divider" />
+                  
+                  {syncStatus && (
+                    <div className="top-bar__github-status">
+                      {syncStatus.hasLocalChanges && (
+                        <div className="top-bar__github-status-item">
+                          <ArrowUpIcon />
+                          <span>{syncStatus.localChanges.length} local change{syncStatus.localChanges.length !== 1 ? 's' : ''}</span>
+                        </div>
+                      )}
+                      {syncStatus.hasRemoteChanges && (
+                        <div className="top-bar__github-status-item">
+                          <ArrowDownIcon />
+                          <span>{syncStatus.remoteChanges.length} remote change{syncStatus.remoteChanges.length !== 1 ? 's' : ''}</span>
+                        </div>
+                      )}
+                      {syncStatus.conflicts.length > 0 && (
+                        <div className="top-bar__github-status-item top-bar__github-status-item--conflict">
+                          <span>⚠️ {syncStatus.conflicts.length} conflict{syncStatus.conflicts.length !== 1 ? 's' : ''}</span>
+                        </div>
+                      )}
+                      {!syncStatus.hasLocalChanges && !syncStatus.hasRemoteChanges && syncStatus.conflicts.length === 0 && (
+                        <div className="top-bar__github-status-item top-bar__github-status-item--synced">
+                          <CheckIcon />
+                          <span>Up to date</span>
+                        </div>
+                      )}
+                      {syncStatus.lastSyncedAt && (
+                        <div className="top-bar__github-last-sync">
+                          Last synced: {new Date(syncStatus.lastSyncedAt).toLocaleString()}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  <div className="top-bar__github-divider" />
+                  
+                  <div className="top-bar__github-actions">
+                    <button 
+                      className="top-bar__github-action"
+                      onClick={() => {
+                        setPushModalOpen(true);
+                        setGitHubDropdownOpen(false);
+                      }}
+                      disabled={isSyncing || !syncStatus?.hasLocalChanges}
+                    >
+                      <ArrowUpIcon />
+                      <span>Push Changes</span>
+                    </button>
+                    <button 
+                      className="top-bar__github-action"
+                      onClick={handlePull}
+                      disabled={isSyncing || !syncStatus?.hasRemoteChanges}
+                    >
+                      <ArrowDownIcon />
+                      <span>Pull Changes</span>
+                    </button>
+                    <button 
+                      className="top-bar__github-action"
+                      onClick={handleRefreshStatus}
+                      disabled={isSyncing}
+                    >
+                      <RefreshIcon />
+                      <span>Refresh Status</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Git Changes Indicator - show when repo is initialized and has changes */}
+          {!isWebMode && gitInitialized && gitHasChanges() && (
+            <Tooltip content={`${gitTotalChanges()} uncommitted change${gitTotalChanges() !== 1 ? 's' : ''}`} position="bottom">
+              <button 
+                className="top-bar__git-indicator"
+                onClick={() => setSidebarView('git')}
+              >
+                <GitBranchIcon />
+                <span className="top-bar__git-badge">{gitTotalChanges()}</span>
+              </button>
             </Tooltip>
-            <AutoComplete<string | null>
-              options={environmentOptions}
-              value={(() => {
-                // Check if there's a selected collection environment first
-                if (currentCollection?.defaultEnvironmentId) {
-                  return `collection:${currentCollection.id}:${currentCollection.defaultEnvironmentId}`;
-                }
-                // Fall back to global environment
-                return selectedEnvironment?.id || null;
-              })()}
-              onChange={handleEnvironmentChange}
-              placeholder="No Environment"
-              searchPlaceholder="Search environments..."
-              emptyMessage="No environments found"
-              size="sm"
-              allowClear={false}
-              onCreate={handleCreateEnvironment}
-              createLabel="Create environment"
-              onCreateClick={openNewEnvironmentModal}
-              createButtonLabel="New Environment"
-              className="top-bar__environment-select"
-            />
-          </div>
+          )}
+          
+          <AutoComplete<string | null>
+            options={environmentOptions}
+            value={(() => {
+              // In web mode, use the persisted selection if available
+              if (isWebMode && selectedEnvironmentId) {
+                return selectedEnvironmentId;
+              }
+              // Check if there's a selected collection environment first
+              if (currentCollection?.defaultEnvironmentId) {
+                return `collection:${currentCollection.id}:${currentCollection.defaultEnvironmentId}`;
+              }
+              // Fall back to global environment
+              return selectedEnvironment?.id || null;
+            })()}
+            onChange={handleEnvironmentChange}
+            placeholder="No Environment"
+            searchPlaceholder="Search environments..."
+            emptyMessage="No environments found"
+            size="sm"
+            allowClear={false}
+            onCreate={handleCreateEnvironment}
+            createLabel="Create environment"
+            onCreateClick={openNewEnvironmentModal}
+            createButtonLabel="New Environment"
+            leadingIcon={<GlobeIcon />}
+            className="top-bar__environment-select"
+          />
+          {settings.debugMode && (
+            <Tooltip content="Developer Tools" position="bottom">
+              <Button variant="ghost" size="sm" onClick={() => window.electronAPI?.toggleDevTools()}>
+                <DevToolsIcon />
+              </Button>
+            </Tooltip>
+          )}
           <Tooltip content="Settings" position="bottom">
-            <Button variant="ghost" size="sm" onClick={openSettingsModal}>
+            <Button variant="ghost" size="sm" onClick={() => openSettingsModal()}>
               <SettingsIcon />
             </Button>
           </Tooltip>
@@ -486,6 +755,81 @@ export const TopBar: React.FC = () => {
         onDelete={workspaces.length > 1 ? handleDeleteWorkspace : undefined}
         echolonPath={echolonPath}
       />
+      
+      {/* Push Modal */}
+      {pushModalOpen && (
+        <div className="workspace-modal-overlay" onClick={() => setPushModalOpen(false)}>
+          <div className="workspace-modal top-bar__push-modal" onClick={e => e.stopPropagation()}>
+            <h3 className="workspace-modal__title">
+              <GitHubIcon />
+              Push Changes to GitHub
+            </h3>
+            
+            {syncStatus?.localChanges && syncStatus.localChanges.length > 0 && (
+              <div className="top-bar__push-changes">
+                <p>{syncStatus.localChanges.length} file{syncStatus.localChanges.length !== 1 ? 's' : ''} to push:</p>
+                <ul>
+                  {syncStatus.localChanges.slice(0, 5).map(change => (
+                    <li key={change.path} className={`top-bar__push-change top-bar__push-change--${change.type}`}>
+                      <span className="top-bar__push-change-type">
+                        {change.type === 'added' ? '+' : change.type === 'deleted' ? '-' : '~'}
+                      </span>
+                      {change.path}
+                    </li>
+                  ))}
+                  {syncStatus.localChanges.length > 5 && (
+                    <li className="top-bar__push-change-more">
+                      ...and {syncStatus.localChanges.length - 5} more
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )}
+            
+            <div className="workspace-modal__field">
+              <label htmlFor="commit-message">Commit Message</label>
+              <input
+                id="commit-message"
+                type="text"
+                value={commitMessage}
+                onChange={e => setCommitMessage(e.target.value)}
+                placeholder="Update workspace collections"
+                autoFocus
+                onKeyDown={e => e.key === 'Enter' && handlePush()}
+              />
+            </div>
+            
+            {pushError && (
+              <div className="top-bar__push-error">
+                {pushError}
+              </div>
+            )}
+            
+            <div className="workspace-modal__actions">
+              <div className="workspace-modal__actions-right">
+                <button 
+                  type="button" 
+                  className="workspace-modal__cancel" 
+                  onClick={() => {
+                    setPushModalOpen(false);
+                    setPushError(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="button"
+                  className="workspace-modal__save"
+                  onClick={handlePush}
+                  disabled={isSyncing || !commitMessage.trim()}
+                >
+                  {isSyncing ? 'Pushing...' : 'Push'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

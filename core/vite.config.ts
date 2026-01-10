@@ -7,10 +7,17 @@ import { builtinModules } from 'module';
 import pkg from './package.json';
 
 console.log('ENV', process.env.ENV);
+
+// Generate build timestamp in local time (format: YYYY-MM-DD HH:mm:ss)
+const now = new Date();
+const buildTimestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+console.log('BUILD_TIMESTAMP', buildTimestamp);
+
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
-    __ENV__:JSON.stringify(process.env.ENV),
+    __ENV__: JSON.stringify(process.env.ENV),
+    __BUILD_TIMESTAMP__: JSON.stringify(buildTimestamp),
   },
   plugins: [
     react(),

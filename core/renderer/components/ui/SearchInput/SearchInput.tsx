@@ -6,11 +6,13 @@ import './SearchInput.css';
 export interface SearchInputProps extends Omit<InputProps, 'icon' | 'iconPosition'> {
   onClear?: () => void;
   showClear?: boolean;
+  suffix?: string;
 }
 
 export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(({
   onClear,
   showClear = true,
+  suffix,
   value,
   className = '',
   ...props
@@ -18,7 +20,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(({
   const hasValue = value && String(value).length > 0;
 
   return (
-    <div className={`search-input ${className}`}>
+    <div className={`search-input ${suffix ? 'search-input--has-suffix' : ''} ${className}`}>
       <Input
         ref={ref}
         value={value}
@@ -27,6 +29,9 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(({
         placeholder="Search..."
         {...props}
       />
+      {suffix && (
+        <span className="search-input__suffix">{suffix}</span>
+      )}
       {showClear && hasValue && (
         <button
           type="button"

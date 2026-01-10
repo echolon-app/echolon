@@ -82,6 +82,8 @@
 
 .center-panel__url {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .center-panel__url .input-wrapper {
@@ -91,6 +93,16 @@
 .center-panel__send {
   flex-shrink: 0;
   min-width: 100px;
+}
+
+.center-panel__send-shortcut {
+  font-size: var(--font-xs);
+  opacity: 0.6;
+  margin-left: var(--spacing-xs);
+  font-weight: 500;
+  background: none;
+  padding: 0;
+  border: none;
 }
 
 .center-panel__url-actions {
@@ -721,6 +733,23 @@
   color: white !important;
 }
 
+/* Tags Tab */
+.center-panel__tags {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.center-panel__tags-description {
+  font-size: var(--font-sm);
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+
+.center-panel__tags-description p {
+  margin: 0;
+}
+
 .center-panel__settings {
   color: var(--text-tertiary);
   font-size: var(--font-sm);
@@ -835,6 +864,171 @@
   cursor: ew-resize;
 }
 
+/* Welcome Screen - shown when no tabs are open */
+.center-panel__welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: 48px 24px;
+  overflow-y: auto;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    color-mix(in srgb, var(--primary) 3%, transparent) 100%
+  );
+}
+
+.center-panel__welcome-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 48px;
+  max-width: 680px;
+  width: 100%;
+}
+
+/* Logo & Branding */
+.center-panel__welcome-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.center-panel__welcome-logo svg {
+  filter: drop-shadow(0 4px 12px rgba(119, 240, 139, 0.25));
+}
+
+.center-panel__welcome-title {
+  font-size: 36px;
+  font-weight: 700;
+  margin: 0;
+  background: linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.5px;
+}
+
+.center-panel__welcome-subtitle {
+  font-size: 16px;
+  color: var(--text-tertiary);
+  margin: 0;
+  font-weight: 400;
+}
+
+/* Feature Grid */
+.center-panel__welcome-features {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  width: 100%;
+}
+
+@media (max-width: 600px) {
+  .center-panel__welcome-features {
+    grid-template-columns: 1fr;
+  }
+}
+
+.center-panel__welcome-feature {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 20px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.center-panel__welcome-feature-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, 
+    color-mix(in srgb, var(--primary) 15%, transparent) 0%, 
+    color-mix(in srgb, var(--primary) 8%, transparent) 100%
+  );
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.center-panel__welcome-feature-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.center-panel__welcome-feature-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.center-panel__welcome-feature-text h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.center-panel__welcome-feature-text p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+
+/* Quick Actions */
+.center-panel__welcome-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.center-panel__welcome-actions button {
+  padding: 12px 32px;
+  font-size: 15px;
+  gap: 10px;
+}
+
+.center-panel__welcome-actions button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.center-panel__welcome-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.center-panel__welcome-hint kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Old empty state - kept for backwards compatibility */
 .center-panel__empty {
   display: flex;
   flex-direction: column;

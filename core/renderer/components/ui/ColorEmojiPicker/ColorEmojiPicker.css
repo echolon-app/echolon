@@ -10,9 +10,15 @@
   flex-shrink: 0;
 }
 
-.color-emoji-picker__trigger:hover {
+.color-emoji-picker__trigger:hover:not(:disabled) {
   border-color: var(--color-primary);
   background: var(--bg-hover);
+}
+
+.color-emoji-picker__trigger:disabled,
+.color-emoji-picker__trigger--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .color-emoji-picker__trigger--sm {

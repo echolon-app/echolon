@@ -3,6 +3,21 @@
   width: 100%;
 }
 
+.search-input__suffix {
+  position: absolute;
+  right: 28px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+  z-index: 10;
+  background: var(--bg-secondary);
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
 .search-input__clear {
   position: absolute;
   right: var(--spacing-sm);
@@ -34,4 +49,9 @@
 
 .search-input .input-wrapper {
   padding-right: 32px;
+}
+
+/* When suffix is present, add more padding */
+.search-input--has-suffix .input-wrapper {
+  padding-right: 72px;
 }

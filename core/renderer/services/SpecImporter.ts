@@ -1,5 +1,10 @@
-import { Collection, Request, Folder, KeyValuePair, HttpMethod, SpecFormat, SpecSource, Environment } from '@/types';
-import { SwaggerDocument, SwaggerPath } from '@/types';
+import { Collection, Request, Folder, KeyValuePair, HttpMethod, SpecFormat, SpecSource, Environment, CollectionEnvironment, AuthConfig } from '@/types';
+import { SwaggerDocument, SwaggerPath, SwaggerSecurityScheme } from '@/types';
+
+// Map of security scheme names to their definitions
+type SecuritySchemeMap = { [name: string]: SwaggerSecurityScheme };
+import { EchoFile } from '../../shared/echoFormat';
+import { echoFileToCollection } from './EchoFileConverter';
 import { v4 as uuidv4 } from 'uuid';
 
 // ============================================================================
@@ -19,7 +24,7 @@ export interface SpecImportResult {
   collection: Collection;
   rawSpec: string;
   format: SpecFormat;
-  environments?: Environment[]; // Environments generated from servers array
+  // Note: Environments from servers are now embedded in collection.environments (as CollectionEnvironment[])
 }
 
 export interface SpecImportOptions {
@@ -97,18 +102,19 @@ export class OpenAPIAdapter implements SpecImporterAdapter {
     const doc = this.parseContent(content);
     const collection = this.convertToCollection(doc, options);
     
-    // Generate environments from servers array (if enabled)
+    // Generate collection environments from servers array (if enabled)
     const createEnvironments = options?.createEnvironments !== false;
-    const environments: Environment[] = [];
     
     if (createEnvironments && doc.servers && doc.servers.length > 0) {
       const baseUrlVarName = options?.baseUrlVariableName || 'baseUrl';
+      const collectionEnvironments: CollectionEnvironment[] = [];
       
-      for (const server of doc.servers) {
-        // Generate environment name from description or URL
+      for (let i = 0; i < doc.servers.length; i++) {
+        const server = doc.servers[i];
+        // Use description as environment name, fallback to URL-based name
         const envName = server.description || this.generateEnvNameFromUrl(server.url);
         
-        environments.push({
+        collectionEnvironments.push({
           id: uuidv4(),
           name: envName,
           variables: [
@@ -120,12 +126,20 @@ export class OpenAPIAdapter implements SpecImporterAdapter {
               enabled: true,
             },
           ],
-          isActive: false, // Don't auto-activate
+          isActive: i === 0, // First environment is active by default
         });
+      }
+      
+      // Attach environments to the collection
+      collection.environments = collectionEnvironments;
+      
+      // Set the first environment as the default (selected) environment
+      if (collectionEnvironments.length > 0) {
+        collection.defaultEnvironmentId = collectionEnvironments[0].id;
       }
     }
     
-    return { collection, environments: environments.length > 0 ? environments : undefined };
+    return { collection };
   }
   
   // Generate a readable environment name from URL
@@ -259,6 +273,15 @@ export class OpenAPIAdapter implements SpecImporterAdapter {
     // URL prefix: use variable if provided, otherwise use actual base URL
     const urlPrefix = baseUrlVarName ? `{{${baseUrlVarName}}}` : baseUrl;
 
+    // Get security schemes (OpenAPI 3.0 or Swagger 2.0)
+    const securitySchemes: SecuritySchemeMap = 
+      doc.components?.securitySchemes || 
+      doc.securityDefinitions || 
+      {};
+
+    // Get global security requirements
+    const globalSecurity = doc.security || [];
+
     // Group paths by tags (like Postman does) or fallback to first path segment
     const groups: Map<string, Request[]> = new Map();
     // Track used tags for better folder naming
@@ -278,7 +301,10 @@ export class OpenAPIAdapter implements SpecImporterAdapter {
         const operation = (pathItem as SwaggerPath)[method];
         if (!operation) continue;
 
-        const request = this.createRequest(path, method, operation, urlPrefix, doc);
+        // Use operation-level security if defined, otherwise fall back to global
+        const operationSecurity = operation.security ?? globalSecurity;
+
+        const request = this.createRequest(path, method, operation, urlPrefix, doc, securitySchemes, operationSecurity);
         
         // Get group name from tags (Postman behavior) or fallback to path segment
         const groupName = this.getGroupName(path, operation.tags);
@@ -297,6 +323,7 @@ export class OpenAPIAdapter implements SpecImporterAdapter {
         name: groupName,
         requests,
         folders: [],
+        collapsed: true, // Collapsed by default on import
       };
       collection.folders.push(folder);
     }
@@ -330,7 +357,9 @@ export class OpenAPIAdapter implements SpecImporterAdapter {
     method: string,
     operation: SwaggerPath[string],
     urlPrefix: string,
-    doc: SwaggerDocument
+    doc: SwaggerDocument,
+    securitySchemes: SecuritySchemeMap,
+    operationSecurity: Array<{ [schemeName: string]: string[] }>
   ): Request {
     const headers: KeyValuePair[] = [];
     const queryParams: KeyValuePair[] = [];
@@ -370,6 +399,7 @@ export class OpenAPIAdapter implements SpecImporterAdapter {
     // Handle request body (OpenAPI 3.0)
     let bodyContent = '';
     let bodyType: 'none' | 'json' | 'form-data' | 'x-www-form-urlencoded' | 'raw' = 'none';
+    let formData: KeyValuePair[] = [];
 
     if (operation.requestBody?.content) {
       const contentTypes = Object.keys(operation.requestBody.content);
@@ -388,10 +418,23 @@ export class OpenAPIAdapter implements SpecImporterAdapter {
         }
       } else if (contentTypes.includes('application/x-www-form-urlencoded')) {
         bodyType = 'x-www-form-urlencoded';
+        // Parse schema properties to create form data entries
+        const formContent = operation.requestBody.content['application/x-www-form-urlencoded'];
+        if (formContent?.schema) {
+          formData = this.parseSchemaToFormData(formContent.schema, doc);
+        }
       } else if (contentTypes.includes('multipart/form-data')) {
         bodyType = 'form-data';
+        // Parse schema properties to create form data entries
+        const formContent = operation.requestBody.content['multipart/form-data'];
+        if (formContent?.schema) {
+          formData = this.parseSchemaToFormData(formContent.schema, doc);
+        }
       }
     }
+
+    // Convert security requirements to auth config
+    const auth = this.convertSecurityToAuth(operationSecurity, securitySchemes);
 
     return {
       id: uuidv4(),
@@ -404,10 +447,137 @@ export class OpenAPIAdapter implements SpecImporterAdapter {
       body: {
         type: bodyType,
         content: bodyContent,
+        formData: formData.length > 0 ? formData : undefined,
       },
-      auth: { type: 'none' },
+      auth,
       scripts: { pre: '', post: '' },
     };
+  }
+
+  /**
+   * Convert OpenAPI security requirements to Echolon AuthConfig
+   */
+  private convertSecurityToAuth(
+    security: Array<{ [schemeName: string]: string[] }>,
+    securitySchemes: SecuritySchemeMap
+  ): AuthConfig {
+    // If no security requirements, return 'none'
+    if (!security || security.length === 0) {
+      return { type: 'none' };
+    }
+
+    // Get the first security requirement (we only support one at a time)
+    const firstRequirement = security[0];
+    const schemeName = Object.keys(firstRequirement)[0];
+    
+    if (!schemeName) {
+      return { type: 'none' };
+    }
+
+    const scheme = securitySchemes[schemeName];
+    if (!scheme) {
+      return { type: 'none' };
+    }
+
+    // Map OpenAPI security scheme to Echolon auth type
+    switch (scheme.type) {
+      case 'http':
+        if (scheme.scheme === 'basic') {
+          return {
+            type: 'basic',
+            basic: { username: '', password: '' },
+          };
+        }
+        if (scheme.scheme === 'bearer') {
+          if (scheme.bearerFormat === 'JWT') {
+            return {
+              type: 'jwt',
+              jwt: { token: '', prefix: 'Bearer' },
+            };
+          }
+          return {
+            type: 'bearer',
+            bearer: { token: '' },
+          };
+        }
+        if (scheme.scheme === 'digest') {
+          return {
+            type: 'digest',
+            digest: { username: '', password: '' },
+          };
+        }
+        break;
+
+      case 'apiKey':
+        // Check for AWS Signature v4 extension
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((scheme as any)['x-amazon-apigateway-authtype'] === 'awsSigv4') {
+          return {
+            type: 'aws-signature',
+            awsSignature: {
+              accessKeyId: '',
+              secretAccessKey: '',
+              region: 'us-east-1',
+              service: 'execute-api',
+            },
+          };
+        }
+        return {
+          type: 'api-key',
+          apiKey: {
+            key: scheme.name || 'X-API-Key',
+            value: '',
+            addTo: scheme.in === 'query' ? 'query' : 'header',
+          },
+        };
+
+      case 'oauth2':
+        // Determine grant type from available flows
+        let grantType: 'authorization_code' | 'client_credentials' | 'password' | 'implicit' = 'authorization_code';
+        let authorizationUrl = '';
+        let tokenUrl = '';
+        
+        if (scheme.flows?.authorizationCode) {
+          grantType = 'authorization_code';
+          authorizationUrl = scheme.flows.authorizationCode.authorizationUrl;
+          tokenUrl = scheme.flows.authorizationCode.tokenUrl;
+        } else if (scheme.flows?.clientCredentials) {
+          grantType = 'client_credentials';
+          tokenUrl = scheme.flows.clientCredentials.tokenUrl;
+        } else if (scheme.flows?.password) {
+          grantType = 'password';
+          tokenUrl = scheme.flows.password.tokenUrl;
+        } else if (scheme.flows?.implicit) {
+          grantType = 'implicit';
+          authorizationUrl = scheme.flows.implicit.authorizationUrl;
+        }
+
+        return {
+          type: 'oauth2',
+          oauth2: {
+            grantType,
+            accessToken: '',
+            tokenType: 'Bearer',
+            clientId: '',
+            authorizationUrl,
+            tokenUrl,
+          },
+        };
+
+      case 'openIdConnect':
+        // Map to OAuth2 with authorization_code flow
+        return {
+          type: 'oauth2',
+          oauth2: {
+            grantType: 'authorization_code',
+            accessToken: '',
+            tokenType: 'Bearer',
+            clientId: '',
+          },
+        };
+    }
+
+    return { type: 'none' };
   }
 
   // Get sample value based on parameter type
@@ -482,6 +652,65 @@ export class OpenAPIAdapter implements SpecImporterAdapter {
       default:
         return '';
     }
+  }
+
+  // Parse OpenAPI schema to form data entries
+  private parseSchemaToFormData(
+    schema: { 
+      type?: string;
+      properties?: Record<string, {
+        type?: string;
+        format?: string;
+        description?: string;
+        enum?: unknown[];
+        default?: unknown;
+        example?: unknown;
+      }>;
+      required?: string[];
+    },
+    doc: SwaggerDocument
+  ): KeyValuePair[] {
+    const formData: KeyValuePair[] = [];
+    
+    // Handle $ref if present
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const schemaRef = (schema as any).$ref;
+    if (schemaRef) {
+      const resolved = this.resolveRef(schemaRef, doc);
+      if (resolved) {
+        return this.parseSchemaToFormData(resolved, doc);
+      }
+    }
+
+    if (schema.properties) {
+      const requiredFields = schema.required || [];
+      
+      for (const [propName, propSchema] of Object.entries(schema.properties)) {
+        const isRequired = requiredFields.includes(propName);
+        
+        // Get sample value for this property
+        let value = '';
+        if (propSchema.example !== undefined) {
+          value = String(propSchema.example);
+        } else if (propSchema.default !== undefined) {
+          value = String(propSchema.default);
+        } else if (propSchema.enum && propSchema.enum.length > 0) {
+          value = String(propSchema.enum[0]);
+        } else {
+          value = this.getSampleValueByType(propSchema.type, propSchema.format);
+        }
+
+        formData.push({
+          id: uuidv4(),
+          key: propName,
+          value,
+          description: propSchema.description || undefined,
+          enabled: isRequired,
+        });
+      }
+    }
+
+    return formData;
   }
 
   // Get human-readable type description for parameter
@@ -961,6 +1190,7 @@ export class PostmanAdapter implements SpecImporterAdapter {
       name: item.name,
       requests,
       folders: nestedFolders,
+      collapsed: true, // Collapsed by default on import
     };
   }
 
@@ -1077,6 +1307,23 @@ export class PostmanAdapter implements SpecImporterAdapter {
     if (pathVarMatches) {
       for (const match of pathVarMatches) {
         const varName = match.slice(1); // Remove : prefix
+        // Only add if not already in pathParams
+        if (!pathParams.some(p => p.key === varName)) {
+          pathParams.push({
+            id: uuidv4(),
+            key: varName,
+            value: '',
+            enabled: true,
+          });
+        }
+      }
+    }
+    
+    // Also extract path variables from OpenAPI-style {id} format (single braces, not {{var}})
+    const openApiPathVarMatches = url.match(/(?<!\{)\{([a-zA-Z_][a-zA-Z0-9_]*)\}(?!\})/g);
+    if (openApiPathVarMatches) {
+      for (const match of openApiPathVarMatches) {
+        const varName = match.slice(1, -1); // Remove { and }
         // Only add if not already in pathParams
         if (!pathParams.some(p => p.key === varName)) {
           pathParams.push({
@@ -1277,6 +1524,94 @@ export class PostmanAdapter implements SpecImporterAdapter {
 }
 
 // ============================================================================
+// Echolon Format Adapter
+// ============================================================================
+
+export class EcholonAdapter implements SpecImporterAdapter {
+  format: SpecFormat = 'echolon';
+
+  canParse(content: string): boolean {
+    try {
+      const doc = JSON.parse(content);
+      // Check for Echolon file structure:
+      // - $schema containing 'echolon' (if present)
+      // - OR: version, metadata with id/name, and requests/folders arrays
+      
+      // Strong match: $schema contains 'echolon'
+      if (doc.$schema && typeof doc.$schema === 'string' && doc.$schema.includes('echolon')) {
+        return true;
+      }
+      
+      // Structural match: has the required Echolon structure
+      const hasVersion = typeof doc.version === 'string';
+      const hasMetadata = doc.metadata && 
+                          typeof doc.metadata.id === 'string' && 
+                          typeof doc.metadata.name === 'string';
+      const hasRequestsOrFolders = Array.isArray(doc.requests) || Array.isArray(doc.folders);
+      const hasSettings = doc.settings !== undefined; // Echolon files have settings
+      
+      // Must NOT look like OpenAPI (no 'openapi'/'swagger' version string at root, no 'paths')
+      const looksLikeOpenAPI = (typeof doc.openapi === 'string') || 
+                               (typeof doc.swagger === 'string') || 
+                               doc.paths !== undefined;
+      
+      return hasVersion && hasMetadata && hasRequestsOrFolders && hasSettings && !looksLikeOpenAPI;
+    } catch {
+      return false;
+    }
+  }
+
+  getInfo(content: string): SpecInfo | null {
+    try {
+      const doc: EchoFile = JSON.parse(content);
+      if (!doc.metadata) return null;
+
+      // Extract base URL from environments if available
+      let baseUrl: string | undefined;
+      const servers: ServerInfo[] = [];
+      
+      if (doc.environments && doc.environments.length > 0) {
+        for (const env of doc.environments) {
+          // Look for baseUrl variable in each environment
+          const baseUrlVar = env.variables?.find(v => 
+            v.key.toLowerCase() === 'baseurl' || 
+            v.key.toLowerCase() === 'base_url'
+          );
+          if (baseUrlVar?.value) {
+            servers.push({
+              url: baseUrlVar.value,
+              description: env.name,
+            });
+            if (!baseUrl) {
+              baseUrl = baseUrlVar.value;
+            }
+          }
+        }
+      }
+
+      return {
+        name: doc.metadata.name,
+        description: doc.metadata.description,
+        baseUrl,
+        servers,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  parse(content: string, _options?: SpecImportOptions): { collection: Collection; environments?: Environment[] } {
+    const doc: EchoFile = JSON.parse(content);
+    
+    // Use the EchoFileConverter to convert to Collection
+    // Use a default workspace ID since we're importing
+    const collection = echoFileToCollection(doc, doc.metadata.workspaceId || 'imported');
+    
+    return { collection };
+  }
+}
+
+// ============================================================================
 // Main Spec Importer Service
 // ============================================================================
 
@@ -1286,6 +1621,9 @@ export class SpecImporter {
 
   private constructor() {
     // Register default adapters
+    // Note: Echolon adapter is first to ensure it has priority over OpenAPI
+    // (since Echolon files may contain an embedded OpenAPI spec)
+    this.registerAdapter(new EcholonAdapter());
     this.registerAdapter(new OpenAPIAdapter());
     this.registerAdapter(new PostmanAdapter());
   }
@@ -1339,26 +1677,35 @@ export class SpecImporter {
           collection: result.collection,
           rawSpec: content,
           format: adapter.format,
-          environments: result.environments,
         };
       }
     }
-    throw new Error('Unable to detect spec format. Supported formats: OpenAPI/Swagger, Postman.');
+    throw new Error('Unable to detect spec format. Supported formats: OpenAPI/Swagger, Echolon.');
   }
 
-  // Import from URL (uses Electron IPC to bypass CORS)
+  // Import from URL (uses Electron IPC to bypass CORS in desktop, fetch in web)
   async importFromUrl(url: string, options?: SpecImportOptions): Promise<SpecImportResult & { specSource: SpecSource }> {
-    if (!window.electronAPI?.fetchUrlContent) {
-      throw new Error('URL import is only available in the desktop app');
-    }
-
-    const result = await window.electronAPI.fetchUrlContent(url);
+    let content: string;
     
-    if (!result.success || !result.content) {
-      throw new Error(result.error || 'Failed to fetch URL content');
+    if (window.electronAPI?.fetchUrlContent) {
+      // Desktop app: use Electron IPC to bypass CORS
+      const result = await window.electronAPI.fetchUrlContent(url);
+      
+      if (!result.success || !result.content) {
+        throw new Error(result.error || 'Failed to fetch URL content');
+      }
+      content = result.content;
+    } else {
+      // Web mode: use fetch directly (requires CORS to be enabled on the server)
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
+      }
+      content = await response.text();
     }
 
-    const importResult = this.parseContent(result.content, options);
+    const importResult = this.parseContent(content, options);
     const now = Date.now();
     
     // Create spec source metadata

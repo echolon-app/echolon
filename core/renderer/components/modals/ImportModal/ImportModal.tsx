@@ -3,7 +3,7 @@ import { Modal, Button, Input } from '@/components/ui';
 import { 
   LinkIcon, FileIcon, CheckIcon, TerminalIcon, UploadIcon, SparkleIcon, EditIcon 
 } from '@/components/ui/icons';
-import { useApp, useCollections, useEnvironments, useRequest } from '@/contexts';
+import { useApp, useCollections, useRequest } from '@/contexts';
 import { specImporter, SpecImportOptions, ServerInfo } from '@/services';
 import { SpecFormat } from '@/types';
 import { parseCurlCommand, detectInputType, CURL_EXAMPLES, URL_EXAMPLES, InputType } from '@/utils/curlParser';
@@ -27,9 +27,8 @@ interface ParsedResult {
 }
 
 export const ImportModal: React.FC = () => {
-  const { importModalOpen, closeImportModal, logToConsole } = useApp();
+  const { importModalOpen, closeImportModal, logToConsole, settings } = useApp();
   const { importCollection, addCollection } = useCollections();
-  const { importEnvironment } = useEnvironments();
   const { addTab } = useRequest();
   
   const [smartInput, setSmartInput] = useState('');
@@ -214,7 +213,7 @@ export const ImportModal: React.FC = () => {
           type: 'request',
           title: result.request.name,
           request: result.request,
-          isDirty: true
+          isDirty: !settings.autoSave // Only mark dirty if auto-save is disabled
         });
         
         logToConsole('success', `Created request from curl: ${result.request.name}`);
@@ -230,7 +229,6 @@ export const ImportModal: React.FC = () => {
       };
       
       let collection;
-      let environments;
       
       if (parsedResult.type === 'url') {
         const url = smartInput.trim().startsWith('http') 
@@ -238,40 +236,21 @@ export const ImportModal: React.FC = () => {
           : 'https://' + smartInput.trim();
         const result = await specImporter.importFromUrl(url, options);
         collection = result.collection;
-        environments = result.environments;
       } else if (parsedResult.type === 'file' && file) {
         const result = await specImporter.parseFile(file, options);
         const specSource = specImporter.createFileSpecSource(result.rawSpec, result.format);
         result.collection.specSource = specSource;
         result.collection.importedAt = Date.now();
         collection = result.collection;
-        environments = result.environments;
       }
       
       if (collection) {
         importCollection(collection);
         logToConsole('success', `Imported collection: ${collection.name}`);
-      
-        // Import environments
-        if (environments && environments.length > 0) {
-        let importedCount = 0;
-        let skippedCount = 0;
         
-          for (const env of environments) {
-            const imported = importEnvironment(env, true);
-          if (imported) {
-            importedCount++;
-          } else {
-            skippedCount++;
-          }
-        }
-        
-        if (importedCount > 0) {
-          logToConsole('info', `Created ${importedCount} environment(s) from servers`);
-        }
-        if (skippedCount > 0) {
-          logToConsole('info', `Skipped ${skippedCount} environment(s) (already exist)`);
-          }
+        // Log collection environments if created from servers
+        if (collection.environments && collection.environments.length > 0) {
+          logToConsole('info', `Created ${collection.environments.length} environment(s) from servers`);
         }
       }
       

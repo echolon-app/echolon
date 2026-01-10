@@ -1,6 +1,9 @@
-import { Collection, Request, Folder, KeyValuePair, HttpMethod } from '@/types';
-import { SwaggerDocument, SwaggerPath } from '@/types';
+import { Collection, Request, Folder, KeyValuePair, HttpMethod, AuthConfig } from '@/types';
+import { SwaggerDocument, SwaggerPath, SwaggerSecurityScheme } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
+
+// Map of security scheme names to their definitions
+type SecuritySchemeMap = { [name: string]: SwaggerSecurityScheme };
 
 export class SwaggerImporter {
   private static instance: SwaggerImporter;
@@ -104,6 +107,15 @@ export class SwaggerImporter {
       baseUrl = `${scheme}://${doc.host}${doc.basePath || ''}`;
     }
 
+    // Get security schemes (OpenAPI 3.0 or Swagger 2.0)
+    const securitySchemes: SecuritySchemeMap = 
+      doc.components?.securitySchemes || 
+      doc.securityDefinitions || 
+      {};
+
+    // Get global security requirements
+    const globalSecurity = doc.security || [];
+
     // Group paths by tags or first path segment
     const groups: Map<string, Request[]> = new Map();
 
@@ -114,7 +126,10 @@ export class SwaggerImporter {
         const operation = (pathItem as SwaggerPath)[method];
         if (!operation) continue;
 
-        const request = this.createRequest(path, method, operation, baseUrl);
+        // Use operation-level security if defined, otherwise fall back to global
+        const operationSecurity = operation.security ?? globalSecurity;
+
+        const request = this.createRequest(path, method, operation, baseUrl, securitySchemes, operationSecurity);
 
         // Group by tag or path segment
         const groupName = this.getGroupName(path);
@@ -157,7 +172,9 @@ export class SwaggerImporter {
     path: string,
     method: string,
     operation: SwaggerPath[string],
-    baseUrl: string
+    baseUrl: string,
+    securitySchemes: SecuritySchemeMap,
+    operationSecurity: Array<{ [schemeName: string]: string[] }>
   ): Request {
     const headers: KeyValuePair[] = [];
     const queryParams: KeyValuePair[] = [];
@@ -184,6 +201,7 @@ export class SwaggerImporter {
     // Handle request body (OpenAPI 3.0)
     let bodyContent = '';
     let bodyType: 'none' | 'json' | 'form-data' | 'x-www-form-urlencoded' | 'raw' = 'none';
+    let formData: KeyValuePair[] = [];
 
     if (operation.requestBody?.content) {
       const contentTypes = Object.keys(operation.requestBody.content);
@@ -197,10 +215,23 @@ export class SwaggerImporter {
         });
       } else if (contentTypes.includes('application/x-www-form-urlencoded')) {
         bodyType = 'x-www-form-urlencoded';
+        // Parse schema properties to create form data entries
+        const formContent = operation.requestBody.content['application/x-www-form-urlencoded'];
+        if (formContent?.schema) {
+          formData = this.parseSchemaToFormData(formContent.schema);
+        }
       } else if (contentTypes.includes('multipart/form-data')) {
         bodyType = 'form-data';
+        // Parse schema properties to create form data entries
+        const formContent = operation.requestBody.content['multipart/form-data'];
+        if (formContent?.schema) {
+          formData = this.parseSchemaToFormData(formContent.schema);
+        }
       }
     }
+
+    // Convert security requirements to auth config
+    const auth = this.convertSecurityToAuth(operationSecurity, securitySchemes);
 
     return {
       id: uuidv4(),
@@ -212,10 +243,215 @@ export class SwaggerImporter {
       body: {
         type: bodyType,
         content: bodyContent,
+        formData: formData.length > 0 ? formData : undefined,
       },
-      auth: { type: 'none' },
+      auth,
       scripts: { pre: '', post: '' },
     };
+  }
+
+  /**
+   * Convert OpenAPI security requirements to Echolon AuthConfig
+   */
+  private convertSecurityToAuth(
+    security: Array<{ [schemeName: string]: string[] }>,
+    securitySchemes: SecuritySchemeMap
+  ): AuthConfig {
+    // If no security requirements, return 'none'
+    if (!security || security.length === 0) {
+      return { type: 'none' };
+    }
+
+    // Get the first security requirement (we only support one at a time)
+    const firstRequirement = security[0];
+    const schemeName = Object.keys(firstRequirement)[0];
+    
+    if (!schemeName) {
+      return { type: 'none' };
+    }
+
+    const scheme = securitySchemes[schemeName];
+    if (!scheme) {
+      return { type: 'none' };
+    }
+
+    // Map OpenAPI security scheme to Echolon auth type
+    switch (scheme.type) {
+      case 'http':
+        if (scheme.scheme === 'basic') {
+          return {
+            type: 'basic',
+            basic: { username: '', password: '' },
+          };
+        }
+        if (scheme.scheme === 'bearer') {
+          if (scheme.bearerFormat === 'JWT') {
+            return {
+              type: 'jwt',
+              jwt: { token: '', prefix: 'Bearer' },
+            };
+          }
+          return {
+            type: 'bearer',
+            bearer: { token: '' },
+          };
+        }
+        if (scheme.scheme === 'digest') {
+          return {
+            type: 'digest',
+            digest: { username: '', password: '' },
+          };
+        }
+        break;
+
+      case 'apiKey':
+        // Check for AWS Signature v4 extension
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((scheme as any)['x-amazon-apigateway-authtype'] === 'awsSigv4') {
+          return {
+            type: 'aws-signature',
+            awsSignature: {
+              accessKeyId: '',
+              secretAccessKey: '',
+              region: 'us-east-1',
+              service: 'execute-api',
+            },
+          };
+        }
+        return {
+          type: 'api-key',
+          apiKey: {
+            key: scheme.name || 'X-API-Key',
+            value: '',
+            addTo: scheme.in === 'query' ? 'query' : 'header',
+          },
+        };
+
+      case 'oauth2':
+        // Determine grant type from available flows
+        let grantType: 'authorization_code' | 'client_credentials' | 'password' | 'implicit' = 'authorization_code';
+        let authorizationUrl = '';
+        let tokenUrl = '';
+        
+        if (scheme.flows?.authorizationCode) {
+          grantType = 'authorization_code';
+          authorizationUrl = scheme.flows.authorizationCode.authorizationUrl;
+          tokenUrl = scheme.flows.authorizationCode.tokenUrl;
+        } else if (scheme.flows?.clientCredentials) {
+          grantType = 'client_credentials';
+          tokenUrl = scheme.flows.clientCredentials.tokenUrl;
+        } else if (scheme.flows?.password) {
+          grantType = 'password';
+          tokenUrl = scheme.flows.password.tokenUrl;
+        } else if (scheme.flows?.implicit) {
+          grantType = 'implicit';
+          authorizationUrl = scheme.flows.implicit.authorizationUrl;
+        }
+
+        return {
+          type: 'oauth2',
+          oauth2: {
+            grantType,
+            accessToken: '',
+            tokenType: 'Bearer',
+            clientId: '',
+            authorizationUrl,
+            tokenUrl,
+          },
+        };
+
+      case 'openIdConnect':
+        // Map to OAuth2 with authorization_code flow
+        return {
+          type: 'oauth2',
+          oauth2: {
+            grantType: 'authorization_code',
+            accessToken: '',
+            tokenType: 'Bearer',
+            clientId: '',
+          },
+        };
+    }
+
+    return { type: 'none' };
+  }
+
+  // Parse OpenAPI schema to form data entries
+  private parseSchemaToFormData(
+    schema: { 
+      type?: string;
+      properties?: Record<string, {
+        type?: string;
+        format?: string;
+        description?: string;
+        enum?: unknown[];
+        default?: unknown;
+        example?: unknown;
+      }>;
+      required?: string[];
+    }
+  ): KeyValuePair[] {
+    const formData: KeyValuePair[] = [];
+
+    if (schema.properties) {
+      const requiredFields = schema.required || [];
+      
+      for (const [propName, propSchema] of Object.entries(schema.properties)) {
+        const isRequired = requiredFields.includes(propName);
+        
+        // Get sample value for this property
+        let value = '';
+        if (propSchema.example !== undefined) {
+          value = String(propSchema.example);
+        } else if (propSchema.default !== undefined) {
+          value = String(propSchema.default);
+        } else if (propSchema.enum && propSchema.enum.length > 0) {
+          value = String(propSchema.enum[0]);
+        } else {
+          value = this.getSampleValueByType(propSchema.type, propSchema.format);
+        }
+
+        formData.push({
+          id: uuidv4(),
+          key: propName,
+          value,
+          description: propSchema.description || undefined,
+          enabled: isRequired,
+        });
+      }
+    }
+
+    return formData;
+  }
+
+  // Get sample value based on type and format
+  private getSampleValueByType(type?: string, format?: string): string {
+    switch (type) {
+      case 'integer':
+        return '0';
+      case 'number':
+        return '0.0';
+      case 'boolean':
+        return 'true';
+      case 'string':
+        switch (format) {
+          case 'date':
+            return new Date().toISOString().split('T')[0];
+          case 'date-time':
+            return new Date().toISOString();
+          case 'email':
+            return 'user@example.com';
+          case 'uri':
+          case 'url':
+            return 'https://example.com';
+          case 'uuid':
+            return '00000000-0000-0000-0000-000000000000';
+          default:
+            return '';
+        }
+      default:
+        return '';
+    }
   }
 
   // Validate if content is valid Swagger/OpenAPI

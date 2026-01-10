@@ -26,6 +26,8 @@
 
 .websocket-panel__url-input {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .websocket-panel__connect-btn {

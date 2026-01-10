@@ -1,5 +1,6 @@
 export * from './Button';
 export * from './Input';
+export * from './SimpleInput';
 export * from './SearchInput';
 export * from './Modal';
 export * from './Dropdown';
@@ -17,5 +18,8 @@ export * from './DiffViewer';
 export * from './CodeEditor';
 export * from './ColorEmojiPicker';
 export * from './ProgressBar';
+export * from './TagInput';
+export * from './Badge';
+export * from './StorageBanner';
 export * from './icons';
 

@@ -514,6 +514,56 @@ class FileStorageManager extends EventEmitter {
   }
 
   /**
+   * Write an OpenAPI spec file for a collection version
+   * This creates an openapi.json file in a subfolder: {collectionId}/{version}/openapi.json
+   * to prevent it from being picked up by the collections loader and to keep version history
+   */
+  async writeCollectionOpenAPI(workspaceName: string, collectionId: string, openapiJson: string, version?: string): Promise<boolean> {
+    const collectionsDir = this.getCollectionsPath(workspaceName);
+    // Use version subfolder if provided, otherwise just the collection ID folder
+    const openapiDir = version 
+      ? path.join(collectionsDir, collectionId, version)
+      : path.join(collectionsDir, collectionId);
+    const openapiPath = path.join(openapiDir, 'openapi.json');
+    
+    try {
+      // Ensure the folder exists
+      if (!fs.existsSync(openapiDir)) {
+        fs.mkdirSync(openapiDir, { recursive: true });
+      }
+      
+      // Parse and re-stringify to ensure valid JSON and pretty print
+      const parsed = JSON.parse(openapiJson);
+      const formatted = JSON.stringify(parsed, null, 2);
+      fs.writeFileSync(openapiPath, formatted, 'utf-8');
+      return true;
+    } catch (error) {
+      console.error('Error writing OpenAPI file:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Read an OpenAPI spec file for a collection (optionally a specific version)
+   */
+  async readCollectionOpenAPI(workspaceName: string, collectionId: string, version?: string): Promise<string | null> {
+    const collectionsDir = this.getCollectionsPath(workspaceName);
+    const openapiPath = version
+      ? path.join(collectionsDir, collectionId, version, 'openapi.json')
+      : path.join(collectionsDir, collectionId, 'openapi.json');
+    
+    try {
+      if (!fs.existsSync(openapiPath)) {
+        return null;
+      }
+      return fs.readFileSync(openapiPath, 'utf-8');
+    } catch (error) {
+      console.error('Error reading OpenAPI file:', error);
+      return null;
+    }
+  }
+
+  /**
    * Rename a collection (file rename)
    */
   async renameCollection(workspaceName: string, oldName: string, newName: string): Promise<boolean> {
@@ -562,6 +612,126 @@ class FileStorageManager extends EventEmitter {
       }))
     );
     return results;
+  }
+
+  // ==================== Request History Operations ====================
+
+  /**
+   * Get the path to a workspace's history directory
+   */
+  getHistoryPath(workspaceName: string): string {
+    return path.join(this.getWorkspacePath(workspaceName), 'history');
+  }
+
+  /**
+   * Ensure history directory exists with .gitignore
+   */
+  private async ensureHistoryDirectory(workspaceName: string): Promise<void> {
+    const historyPath = this.getHistoryPath(workspaceName);
+    if (!fs.existsSync(historyPath)) {
+      fs.mkdirSync(historyPath, { recursive: true });
+    }
+    
+    // Create .gitignore to exclude history from git by default
+    const gitignorePath = path.join(historyPath, '.gitignore');
+    if (!fs.existsSync(gitignorePath)) {
+      fs.writeFileSync(gitignorePath, '# Request history is excluded from git by default\n*\n!.gitignore\n', 'utf-8');
+    }
+  }
+
+  /**
+   * Get the path to a workspace's history file
+   */
+  getHistoryFilePath(workspaceName: string): string {
+    return path.join(this.getHistoryPath(workspaceName), 'history.json');
+  }
+
+  /**
+   * Read request history from disk for a workspace
+   */
+  async readHistory<T>(workspaceName: string): Promise<T | null> {
+    await this.ensureHistoryDirectory(workspaceName);
+    return this.readJsonFile<T>(this.getHistoryFilePath(workspaceName));
+  }
+
+  /**
+   * Write request history to disk for a workspace
+   */
+  async writeHistory<T>(workspaceName: string, data: T): Promise<boolean> {
+    await this.ensureHistoryDirectory(workspaceName);
+    return this.writeJsonFile(this.getHistoryFilePath(workspaceName), data);
+  }
+
+  /**
+   * Clear history for a workspace
+   */
+  async clearHistory(workspaceName: string): Promise<boolean> {
+    const historyPath = this.getHistoryFilePath(workspaceName);
+    if (fs.existsSync(historyPath)) {
+      return this.deleteFile(historyPath);
+    }
+    return true;
+  }
+
+  // ==================== Workspace Data Files ====================
+  // These store workspace-specific state like sync states, pending changes, etc.
+
+  /**
+   * Get the path to a workspace's .echolon data directory
+   */
+  getWorkspaceDataPath(workspaceName: string): string {
+    return path.join(this.getWorkspacePath(workspaceName), '.echolon');
+  }
+
+  /**
+   * Ensure workspace data directory exists with .gitignore
+   */
+  private async ensureWorkspaceDataDirectory(workspaceName: string): Promise<void> {
+    const dataPath = this.getWorkspaceDataPath(workspaceName);
+    if (!fs.existsSync(dataPath)) {
+      fs.mkdirSync(dataPath, { recursive: true });
+    }
+    
+    // Create .gitignore to exclude internal data from git by default
+    const gitignorePath = path.join(dataPath, '.gitignore');
+    if (!fs.existsSync(gitignorePath)) {
+      fs.writeFileSync(gitignorePath, '# Internal Echolon data is excluded from git by default\n*\n!.gitignore\n', 'utf-8');
+    }
+  }
+
+  /**
+   * Get the path to a workspace data file
+   */
+  getWorkspaceDataFilePath(workspaceName: string, filename: string): string {
+    const safeFilename = this.sanitizeFilename(filename);
+    return path.join(this.getWorkspaceDataPath(workspaceName), `${safeFilename}.json`);
+  }
+
+  /**
+   * Read a workspace-specific data file
+   */
+  async readWorkspaceDataFile<T>(workspaceName: string, filename: string): Promise<T | null> {
+    await this.ensureWorkspaceDataDirectory(workspaceName);
+    return this.readJsonFile<T>(this.getWorkspaceDataFilePath(workspaceName, filename));
+  }
+
+  /**
+   * Write a workspace-specific data file
+   */
+  async writeWorkspaceDataFile<T>(workspaceName: string, filename: string, data: T): Promise<boolean> {
+    await this.ensureWorkspaceDataDirectory(workspaceName);
+    return this.writeJsonFile(this.getWorkspaceDataFilePath(workspaceName, filename), data);
+  }
+
+  /**
+   * Delete a workspace-specific data file
+   */
+  async deleteWorkspaceDataFile(workspaceName: string, filename: string): Promise<boolean> {
+    const filePath = this.getWorkspaceDataFilePath(workspaceName, filename);
+    if (fs.existsSync(filePath)) {
+      return this.deleteFile(filePath);
+    }
+    return true;
   }
 
   // ==================== Mocking Data Operations ====================

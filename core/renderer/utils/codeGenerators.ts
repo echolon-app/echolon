@@ -1,4 +1,9 @@
-import { Request, Environment, Collection, KeyValuePair, AuthConfig } from '@/types';
+import { Request, Environment, Collection, KeyValuePair, AuthConfig, ResolvedRequest } from '@/types';
+import {
+  isFunction,
+  parseFunction,
+  evaluateFunction,
+} from '@/services/DynamicFunctions';
 
 export function interpolateVariables(
   text: string,
@@ -14,8 +19,8 @@ export function interpolateVariables(
   });
 }
 
-// Interpolate both environment variables and path parameters
-// Collection variables have priority over global environment variables
+// Interpolate both environment variables, functions, and path parameters
+// Priority: collection environment > collection variables > global environment > functions
 export function interpolateAll(
   text: string,
   environment: Environment | null,
@@ -29,15 +34,14 @@ export function interpolateAll(
   // Get active collection environment (if any)
   const activeCollectionEnv = collection?.environments?.find(e => e.isActive);
   
-  // Interpolate environment variables {{var}}
-  // Priority: collection environment > collection variables > global environment
-  result = result.replace(/\{\{([^}]+)\}\}/g, (match, varName) => {
-    const trimmedName = varName.trim();
+  // Interpolate environment variables and functions {{var}} or {{function}}
+  result = result.replace(/\{\{([^}]+)\}\}/g, (match, expression) => {
+    const trimmedExpr = expression.trim();
     
     // 1. Check active collection environment first (highest priority)
     if (activeCollectionEnv) {
       const collEnvVar = activeCollectionEnv.variables.find(
-        v => v.key === trimmedName && v.enabled
+        v => v.key === trimmedExpr && v.enabled
       );
       if (collEnvVar) return collEnvVar.value;
     }
@@ -45,17 +49,25 @@ export function interpolateAll(
     // 2. Check collection-level variables
     if (collection?.variables) {
       const collVar = collection.variables.find(
-        v => v.key === trimmedName && v.enabled
+        v => v.key === trimmedExpr && v.enabled
       );
       if (collVar) return collVar.value;
     }
     
-    // 3. Fall back to global environment
+    // 3. Check global environment
     if (environment) {
       const globalVar = environment.variables.find(
-        v => v.key === trimmedName && v.enabled
+        v => v.key === trimmedExpr && v.enabled
       );
       if (globalVar) return globalVar.value;
+    }
+    
+    // 4. Check if it's a dynamic function
+    if (isFunction(trimmedExpr)) {
+      const parsed = parseFunction(trimmedExpr);
+      if (parsed) {
+        return evaluateFunction(parsed.functionName, parsed.parameters);
+      }
     }
     
     return match; // Keep original if not found
@@ -128,18 +140,28 @@ function buildHeaders(
 ): Record<string, string> {
   const headers: Record<string, string> = {};
   
+  // Get disabled inherited header overrides from request
+  const disabledInheritedHeaderIds = new Set<string>();
+  request.headers
+    .filter(h => h.id?.startsWith('__inherited_header_override__') && !h.enabled)
+    .forEach(h => {
+      disabledInheritedHeaderIds.add(h.key);
+    });
+  
   // First, add collection-level headers (can be overridden by request headers)
+  // Skip headers that have been disabled via overrides
   if (collection?.headers) {
     collection.headers
-      .filter(h => h.enabled && h.key)
+      .filter(h => h.enabled && h.key && !disabledInheritedHeaderIds.has(h.id))
       .forEach(h => {
         headers[interpolate(h.key)] = interpolate(h.value);
       });
   }
   
   // Then add request-level headers (these override collection headers)
+  // Filter out override markers
   request.headers
-    .filter(h => h.enabled && h.key)
+    .filter(h => h.enabled && h.key && !h.id?.startsWith('__inherited_header_override__'))
     .forEach(h => {
       headers[interpolate(h.key)] = interpolate(h.value);
     });
@@ -229,6 +251,30 @@ export function generateCurl(request: Request, environment: Environment | null =
   }
 
   parts.push(`'${url}'`);
+  return parts.join(' \\\n  ');
+}
+
+/**
+ * Generate cURL command from already-resolved request data
+ * Used for displaying history entries where interpolation has already been done
+ */
+export function generateCurlFromResolved(resolvedRequest: ResolvedRequest): string {
+  const parts: string[] = ['curl'];
+
+  if (resolvedRequest.method !== 'GET') {
+    parts.push(`-X ${resolvedRequest.method}`);
+  }
+
+  // Add all headers
+  resolvedRequest.headers.forEach(({ key, value }) => {
+    parts.push(`-H '${key}: ${escape.singleQuote(value)}'`);
+  });
+
+  if (resolvedRequest.body) {
+    parts.push(`-d '${escape.singleQuote(resolvedRequest.body)}'`);
+  }
+
+  parts.push(`'${resolvedRequest.url}'`);
   return parts.join(' \\\n  ');
 }
 

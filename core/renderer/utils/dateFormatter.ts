@@ -173,8 +173,15 @@ export function formatRelativeDate(
     return `Yesterday at ${timeStr}`;
   }
   
-  // For older dates, show month and day
-  return d.toLocaleDateString(loc, { month: 'short', day: 'numeric' });
+  // For older dates, show month and day, with 2-digit year if not current year
+  const isCurrentYear = d.getFullYear() === now.getFullYear();
+  if (isCurrentYear) {
+    return d.toLocaleDateString(loc, { month: 'short', day: 'numeric' }) + ` at ${timeStr}`;
+  }
+  
+  // Show 2-digit year for dates in different years
+  const shortYear = String(d.getFullYear()).slice(-2);
+  return d.toLocaleDateString(loc, { month: 'short', day: 'numeric' }) + ` '${shortYear} at ${timeStr}`;
 }
 
 /**

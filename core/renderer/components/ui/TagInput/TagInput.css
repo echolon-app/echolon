@@ -1,0 +1,129 @@
+.tag-input {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  width: 100%;
+}
+
+.tag-input--disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.tag-input__tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-md);
+  min-height: 42px;
+  cursor: text;
+  transition: border-color var(--transition-fast);
+}
+
+.tag-input__tags:hover {
+  border-color: var(--border-hover);
+}
+
+.tag-input__tags:focus-within {
+  border-color: var(--color-primary);
+}
+
+.tag-input__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background-color: var(--color-primary);
+  color: white;
+  border-radius: var(--radius-full);
+  font-size: var(--font-xs);
+  font-weight: 500;
+  white-space: nowrap;
+  animation: tag-appear 0.15s ease-out;
+}
+
+@keyframes tag-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.tag-input__tag-text {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tag-input__tag-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 50%;
+  color: white;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.tag-input__tag-remove:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.tag-input__tag-remove svg {
+  width: 10px;
+  height: 10px;
+}
+
+.tag-input__input {
+  flex: 1;
+  min-width: 120px;
+  padding: 4px 0;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+  outline: none;
+}
+
+.tag-input__input::placeholder {
+  color: var(--input-placeholder);
+}
+
+.tag-input__input:disabled {
+  cursor: not-allowed;
+}
+
+.tag-input__hint {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+}
+
+.tag-input__hint kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+

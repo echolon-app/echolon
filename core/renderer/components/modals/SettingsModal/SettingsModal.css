@@ -262,6 +262,45 @@
   width: 100%;
 }
 
+.settings-modal__plans-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl) var(--spacing-lg);
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.settings-modal__plans-error svg {
+  width: 40px;
+  height: 40px;
+  color: var(--text-tertiary);
+  margin-bottom: var(--spacing-md);
+}
+
+.settings-modal__plans-error h4 {
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-sm);
+}
+
+.settings-modal__plans-error p {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.settings-modal__plans-error a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.settings-modal__plans-error a:hover {
+  text-decoration: underline;
+}
+
 /* About tab styles */
 .settings-modal__about-info {
   display: flex;
@@ -365,7 +404,7 @@
 .settings-modal__theme-card.active {
   border-color: var(--theme-primary, var(--color-primary));
   box-shadow: 0 0 0 1px var(--theme-primary, var(--color-primary)),
-              0 0 20px color-mix(in srgb, var(--theme-primary, var(--color-primary)) 20%, transparent);
+              0 0 20px rgba(99, 102, 241, 0.2);
 }
 
 .settings-modal__theme-preview {
@@ -380,7 +419,7 @@
 .settings-modal__theme-preview-sidebar {
   width: 28px;
   background-color: var(--theme-bg-2);
-  border-right: 1px solid color-mix(in srgb, var(--theme-accent-1) 20%, transparent);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .settings-modal__theme-preview-main {
@@ -392,7 +431,7 @@
 .settings-modal__theme-preview-topbar {
   height: 14px;
   background-color: var(--theme-bg-1);
-  border-bottom: 1px solid color-mix(in srgb, var(--theme-accent-1) 15%, transparent);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .settings-modal__theme-preview-content {
@@ -564,125 +603,181 @@
   gap: var(--spacing-sm);
 }
 
-/* Workspace Environments Panel */
-.settings-modal__env-add {
-  display: flex;
-  gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-md);
+
+.settings-modal__priority-list strong {
+  color: var(--text-primary);
 }
 
-.settings-modal__env-add .input-wrapper {
-  flex: 1;
+/* Danger Zone Section */
+.settings-modal__section--danger {
+  border-top: 1px solid var(--color-error-alpha);
+  padding-top: var(--spacing-lg);
+  margin-top: var(--spacing-lg);
 }
 
-.settings-modal__env-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-md);
-  overflow: hidden;
+.settings-modal__section--danger h3 {
+  color: var(--color-error);
 }
 
-.settings-modal__env-item {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
-  background: var(--bg-secondary);
-  cursor: pointer;
-  transition: background var(--transition-fast);
-}
-
-.settings-modal__env-item:hover {
-  background: var(--bg-hover);
-}
-
-.settings-modal__env-item.selected {
-  background: var(--color-primary-alpha);
-  border-left: 3px solid var(--color-primary);
-}
-
-.settings-modal__env-color {
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-sm);
+/* Confirmation Modal Overlay */
+.settings-modal__confirmation-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.9em;
-  flex-shrink: 0;
+  z-index: 10000;
 }
 
-.settings-modal__env-name {
-  flex: 1;
-  font-weight: 500;
-}
-
-.settings-modal__env-vars {
-  font-size: var(--font-xs);
-  color: var(--text-muted);
-}
-
-.settings-modal__env-delete {
-  padding: var(--spacing-xs);
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  opacity: 0;
-  transition: all var(--transition-fast);
-}
-
-.settings-modal__env-item:hover .settings-modal__env-delete {
-  opacity: 1;
-}
-
-.settings-modal__env-delete:hover {
-  color: var(--color-danger);
-  background: var(--color-danger-alpha);
-}
-
-.settings-modal__env-delete svg {
-  width: 14px;
-  height: 14px;
-}
-
-.settings-modal__env-editor {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
-}
-
-.settings-modal__env-header {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
-.settings-modal__env-header .input-wrapper {
-  flex: 1;
-}
-
-.settings-modal__env-variables {
+.settings-modal__confirmation-modal {
+  background-color: var(--bg-primary);
   border: 1px solid var(--border-primary);
-  border-radius: var(--radius-md);
-  overflow: hidden;
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl);
+  max-width: 450px;
+  width: 90%;
+  box-shadow: var(--shadow-xl);
 }
 
-.settings-modal__priority-list {
-  margin: var(--spacing-md) 0;
+.settings-modal__confirmation-modal h3 {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: var(--font-lg);
+  color: var(--color-error);
+}
+
+.settings-modal__confirmation-modal p {
+  margin: 0 0 var(--spacing-sm) 0;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  line-height: 1.5;
+}
+
+.settings-modal__confirmation-modal ul {
+  margin: 0 0 var(--spacing-md) 0;
   padding-left: var(--spacing-lg);
   color: var(--text-secondary);
   font-size: var(--font-sm);
   line-height: 1.8;
 }
 
-.settings-modal__priority-list li {
+.settings-modal__confirmation-modal li {
   margin-bottom: var(--spacing-xs);
 }
 
-.settings-modal__priority-list strong {
+.settings-modal__confirmation-modal code {
+  background-color: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--color-error);
+  font-weight: 600;
+}
+
+.settings-modal__confirmation-modal input {
+  margin-bottom: var(--spacing-md);
+}
+
+.settings-modal__confirmation-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-lg);
+}
+
+/* LocalStorage Debug View */
+.settings-modal__localstorage-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm);
+  background-color: var(--bg-secondary);
+}
+
+.settings-modal__localstorage-item {
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-sm);
+}
+
+.settings-modal__localstorage-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-xs);
+}
+
+.settings-modal__localstorage-key {
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  color: var(--color-primary);
+  background-color: var(--color-primary-alpha);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.settings-modal__localstorage-size {
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+}
+
+.settings-modal__localstorage-value {
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  background-color: var(--bg-tertiary);
+  padding: var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 100px;
+  overflow-y: auto;
+  line-height: 1.4;
+}
+
+/* Warning box for unsupported features */
+.settings-modal__warning-box {
+  display: flex;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background-color: color-mix(in srgb, var(--color-warning, #f59e0b) 10%, var(--bg-secondary));
+  border: 1px solid color-mix(in srgb, var(--color-warning, #f59e0b) 30%, var(--border-primary));
+  border-radius: var(--radius-md);
+  align-items: flex-start;
+}
+
+.settings-modal__warning-box svg {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  color: var(--color-warning, #f59e0b);
+}
+
+.settings-modal__warning-box > div {
+  flex: 1;
+}
+
+.settings-modal__warning-box p {
+  margin: 0;
+  font-size: var(--font-sm);
   color: var(--text-primary);
+}
+
+.settings-modal__warning-box p:first-child {
+  margin-bottom: var(--spacing-xs);
+}
+
+.settings-modal__warning-box .settings-modal__field-description {
+  max-width: none;
 }

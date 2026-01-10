@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { MainLayout } from '@/components/layout';
 import { LeftPanel, CenterPanel, RightPanel, ConsolePanel, CodePanel, MockingPanel, APIReferencePanel } from '@/components/panels';
 import { SettingsModal, ImportModal, GlobalSearchModal, NewCollectionModal, NewEnvironmentModal, MoveCollectionModal, ShortcutsModal, UpdateModal } from '@/components/modals';
@@ -28,6 +28,7 @@ export const App: React.FC = () => {
   const { 
     openSettingsModal, 
     openGlobalSearch,
+    openShortcutsModal,
     cycleSidebarState,
     toggleConsole,
     showCodePanel,
@@ -38,7 +39,7 @@ export const App: React.FC = () => {
     logToConsole,
     settings
   } = useApp();
-  const { sendRequest, addTab, addCollectionTab } = useRequest();
+  const { sendRequest, addTab, addCollectionTab, closeTab, activeTabId, currentExecution, updateTab } = useRequest();
   const { isLoading: dataLoading, timings } = useDataLoader();
   const { addToast } = useToast();
   const { collections } = useCollections();
@@ -56,14 +57,70 @@ export const App: React.FC = () => {
     addCollectionTabRef.current = addCollectionTab;
   }, [addCollectionTab]);
 
+  // Handler to copy current response to clipboard
+  const handleCopyResponse = useCallback(async () => {
+    const response = currentExecution?.response;
+    if (!response?.body) {
+      addToast({ type: 'info', message: 'No response to copy' });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(response.body);
+      addToast({ type: 'success', message: 'Response copied to clipboard' });
+    } catch (err) {
+      addToast({ type: 'error', message: 'Failed to copy response' });
+    }
+  }, [currentExecution, addToast]);
+
+  // Handler to download current response as file
+  const handleDownloadResponse = useCallback(() => {
+    const response = currentExecution?.response;
+    if (!response?.body) {
+      addToast({ type: 'info', message: 'No response to download' });
+      return;
+    }
+    try {
+      const blob = new Blob([response.body], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `response-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      addToast({ type: 'success', message: 'Response downloaded' });
+    } catch (err) {
+      addToast({ type: 'error', message: 'Failed to download response' });
+    }
+  }, [currentExecution, addToast]);
+
+  // Handle CMD+S to save (clears dirty indicator)
+  const handleSaveRequest = useCallback(() => {
+    if (activeTabId) {
+      // Clear the dirty flag - changes are already auto-saved via debounce
+      updateTab(activeTabId, { isDirty: false });
+      // Only show toast if auto-save is disabled (manual save mode)
+      if (!settings.autoSave) {
+        addToast({ type: 'success', message: 'Saved' });
+      }
+    }
+  }, [activeTabId, updateTab, settings.autoSave, addToast]);
+
   // Global keyboard shortcuts
   useGlobalShortcuts({
     onSendRequest: sendRequest,
     onOpenSettings: openSettingsModal,
     onNewRequest: () => addTab(),
+    onNewTab: () => addTab(),
+    onCloseTab: () => activeTabId && closeTab(activeTabId),
+    onSaveRequest: handleSaveRequest,
     onOpenSearch: openGlobalSearch,
     onToggleSidebar: cycleSidebarState,
     onToggleConsole: toggleConsole,
+    onOpenShortcuts: openShortcutsModal,
+    onDownloadResponse: handleDownloadResponse,
+    onCopyResponse: handleCopyResponse,
   });
 
   // Listen for menu events from main process

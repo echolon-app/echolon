@@ -5,7 +5,7 @@
   width: 100%;
   background-color: var(--input-bg);
   border: 1px solid var(--input-border);
-  border-radius: var(--radius-md);
+  border-radius: 2px;
   transition: all var(--transition-fast);
   z-index: 1;
 }
@@ -334,4 +334,79 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Function variable styling */
+.input__variable--function {
+  background-color: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+}
+
+.input__variable--function:hover {
+  filter: brightness(1.2);
+}
+
+/* Grouped suggestions */
+.input__suggestions-group {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.input__suggestions-group:last-child {
+  border-bottom: none;
+}
+
+.input__suggestions-group-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 6px 12px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  background-color: var(--bg-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.input__suggestion--function {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.input__suggestion-main {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+}
+
+.input__suggestion-fn-icon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: #34d399;
+  background-color: rgba(16, 185, 129, 0.15);
+  border-radius: var(--radius-sm);
+}
+
+.input__suggestion-name {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+}
+
+.input__suggestion-description {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  padding-left: 26px;
+  line-height: 1.3;
 }

@@ -22,30 +22,19 @@ const shortcutSections: ShortcutSection[] = [
   {
     title: 'General',
     items: [
-      { label: 'Help menu', keys: ['?'] },
       { label: 'Search & command menu', keys: [cmdKey, 'K'] },
-      { label: 'Keyboard shortcuts', keys: [cmdKey, '/'] },
-      { label: 'Close current menu', keys: ['ESC'] },
-      { label: 'Undo', keys: [cmdKey, 'Z'] },
-      { label: 'Redo', keys: [cmdKey, 'Y'] },
-      { label: 'Comment/Uncomment', keys: [cmdKey, '/'] },
+      { label: 'Keyboard shortcuts', keys: [cmdKey, 'O'] },
+      { label: 'New Tab', keys: [cmdKey, 'E'] },
       { label: 'Close Tab', keys: [cmdKey, 'D'] },
+      { label: 'Toggle sidebar', keys: [cmdKey, 'B'] },
+      { label: 'Close current menu', keys: ['ESC'] },
     ],
   },
   {
     title: 'Request',
     items: [
       { label: 'Send Request', keys: [cmdKey, '↵'] },
-      { label: 'Save to Collections', keys: [cmdKey, 'S'] },
-      { label: 'Share Request', keys: [cmdKey, 'U'] },
-      { label: 'Reset Request', keys: [cmdKey, 'I'] },
-      { label: 'Select Next method', keys: [optKey, '↑'] },
-      { label: 'Select Previous method', keys: [optKey, '↓'] },
-      { label: 'Select GET method', keys: [optKey, 'G'] },
-      { label: 'Select HEAD method', keys: [optKey, 'H'] },
-      { label: 'Select POST method', keys: [optKey, 'P'] },
-      { label: 'Select PUT method', keys: [optKey, 'U'] },
-      { label: 'Select DELETE method', keys: [optKey, 'X'] },
+      { label: 'Save Request', keys: [cmdKey, 'Z'] },
     ],
   },
   {
@@ -63,6 +52,21 @@ export const ShortcutsModal: React.FC = () => {
   const { shortcutsModalOpen, closeShortcutsModal } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
   const [isVisible, setIsVisible] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(
+    () => new Set(shortcutSections.map((s) => s.title))
+  );
+
+  const toggleSection = (title: string) => {
+    setExpandedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(title)) {
+        next.delete(title);
+      } else {
+        next.add(title);
+      }
+      return next;
+    });
+  };
 
   // Handle animation states
   useEffect(() => {
@@ -122,28 +126,34 @@ export const ShortcutsModal: React.FC = () => {
         </div>
 
         <div className="shortcuts-panel__content">
-          {filteredSections.map((section) => (
-            <div key={section.title} className="shortcuts-panel__section">
-              <button className="shortcuts-panel__section-header">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="m6 9 6 6 6-6"/>
-                </svg>
-                <span>{section.title}</span>
-              </button>
-              <div className="shortcuts-panel__items">
-                {section.items.map((item) => (
-                  <div key={item.label} className="shortcuts-panel__item">
-                    <span className="shortcuts-panel__item-label">{item.label}</span>
-                    <div className="shortcuts-panel__item-keys">
-                      {item.keys.map((key, idx) => (
-                        <kbd key={idx}>{key}</kbd>
-                      ))}
+          {filteredSections.map((section) => {
+            const isExpanded = expandedSections.has(section.title);
+            return (
+              <div key={section.title} className="shortcuts-panel__section">
+                <button
+                  className={`shortcuts-panel__section-header ${!isExpanded ? 'shortcuts-panel__section-header--collapsed' : ''}`}
+                  onClick={() => toggleSection(section.title)}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="m6 9 6 6 6-6"/>
+                  </svg>
+                  <span>{section.title}</span>
+                </button>
+                <div className={`shortcuts-panel__items ${!isExpanded ? 'shortcuts-panel__items--collapsed' : ''}`}>
+                  {section.items.map((item) => (
+                    <div key={item.label} className="shortcuts-panel__item">
+                      <span className="shortcuts-panel__item-label">{item.label}</span>
+                      <div className="shortcuts-panel__item-keys">
+                        {item.keys.map((key, idx) => (
+                          <kbd key={idx}>{key}</kbd>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </>

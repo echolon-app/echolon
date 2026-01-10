@@ -12,6 +12,7 @@ import {
   ToastProvider,
   DataLoaderProvider,
   GitHubProvider,
+  GitProvider,
   WebModeProvider,
   Reference2Provider,
   FileStorageProvider,
@@ -32,6 +33,7 @@ root.render(
                 <AppProvider>
                   <WorkspaceProvider>
                     <GitHubProvider>
+                      <GitProvider>
                       <CollectionsProvider>
                         <EnvironmentsProvider>
                           <MockingProvider>
@@ -42,6 +44,7 @@ root.render(
                           </MockingProvider>
                         </EnvironmentsProvider>
                       </CollectionsProvider>
+                      </GitProvider>
                     </GitHubProvider>
                   </WorkspaceProvider>
                 </AppProvider>

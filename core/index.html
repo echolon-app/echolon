@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src *;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; object-src 'self' blob:; frame-src 'self' blob:; connect-src *;">
     <title>Echolon</title>
     
     <!-- Record startup time as early as possible -->
@@ -11,7 +11,7 @@
       window.__APP_START_TIME__ = performance.now();
     </script>
     
-    <!-- Sync theme from localStorage before any paint -->
+    <!-- Sync theme and font size from localStorage before any paint -->
     <script>
       (function() {
         try {
@@ -31,6 +31,23 @@
           // Apply immediately to prevent flash
           document.documentElement.setAttribute('data-theme', theme);
           document.documentElement.setAttribute('data-color-scheme', colorScheme);
+          
+          // Read and apply font size setting
+          var storedSettings = localStorage.getItem('echolonSettings');
+          if (storedSettings) {
+            var settings = JSON.parse(storedSettings);
+            var fontSize = settings.fontSize || 13;
+            var baseFontSize = 13;
+            var scale = fontSize / baseFontSize;
+            var root = document.documentElement;
+            root.style.setProperty('--font-xs', Math.round(11 * scale) + 'px');
+            root.style.setProperty('--font-sm', Math.round(12 * scale) + 'px');
+            root.style.setProperty('--font-md', Math.round(13 * scale) + 'px');
+            root.style.setProperty('--font-lg', Math.round(14 * scale) + 'px');
+            root.style.setProperty('--font-xl', Math.round(16 * scale) + 'px');
+            root.style.setProperty('--font-2xl', Math.round(18 * scale) + 'px');
+            root.style.setProperty('--font-3xl', Math.round(24 * scale) + 'px');
+          }
         } catch (e) {
           // Fallback to defaults already set on html element
           console.warn('Failed to load theme from localStorage:', e);

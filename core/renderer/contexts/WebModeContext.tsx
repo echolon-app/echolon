@@ -1,7 +1,17 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import { Collection } from '@/types';
+import { isElectron } from '@/utils';
+import { specImporter } from '@/services';
 
 export type ViewMode = 'tabs' | 'reference';
+
+export interface PublicSpecVersion {
+  version: string;
+  publishedAt?: string;
+  title?: string;
+  description?: string;
+  url?: string;
+}
 
 export interface WebModeConfig {
   specUrl?: string;
@@ -11,6 +21,7 @@ export interface WebModeConfig {
   container?: string;
   readonly?: boolean;
   title?: string;
+  versionsUrl?: string;
 }
 
 interface WebModeContextValue {
@@ -40,14 +51,25 @@ interface WebModeContextValue {
   
   // Initial config from script attributes
   initialConfig: WebModeConfig;
+  
+  // Version switching (for public specs)
+  versionsUrl: string | null;
+  availableVersions: PublicSpecVersion[];
+  currentVersion: string | null;
+  setCurrentVersion: (version: string) => void;
+  versionsLoading: boolean;
+  
+  // Environment selection (persisted to localStorage)
+  selectedEnvironmentId: string | null;
+  setSelectedEnvironmentId: (envId: string | null) => void;
 }
 
 const WebModeContext = createContext<WebModeContextValue | null>(null);
 
 // Detect if running in web mode (not Electron)
+// Uses the shared isElectron utility for consistent detection
 const detectWebMode = (): boolean => {
-  // In Electron, window.electronAPI is defined by preload script
-  return typeof window !== 'undefined' && !window.electronAPI;
+  return !isElectron();
 };
 
 // Get config from script tag data attributes
@@ -68,6 +90,7 @@ const getScriptConfig = (): WebModeConfig => {
     viewMode: (scriptTag.getAttribute('data-view') as ViewMode) || undefined,
     readonly: readonlyAttr === 'true' || readonlyAttr === '',
     title: scriptTag.getAttribute('data-title') || undefined,
+    versionsUrl: scriptTag.getAttribute('data-versions-url') || undefined,
   };
 };
 
@@ -113,6 +136,96 @@ export const WebModeProvider: React.FC<WebModeProviderProps> = ({ children, conf
   // Page title
   const title = initialConfig.title || null;
   
+  // Version switching state
+  const [versionsUrl] = useState<string | null>(initialConfig.versionsUrl || null);
+  const [availableVersions, setAvailableVersions] = useState<PublicSpecVersion[]>([]);
+  const [currentVersion, setCurrentVersionState] = useState<string | null>(null);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  
+  // Environment selection (persisted to localStorage)
+  const [selectedEnvironmentId, setSelectedEnvironmentIdState] = useState<string | null>(() => {
+    if (typeof localStorage === 'undefined') return null;
+    return localStorage.getItem('echolon_web_selected_env');
+  });
+  
+  // Fetch available versions from versionsUrl
+  useEffect(() => {
+    if (!versionsUrl) return;
+    
+    const fetchVersions = async () => {
+      setVersionsLoading(true);
+      try {
+        const response = await fetch(versionsUrl);
+        if (response.ok) {
+          const data = await response.json();
+          const versions: PublicSpecVersion[] = data.versions || [];
+          setAvailableVersions(versions);
+          
+          // Extract current version from URL if possible
+          const urlPath = window.location.pathname;
+          const versionMatch = urlPath.match(/\/([^/]+)\/$/);
+          if (versionMatch) {
+            const urlVersion = versionMatch[1];
+            const matchingVersion = versions.find(v => v.version === urlVersion);
+            if (matchingVersion) {
+              setCurrentVersionState(urlVersion);
+            }
+          }
+          
+          // If no current version set, default to first (latest)
+          if (!currentVersion && versions.length > 0) {
+            setCurrentVersionState(versions[0].version);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch versions:', err);
+      } finally {
+        setVersionsLoading(false);
+      }
+    };
+    
+    fetchVersions();
+  }, [versionsUrl]);
+  
+  // Handle version change - fetch new spec without page reload
+  const setCurrentVersion = useCallback(async (version: string) => {
+    if (version === currentVersion) return;
+    
+    setSpecLoading(true);
+    setCurrentVersionState(version);
+    
+    try {
+      // Construct absolute URL for the selected version's openapi.json
+      const baseUrl = window.location.origin;
+      const specUrlToFetch = `${baseUrl}/${version}/openapi.json`;
+      
+      // Fetch the new spec
+      const response = await fetch(specUrlToFetch);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch spec: ${response.status}`);
+      }
+      
+      const specContent = await response.text();
+      
+      // Convert the OpenAPI spec to a Collection using specImporter
+      const result = specImporter.parseContent(specContent);
+      const collection = result.collection;
+      
+      setLoadedCollection(collection);
+      setSpecError(null);
+      
+      // Update URL without reload (history state)
+      const newUrl = `${baseUrl}/${version}/`;
+      window.history.pushState({ version }, '', newUrl);
+      
+    } catch (err) {
+      console.error('Failed to switch version:', err);
+      setSpecError(err instanceof Error ? err.message : 'Failed to load spec');
+    } finally {
+      setSpecLoading(false);
+    }
+  }, [currentVersion]);
+  
   // Set document title if provided
   useEffect(() => {
     if (title && typeof document !== 'undefined') {
@@ -124,6 +237,16 @@ export const WebModeProvider: React.FC<WebModeProviderProps> = ({ children, conf
   const setCorsProxy = useCallback((proxy: string) => {
     setCorsProxyState(proxy);
     localStorage.setItem('echolon_cors_proxy', proxy);
+  }, []);
+  
+  // Persist selected environment to localStorage
+  const setSelectedEnvironmentId = useCallback((envId: string | null) => {
+    setSelectedEnvironmentIdState(envId);
+    if (envId) {
+      localStorage.setItem('echolon_web_selected_env', envId);
+    } else {
+      localStorage.removeItem('echolon_web_selected_env');
+    }
   }, []);
   
   // Persist view mode to localStorage
@@ -156,6 +279,13 @@ export const WebModeProvider: React.FC<WebModeProviderProps> = ({ children, conf
     readonly,
     title,
     initialConfig,
+    versionsUrl,
+    availableVersions,
+    currentVersion,
+    setCurrentVersion,
+    versionsLoading,
+    selectedEnvironmentId,
+    setSelectedEnvironmentId,
   }), [
     isWebMode,
     corsProxy,
@@ -170,6 +300,13 @@ export const WebModeProvider: React.FC<WebModeProviderProps> = ({ children, conf
     readonly,
     title,
     initialConfig,
+    versionsUrl,
+    availableVersions,
+    currentVersion,
+    setCurrentVersion,
+    versionsLoading,
+    selectedEnvironmentId,
+    setSelectedEnvironmentId,
   ]);
   
   return (

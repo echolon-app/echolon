@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from '../core/renderer/App';
 import {
@@ -19,28 +19,23 @@ import {
 import { ToastContainer } from '../core/renderer/components/ui';
 import { specImporter } from '../core/renderer/services';
 import { useCollections } from '../core/renderer/contexts/CollectionsContext';
-import { useEnvironments } from '../core/renderer/contexts/EnvironmentsContext';
 import { useWebMode } from '../core/renderer/contexts/WebModeContext';
 import '../core/renderer/styles/index.css';
 import './styles.css';
 
-// Spec loader component that fetches and loads the OpenAPI spec
+// Spec loader component that fetches and loads the OpenAPI spec as initial collection
+// Unlike before, this doesn't block the app - it loads the spec in the background
 const SpecLoader: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { specUrl, setLoadedCollection, corsProxy } = useWebMode();
-  const { addWebModeCollection } = useCollections();
-  const { addWebModeEnvironment } = useEnvironments();
-  const [loading, setLoading] = useState(!!specUrl);
-  const [error, setError] = useState<string | null>(null);
+  const { addWebModeCollection, collections } = useCollections();
   const hasLoaded = useRef(false);
 
   useEffect(() => {
-    if (!specUrl || hasLoaded.current) return;
+    // Skip if no specUrl, already loaded, or collections already exist
+    if (!specUrl || hasLoaded.current || collections.length > 0) return;
     hasLoaded.current = true;
 
     const loadSpec = async () => {
-      setLoading(true);
-      setError(null);
-
       try {
         // Apply CORS proxy if configured
         const fetchUrl = corsProxy ? `${corsProxy}${encodeURIComponent(specUrl)}` : specUrl;
@@ -65,53 +60,28 @@ const SpecLoader: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             url: specUrl,
             rawSpec: result.rawSpec,
             lastSyncedAt: Date.now(),
+            syncFrequencyMins: 0, // No auto-sync by default
           };
           
           // Add the collection directly to state (web mode, no file storage)
           addWebModeCollection(result.collection);
           setLoadedCollection(result.collection);
           
-          // Add environments from the spec (servers array)
-          if (result.environments && result.environments.length > 0) {
-            for (const env of result.environments) {
-              addWebModeEnvironment(env);
-            }
-          }
+          console.log('[SpecLoader] Loaded initial collection from:', specUrl);
         } else {
-          setError('Failed to parse API specification - invalid format');
+          console.error('[SpecLoader] Failed to parse spec from:', specUrl);
         }
       } catch (err) {
-        console.error('Failed to load spec:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load API specification');
-      } finally {
-        setLoading(false);
+        console.error('[SpecLoader] Failed to load spec:', err);
+        // Don't block the app - just log the error
+        // User can still use the app and import specs manually
       }
     };
 
     loadSpec();
-  }, [specUrl, corsProxy, addWebModeCollection, setLoadedCollection, addWebModeEnvironment]);
+  }, [specUrl, corsProxy, addWebModeCollection, setLoadedCollection, collections.length]);
 
-  if (loading) {
-    return (
-      <div className="echolon-web-loading">
-        <div className="echolon-web-loading__spinner" />
-        <p>Loading API specification...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="echolon-web-error">
-        <h2>Failed to load API specification</h2>
-        <p>{error}</p>
-        <p className="echolon-web-error__hint">
-          If this is a CORS error, try configuring a CORS proxy using the <code>data-cors-proxy</code> attribute.
-        </p>
-      </div>
-    );
-  }
-
+  // Always render the app - spec loading happens in the background
   return <>{children}</>;
 };
 
@@ -134,6 +104,7 @@ export interface MountOptions {
   viewMode?: 'tabs' | 'reference';
   readonly?: boolean;
   title?: string;
+  versionsUrl?: string;
 }
 
 export function mount(options: MountOptions): () => void {
@@ -152,6 +123,7 @@ export function mount(options: MountOptions): () => void {
     viewMode: options.viewMode,
     readonly: options.readonly,
     title: options.title,
+    versionsUrl: options.versionsUrl,
   };
 
   const root = ReactDOM.createRoot(container);
@@ -221,6 +193,7 @@ function autoInit() {
   const readonlyAttr = scriptTag.getAttribute('data-readonly');
   const readonly = readonlyAttr === 'true' || readonlyAttr === '';
   const title = scriptTag.getAttribute('data-title') || undefined;
+  const versionsUrl = scriptTag.getAttribute('data-versions-url') || undefined;
 
   mount({
     container,
@@ -230,6 +203,7 @@ function autoInit() {
     viewMode,
     readonly,
     title,
+    versionsUrl,
   });
 }
 
