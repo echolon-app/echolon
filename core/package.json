@@ -1,6 +1,6 @@
 {
   "name": "echolon",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "A powerful, local-first API client - Postman alternative",
   "homepage": "https://echolon.app",
   "main": "dist/main/index.js",
