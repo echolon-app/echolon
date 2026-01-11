@@ -88,6 +88,7 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: Echolon
+  artifactName: "${productName}-Setup-${version}.${ext}"
 
 # Linux Configuration
 linux:

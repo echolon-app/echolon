@@ -438,7 +438,8 @@ export const SettingsModal: React.FC = () => {
         <div className="settings-modal__content">
           {activeTab === 'general' && (
             <div className="settings-modal__panel">
-              <div className="settings-modal__panel-header">
+              <div>SETTINGS</div>
+             {/*} <div className="settings-modal__panel-header">
                 <h2>General</h2>
                 <p>Customize the appearance and behavior of Echolon</p>
               </div>
@@ -494,6 +495,7 @@ export const SettingsModal: React.FC = () => {
                   </p>
                 </div>
               </div>
+              */}
 
              
             </div>
