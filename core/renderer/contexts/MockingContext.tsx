@@ -11,6 +11,7 @@ const MOCK_APIS_FILE = 'mock-apis';
 // Default values (can be overridden via settings)
 const DEFAULT_MAX_CAPTURED_REQUESTS = 1000;
 const DEFAULT_SAVE_DEBOUNCE_MS = 1000;
+const MOCK_APIS_SAVE_DEBOUNCE_MS = 500;
 
 // Default cloud proxy server URL
 const DEFAULT_CLOUD_SERVER_URL = 'https://proxy.echolon.app';
@@ -146,7 +147,9 @@ export const MockingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isRequestsLoaded, setIsRequestsLoaded] = useState(false);
   const isLoadingRef = useRef(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const mockApisSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingSavesRef = useRef<Map<string, CapturedRequest[]>>(new Map());
+  const lastLoadedWorkspaceRef = useRef<string | null>(null);
   
   // Captured requests - now persisted per workspace/mock-api/endpoint
   const [capturedRequests, setCapturedRequests] = useState<CapturedRequest[]>([]);
@@ -161,28 +164,47 @@ export const MockingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   });
 
-  // Load mock APIs from disk on mount
+  // Load mock APIs from workspace when workspace changes
   useEffect(() => {
     const loadMockApis = async () => {
-      if (isLoadingRef.current) return;
-      isLoadingRef.current = true;
+      if (!activeWorkspace) {
+        // Reset when no workspace
+        if (lastLoadedWorkspaceRef.current !== null) {
+          setMockApis([]);
+          lastLoadedWorkspaceRef.current = null;
+        }
+        setIsLoaded(true);
+        return;
+      }
+      
+      // Skip if already loaded for this workspace
+      if (lastLoadedWorkspaceRef.current === activeWorkspace.name) {
+        return;
+      }
       
       try {
-        // Load mock APIs
-        const storedApis = await fileStorageManager.readDataFile<MockAPI[]>(MOCK_APIS_FILE);
+        // Load mock APIs from workspace
+        const storedApis = await fileStorageManager.readWorkspaceDataFile<MockAPI[]>(
+          activeWorkspace.name,
+          MOCK_APIS_FILE
+        );
         if (storedApis && Array.isArray(storedApis)) {
           // Reset isRunning to false on initialization since servers don't persist across reloads
           setMockApis(storedApis.map(api => ({ ...api, isRunning: false })));
+        } else {
+          setMockApis([]);
         }
+        lastLoadedWorkspaceRef.current = activeWorkspace.name;
       } catch (error) {
-        console.error('Failed to load mock APIs from disk:', error);
+        console.error('Failed to load mock APIs from workspace:', error);
+        setMockApis([]);
       } finally {
         setIsLoaded(true);
       }
     };
     
     loadMockApis();
-  }, []);
+  }, [activeWorkspace]);
 
   // Load captured requests from workspace when workspace or mock APIs change
   useEffect(() => {
@@ -334,15 +356,35 @@ export const MockingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, []);
 
-  // Persist mock APIs to disk
+  // Persist mock APIs to workspace (debounced)
   useEffect(() => {
-    // Only persist after initial load to avoid overwriting with empty array
-    if (!isLoaded) return;
+    // Only persist after initial load and when workspace is available
+    if (!isLoaded || !activeWorkspace) return;
     
-    fileStorageManager.writeDataFile(MOCK_APIS_FILE, mockApis).catch(error => {
-      console.error('Failed to save mock APIs to disk:', error);
-    });
-  }, [mockApis, isLoaded]);
+    // Clear any pending save
+    if (mockApisSaveTimeoutRef.current) {
+      clearTimeout(mockApisSaveTimeoutRef.current);
+    }
+    
+    // Debounce save operation
+    mockApisSaveTimeoutRef.current = setTimeout(async () => {
+      try {
+        await fileStorageManager.writeWorkspaceDataFile(
+          activeWorkspace.name,
+          MOCK_APIS_FILE,
+          mockApis
+        );
+      } catch (error) {
+        console.error('Failed to save mock APIs to workspace:', error);
+      }
+    }, MOCK_APIS_SAVE_DEBOUNCE_MS);
+    
+    return () => {
+      if (mockApisSaveTimeoutRef.current) {
+        clearTimeout(mockApisSaveTimeoutRef.current);
+      }
+    };
+  }, [mockApis, isLoaded, activeWorkspace]);
 
   // Persist captured requests to disk (debounced, per mock API and endpoint)
   useEffect(() => {

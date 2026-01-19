@@ -333,7 +333,7 @@ const ProxySettings: React.FC<ProxySettingsProps> = ({ settings, updateSettings 
 };
 
 export const SettingsModal: React.FC = () => {
-  const { settingsModalOpen, settingsModalTab, closeSettingsModal, openSettingsModal, settings, updateSettings, isWebMode } = useApp();
+  const { settingsModalOpen, settingsModalTab, closeSettingsModal, openSettingsModal, settings, updateSettings, isWebMode, openOnboarding } = useApp();
   const { theme, setTheme, colorScheme, setColorScheme } = useTheme();
   const { isAuthenticated, user, logout, loginWithPAT } = useGitHub();
   const webMode = useWebModeOptional();
@@ -1787,6 +1787,31 @@ export const SettingsModal: React.FC = () => {
                       <code>{isElectronApp ? 'Desktop App' : 'Web'}</code>
                     </span>
                   </div>
+                </div>
+              </div>
+
+              <div className="settings-modal__section">
+                <h3>Help</h3>
+                
+                <div className="settings-modal__field">
+                  <label>Onboarding Tour</label>
+                  <p className="settings-modal__field-description">
+                    Take a quick tour to learn about Echolon's main features
+                  </p>
+                  <Button 
+                    variant="secondary" 
+                    size="sm"
+                    onClick={() => {
+                      closeSettingsModal();
+                      // Small delay to let the modal close animation complete
+                      setTimeout(() => {
+                        openOnboarding();
+                      }, 200);
+                    }}
+                    icon={<RocketIcon />}
+                  >
+                    Start Tour
+                  </Button>
                 </div>
               </div>
 

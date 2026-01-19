@@ -866,7 +866,7 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
   }
 
   return (
-    <div className="response-viewer">
+    <div className="response-viewer" data-onboarding="response">
       <div className="response-viewer__header">
         <div className="response-viewer__tabs">
           <button

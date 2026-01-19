@@ -37,6 +37,7 @@ interface AppContextValue {
   moveCollectionTarget: Collection | null;
   globalSearchOpen: boolean;
   shortcutsModalOpen: boolean;
+  onboardingOpen: boolean;
   
   // Settings
   settings: AppSettings;
@@ -72,6 +73,8 @@ interface AppContextValue {
   closeGlobalSearch: () => void;
   openShortcutsModal: () => void;
   closeShortcutsModal: () => void;
+  openOnboarding: () => void;
+  closeOnboarding: () => void;
   updateSettings: (updates: Partial<AppSettings>) => void;
   logToConsole: (type: ConsoleEntry['type'], message: string, details?: string) => void;
   clearConsole: () => void;
@@ -110,6 +113,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [moveCollectionTarget, setMoveCollectionTarget] = useState<Collection | null>(null);
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
 
   // Settings
   const [settings, setSettings] = useState<AppSettings>(() => storageManager.getSettings());
@@ -260,6 +264,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const closeGlobalSearch = useCallback(() => setGlobalSearchOpen(false), []);
   const openShortcutsModal = useCallback(() => setShortcutsModalOpen(true), []);
   const closeShortcutsModal = useCallback(() => setShortcutsModalOpen(false), []);
+  const openOnboarding = useCallback(() => setOnboardingOpen(true), []);
+  const closeOnboarding = useCallback(() => setOnboardingOpen(false), []);
 
   const updateSettings = useCallback((updates: Partial<AppSettings>) => {
     setSettings(prev => ({ ...prev, ...updates }));
@@ -331,6 +337,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     moveCollectionTarget,
     globalSearchOpen,
     shortcutsModalOpen,
+    onboardingOpen,
     settings,
     consoleEntries,
     customHttpMethods,
@@ -358,6 +365,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     closeGlobalSearch,
     openShortcutsModal,
     closeShortcutsModal,
+    openOnboarding,
+    closeOnboarding,
     updateSettings,
     logToConsole,
     clearConsole,
@@ -379,6 +388,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     moveCollectionTarget,
     globalSearchOpen,
     shortcutsModalOpen,
+    onboardingOpen,
     settings,
     consoleEntries,
     customHttpMethods,
@@ -406,6 +416,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     closeGlobalSearch,
     openShortcutsModal,
     closeShortcutsModal,
+    openOnboarding,
+    closeOnboarding,
     updateSettings,
     logToConsole,
     clearConsole,

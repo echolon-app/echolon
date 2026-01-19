@@ -936,7 +936,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
           {/* Request Section (URL Bar + Options) */}
           <div className="center-panel__request-section">
             {/* URL Bar */}
-            <div className="center-panel__url-bar">
+            <div className="center-panel__url-bar" data-onboarding="url-bar">
               <Dropdown
                 options={methodOptions}
                 value={request.method}

@@ -7,7 +7,7 @@ import {
 import { 
   RadarIcon, PlusIcon, FolderIcon, ImportIcon, PlayIcon, StopIcon, ServerIcon, SocketIcon, GraphQLIcon, 
   MailIcon, CollapseAllIcon, ExpandAllIcon, EditIcon, CopyIcon, ExportIcon, TrashIcon, OpenIcon, NewTabIcon, MoveIcon,
-  WorkspacesIcon, SortAscIcon, SortDescIcon, AlertIcon, WarningIcon
+  WorkspacesIcon, SortAscIcon, SortDescIcon, AlertIcon, WarningIcon, CollectionsIcon, EnvironmentsIcon, HistoryIcon
 } from '@/components/ui/icons';
 import { useApp, useCollections, useRequest, useEnvironments, useMocking, useWebMode, useToast, useWorkspace } from '@/contexts';
 import { GitPanel } from '@/components/panels/GitPanel';
@@ -1381,7 +1381,7 @@ export const LeftPanel: React.FC = () => {
   };
 
   return (
-    <div className="left-panel">
+    <div className="left-panel" data-onboarding="sidebar">
       {sidebarView != 'git' && <div className="left-panel__header">
         <SearchInput
           value={searchQuery}
@@ -1513,6 +1513,7 @@ export const LeftPanel: React.FC = () => {
                     </>
                   ) : readonly ? (
                     <>
+                      <CollectionsIcon />
                       <p>No collections loaded</p>
                       <p className="left-panel__empty-hint">
                         The API reference will appear here
@@ -1520,7 +1521,11 @@ export const LeftPanel: React.FC = () => {
                     </>
                   ) : (
                     <>
+                      <CollectionsIcon />
                       <p>No collections yet</p>
+                      <p className="left-panel__empty-hint">
+                        Organize your API requests into collections
+                      </p>
                       <Button variant="secondary" size="sm" onClick={openNewCollectionModal}>
                         Create Collection
                       </Button>
@@ -1618,7 +1623,11 @@ export const LeftPanel: React.FC = () => {
             <div className="left-panel__list">
               {filteredEnvironments.length === 0 ? (
                 <div className="left-panel__empty">
+                  <EnvironmentsIcon />
                   <p>No environments yet</p>
+                  <p className="left-panel__empty-hint">
+                    Store variables for different environments
+                  </p>
                   <Button variant="secondary" size="sm" onClick={openNewEnvironmentModal}>
                     Create Environment
                   </Button>
@@ -1686,6 +1695,7 @@ export const LeftPanel: React.FC = () => {
               
               return workspaceHistory.length === 0 ? (
                 <div className="left-panel__empty">
+                  <HistoryIcon />
                   <p>No history yet</p>
                   <p className="left-panel__empty-hint">Send a request to see it here</p>
                 </div>
@@ -1768,36 +1778,6 @@ export const LeftPanel: React.FC = () => {
           </>
         )}
 
-        {sidebarView === 'socket' && (
-          <div className="left-panel__list">
-            <div className="left-panel__coming-soon">
-              <SocketIcon />
-              <h3>WebSocket Support</h3>
-              <div className="left-panel__coming-soon-badge">Under Consideration</div>
-              <p className="left-panel__coming-soon-description">
-                Real-time WebSocket connections for testing live APIs, chat applications, and streaming data.
-              </p>
-              <p className="left-panel__coming-soon-hint">
-                Interested in this feature? Let us know!
-              </p>
-              <button 
-                className="left-panel__coming-soon-link"
-                onClick={() => {
-                  const mailtoUrl = "mailto:support@echolon.app?subject=Feature Request: WebSocket Support in Echolon&body=Hi,%0D%0A%0D%0AI'm interested in WebSocket support for Echolon.%0D%0A%0D%0A[Please describe your use case here]";
-                  if (window.electronAPI?.openExternal) {
-                    window.electronAPI.openExternal(mailtoUrl);
-                  } else {
-                    window.open(mailtoUrl, '_blank');
-                  }
-                }}
-              >
-                <MailIcon />
-                Request this feature
-              </button>
-            </div>
-          </div>
-        )}
-
         {sidebarView === 'graphql' && (
           <div className="left-panel__list">
             <div className="left-panel__coming-soon">
@@ -1808,7 +1788,7 @@ export const LeftPanel: React.FC = () => {
                 Full GraphQL support with schema exploration, query builder, and subscription testing.
               </p>
               <p className="left-panel__coming-soon-hint">
-                Interested in this feature? Let us know!
+                Interested in this feature? Let me know!
               </p>
               <button 
                 className="left-panel__coming-soon-link"

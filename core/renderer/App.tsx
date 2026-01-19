@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { MainLayout } from '@/components/layout';
 import { LeftPanel, CenterPanel, RightPanel, ConsolePanel, CodePanel, MockingPanel, APIReferencePanel } from '@/components/panels';
-import { SettingsModal, ImportModal, GlobalSearchModal, NewCollectionModal, NewEnvironmentModal, MoveCollectionModal, ShortcutsModal, UpdateModal } from '@/components/modals';
+import { SettingsModal, ImportModal, GlobalSearchModal, NewCollectionModal, NewEnvironmentModal, MoveCollectionModal, ShortcutsModal, UpdateModal, OnboardingTour } from '@/components/modals';
 import { useApp, useRequest, useDataLoader, useToast, useCollections } from '@/contexts';
 import { useGlobalShortcuts } from '@/hooks';
 import { isElectron } from '@/utils';
@@ -37,7 +37,9 @@ export const App: React.FC = () => {
     viewMode,
     isWebMode,
     logToConsole,
-    settings
+    settings,
+    onboardingOpen,
+    closeOnboarding
   } = useApp();
   const { sendRequest, addTab, addCollectionTab, closeTab, activeTabId, currentExecution, updateTab } = useRequest();
   const { isLoading: dataLoading, timings } = useDataLoader();
@@ -290,6 +292,9 @@ export const App: React.FC = () => {
       {codePanelVisible && (
         <div className="code-panel-overlay" />
       )}
+
+      {/* Onboarding Tour */}
+      <OnboardingTour forceOpen={onboardingOpen} onClose={closeOnboarding} />
     </>
   );
 };

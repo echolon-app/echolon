@@ -144,14 +144,30 @@ export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
   // This also runs in web mode when web file system is enabled
   useEffect(() => {
     // Skip if not initialized, no workspace, or no file storage available
-    if (!initStateRef.current.initialized || !activeWorkspaceId) return;
-    if (shouldSkipFileOps) return; // Skip in web mode without file system
-    
+    if (!initStateRef.current.initialized || !activeWorkspaceId) {
+      console.log('[CollectionsContext] Sample import: skipping - not initialized or no workspace', { 
+        initialized: initStateRef.current.initialized, 
+        activeWorkspaceId 
+      });
+      return;
+    }
+    if (shouldSkipFileOps) {
+      console.log('[CollectionsContext] Sample import: skipping - file ops disabled');
+      return;
+    }
 
     // Only create sample on first app start, not whenever workspace is empty
-    if (storageManager.isSampleCreated()) return;
+    if (storageManager.isSampleCreated()) {
+      console.log('[CollectionsContext] Sample import: skipping - already created');
+      return;
+    }
     
     const workspaceCollections = allCollections.filter(c => c.workspaceId === activeWorkspaceId);
+    console.log('[CollectionsContext] Sample import: checking workspace collections', { 
+      count: workspaceCollections.length,
+      workspaceId: activeWorkspaceId 
+    });
+    
     if (workspaceCollections.length === 0) {
       console.log('[CollectionsContext] Create initial collection')
       // Defer sample import to not block startup
