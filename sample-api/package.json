@@ -1,6 +1,6 @@
 {
   "name": "sample-api",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Sample CRUD API with OpenAPI documentation and GraphQL for testing Echolon import",
   "main": "dist/index.js",
   "scripts": {

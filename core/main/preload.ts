@@ -760,6 +760,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   githubPullLatest: (owner: string, repo: string, branch: string): Promise<GitHubApiResponse<{ sha: string; commit: GitHubCommit; tree: Array<{ path: string; type: string; sha: string }> }>> =>
     ipcRenderer.invoke(GITHUB_CHANNELS.PULL_LATEST, { owner, repo, branch }),
 
+  // Workspace linking
+  githubSetupWorkspaceGit: (workspaceName: string, owner: string, repo: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(GITHUB_CHANNELS.SETUP_WORKSPACE_GIT, { workspaceName, owner, repo }),
+
   // ==================== Public Specs ====================
   publicSpecsCheckSubdomain: (subdomain: string, userId?: string): Promise<CheckSubdomainResult> =>
     ipcRenderer.invoke(PUBLIC_SPECS_CHANNELS.CHECK_SUBDOMAIN, { subdomain, userId }),
@@ -1035,6 +1039,7 @@ declare global {
       githubCompareCommits: (owner: string, repo: string, base: string, head: string) => Promise<GitHubApiResponse<{ status: string; ahead_by: number; behind_by: number; commits: Array<{ sha: string; commit: GitHubCommit }>; files: Array<{ filename: string; status: string; patch?: string }> }>>;
       githubPushChanges: (owner: string, repo: string, branch: string, message: string, changes: GitHubFileChange[]) => Promise<GitHubApiResponse<{ sha: string }>>;
       githubPullLatest: (owner: string, repo: string, branch: string) => Promise<GitHubApiResponse<{ sha: string; commit: GitHubCommit; tree: Array<{ path: string; type: string; sha: string }> }>>;
+      githubSetupWorkspaceGit: (workspaceName: string, owner: string, repo: string) => Promise<{ success: boolean; error?: string }>;
       // Public Specs
       publicSpecsCheckSubdomain: (subdomain: string, userId?: string) => Promise<CheckSubdomainResult>;
       publicSpecsUpload: (options: UploadSpecOptions) => Promise<UploadResult>;

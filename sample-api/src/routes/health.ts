@@ -11,7 +11,7 @@ const router = Router();
  * /health:
  *   get:
  *     tags:
- *       - Health
+ *       - 3. Health
  *     summary: Health check
  *     description: Returns the health status of the API
  *     responses:
@@ -48,7 +48,7 @@ router.get('/', (_req: Request, res: Response) => {
  * /echo:
  *   post:
  *     tags:
- *       - Echo
+ *       - 4. Echo
  *     summary: Echo back request
  *     description: Returns the request body, headers, query params and method back to the client. Useful for testing.
  *     requestBody:
@@ -90,7 +90,7 @@ router.get('/', (_req: Request, res: Response) => {
  *                   format: date-time
  *   get:
  *     tags:
- *       - Echo
+ *       - 4. Echo
  *     summary: Echo back request (GET)
  *     description: Returns the request headers, query params and method back to the client. Useful for testing.
  *     parameters:
@@ -122,7 +122,7 @@ router.get('/', (_req: Request, res: Response) => {
  *                   format: date-time
  *   put:
  *     tags:
- *       - Echo
+ *       - 4. Echo
  *     summary: Echo back request (PUT)
  *     description: Returns the request body, headers, query params and method back to the client. Useful for testing.
  *     requestBody:
@@ -137,7 +137,7 @@ router.get('/', (_req: Request, res: Response) => {
  *         description: Echoed request data
  *   patch:
  *     tags:
- *       - Echo
+ *       - 4. Echo
  *     summary: Echo back request (PATCH)
  *     description: Returns the request body, headers, query params and method back to the client. Useful for testing.
  *     requestBody:
@@ -152,7 +152,7 @@ router.get('/', (_req: Request, res: Response) => {
  *         description: Echoed request data
  *   delete:
  *     tags:
- *       - Echo
+ *       - 4. Echo
  *     summary: Echo back request (DELETE)
  *     description: Returns the request headers, query params and method back to the client. Useful for testing.
  *     responses:

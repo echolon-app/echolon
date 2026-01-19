@@ -21,10 +21,15 @@ const menuItems: { id: SidebarView; icon: React.FC; label: string; electronOnly?
 ];
 
 export const LeftSidebar: React.FC = () => {
-  const { sidebarView, setSidebarView, sidebarState, isWebMode } = useApp();
+  const { sidebarView, setSidebarView, sidebarState, isWebMode, viewMode } = useApp();
   
   // Check if we're in standalone web mode (web.echolon.app) vs embedded
   const webStandalone = isWebStandalone();
+  
+  // Hide sidebar completely in reference view mode (web)
+  if (isWebMode && viewMode === 'reference') {
+    return null;
+  }
   
   // Filter out items based on mode:
   // - electronOnly: hide in web mode

@@ -19,6 +19,7 @@ interface WorkspaceContextValue {
   setActiveWorkspace: (id: string | null) => void;
   getWorkspaceNameById: (id: string) => string | undefined;
   refreshWorkspaces: () => Promise<void>;
+  reorderWorkspaces: (fromIndex: number, toIndex: number) => Promise<void>;
   // Workspace environment management
   selectedWorkspaceEnvironment: WorkspaceEnvironment | null;
   addWorkspaceEnvironment: (workspaceId: string, name: string) => Promise<WorkspaceEnvironment | null>;
@@ -113,7 +114,22 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     // In web mode with file system or electron mode, sync with loaded data
     // Always update when data changes (not just on initial load)
     console.log('[WorkspaceContext] Syncing with loaded data', { workspaceCount: data.workspaces.length });
-    setWorkspaces(data.workspaces);
+    
+    // Apply workspace ordering from config if available
+    const workspaceOrder = data.config?.ui?.workspaceOrder;
+    let orderedWorkspaces = [...data.workspaces];
+    if (workspaceOrder && workspaceOrder.length > 0) {
+      orderedWorkspaces.sort((a, b) => {
+        const aIndex = workspaceOrder.indexOf(a.id);
+        const bIndex = workspaceOrder.indexOf(b.id);
+        // If not in order array, put at the end
+        if (aIndex === -1 && bIndex === -1) return 0;
+        if (aIndex === -1) return 1;
+        if (bIndex === -1) return -1;
+        return aIndex - bIndex;
+      });
+    }
+    setWorkspaces(orderedWorkspaces);
     
     // Only update active workspace if we don't have one or if it changed
     if (data.activeWorkspaceId) {
@@ -123,7 +139,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setIsLoading(false);
     // Reset virtual workspace flag when switching to file system mode
     virtualWorkspaceInitRef.current = false;
-  }, [dataLoading, data.workspaces, data.activeWorkspaceId, isWebMode, isWebFileSystemEnabled]);
+  }, [dataLoading, data.workspaces, data.activeWorkspaceId, data.config?.ui?.workspaceOrder, isWebMode, isWebFileSystemEnabled]);
 
   // Save active workspace to config when it changes (not in web mode without file system)
   useEffect(() => {
@@ -152,6 +168,8 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         updatedAt: Date.now(),
       };
       setWorkspaces(prev => [...prev, newWorkspace]);
+      // Make the new workspace active
+      setActiveWorkspaceIdState(newWorkspace.id);
       return newWorkspace;
     }
     
@@ -161,6 +179,8 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (result.success && result.workspace) {
       const newWorkspace = echoConverter.workspaceFileToWorkspace(result.workspace);
       setWorkspaces(prev => [...prev, newWorkspace]);
+      // Make the new workspace active
+      setActiveWorkspaceIdState(newWorkspace.id);
       return newWorkspace;
     }
     
@@ -240,6 +260,28 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const refreshWorkspaces = useCallback(async () => {
     await refreshData();
   }, [refreshData]);
+
+  const reorderWorkspaces = useCallback(async (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return;
+    if (fromIndex < 0 || fromIndex >= workspaces.length) return;
+    if (toIndex < 0 || toIndex >= workspaces.length) return;
+
+    // Reorder the workspaces array
+    const newWorkspaces = [...workspaces];
+    const [movedWorkspace] = newWorkspaces.splice(fromIndex, 1);
+    newWorkspaces.splice(toIndex, 0, movedWorkspace);
+    
+    setWorkspaces(newWorkspaces);
+
+    // Save the new order to config
+    if (!shouldSkipFileOps) {
+      const manager = getStorageManager();
+      const workspaceOrder = newWorkspaces.map(w => w.id);
+      await manager.updateConfig({
+        ui: { workspaceOrder }
+      });
+    }
+  }, [workspaces, shouldSkipFileOps, getStorageManager]);
 
   // Get selected workspace environment for the active workspace
   const selectedWorkspaceEnvironment = useMemo(() => {
@@ -453,6 +495,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setActiveWorkspace,
         getWorkspaceNameById,
         refreshWorkspaces,
+        reorderWorkspaces,
         selectedWorkspaceEnvironment,
         addWorkspaceEnvironment,
         updateWorkspaceEnvironment,

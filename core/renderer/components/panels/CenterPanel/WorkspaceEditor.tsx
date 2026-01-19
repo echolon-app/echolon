@@ -52,6 +52,7 @@ export const WorkspaceEditor: React.FC<WorkspaceEditorProps> = ({ workspaceId })
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showNewEnvModal, setShowNewEnvModal] = useState(false);
   const [newEnvName, setNewEnvName] = useState('');
+  const colorInputRef = React.useRef<HTMLInputElement>(null);
   
   const workspace = workspaces.find(w => w.id === workspaceId);
   
@@ -220,6 +221,21 @@ export const WorkspaceEditor: React.FC<WorkspaceEditorProps> = ({ workspaceId })
                     aria-label={`Select color ${color}`}
                   />
                 ))}
+                {/* Custom color picker */}
+                <button
+                  className={`workspace-editor__color-btn workspace-editor__color-btn--custom ${!WORKSPACE_COLORS.includes(workspace.color || '') && workspace.color ? 'workspace-editor__color-btn--active' : ''}`}
+                  style={{ backgroundColor: !WORKSPACE_COLORS.includes(workspace.color || '') ? workspace.color : 'transparent' }}
+                  onClick={() => colorInputRef.current?.click()}
+                  aria-label="Choose custom color"
+                  title="Custom color"
+                />
+                <input
+                  ref={colorInputRef}
+                  type="color"
+                  className="workspace-editor__color-input-hidden"
+                  value={workspace.color || '#6366f1'}
+                  onChange={(e) => handleColorChange(e.target.value)}
+                />
               </div>
             </div>
 
@@ -298,9 +314,7 @@ export const WorkspaceEditor: React.FC<WorkspaceEditorProps> = ({ workspaceId })
                 <CollectionsIcon />
                 <h4>No Collections</h4>
                 <p>This workspace doesn't have any collections yet.</p>
-                <p className="workspace-editor__empty-hint">
-                  Move collections to this workspace from the Collections panel.
-                </p>
+
               </div>
             ) : (
               <div className="workspace-editor__collections-list">
@@ -403,19 +417,23 @@ export const WorkspaceEditor: React.FC<WorkspaceEditorProps> = ({ workspaceId })
                         />
                       </div>
                       <div className="workspace-editor__environment-actions">
-                        <Tooltip content={env.isActive ? 'Hide from dropdown' : 'Show in dropdown'} position="left">
-                          <Switch
-                            checked={env.isActive}
-                            onChange={() => handleToggleEnvironmentActive(env.id)}
+                        <Tooltip content="Delete environment" position="left">
+                          <Button
+                            variant="ghost"
                             size="sm"
+                            onClick={() => handleDeleteEnvironment(env.id)}
+                            icon={<TrashIcon />}
                           />
                         </Tooltip>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteEnvironment(env.id)}
-                          icon={<TrashIcon />}
-                        />
+                        <Tooltip content={env.isActive ? 'Hide from dropdown' : 'Show in dropdown'} position="left">
+                          <span className="workspace-editor__environment-switch">
+                            <Switch
+                              checked={env.isActive}
+                              onChange={() => handleToggleEnvironmentActive(env.id)}
+                              size="sm"
+                            />
+                          </span>
+                        </Tooltip>
                       </div>
                     </div>
                     <div className="workspace-editor__environment-variables">

@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { Button, Input, SearchInput, CodeEditor, Tooltip } from '@/components/ui';
+import { Button, Input, SearchInput, CodeEditor, Tooltip, NumericInput } from '@/components/ui';
 import { SendIcon, TrashIcon, ChevronDownIcon, ChevronRightIcon, SuccessIcon, CloseIcon, ArrowUpIcon, ArrowDownIcon, InfoIcon } from '@/components/ui/icons';
 import { useRequest, useEnvironments, useTheme } from '@/contexts';
 import { WebSocketConnection, WebSocketMessage, KeyValuePair, WebSocketSettings } from '@/types';
@@ -691,7 +691,7 @@ export const WebSocketPanel: React.FC<WebSocketPanelProps> = ({ websocket, tabId
         <Input
           value={websocket.url}
           onChange={handleUrlChange}
-          placeholder="wss://echo.websocket.org"
+          placeholder="wss://api.echolon.app/ws"
           className="websocket-panel__url-input"
           disabled={websocket.status === 'connected' || websocket.status === 'connecting'}
         />
@@ -802,12 +802,12 @@ export const WebSocketPanel: React.FC<WebSocketPanelProps> = ({ websocket, tabId
                   Set how long the handshake request should wait before timing out in milliseconds. To never time out, set to 0.
                 </p>
               </div>
-              <input
-                type="number"
-                className="websocket-panel__setting-input"
+              <NumericInput
                 value={websocket.settings?.handshakeTimeout ?? 0}
-                onChange={(e) => handleSettingsChange('handshakeTimeout', parseInt(e.target.value) || 0)}
+                onChange={(value: number) => handleSettingsChange('handshakeTimeout', value)}
                 min={0}
+                defaultValue={0}
+                className="websocket-panel__setting-input"
               />
             </div>
             
@@ -818,12 +818,12 @@ export const WebSocketPanel: React.FC<WebSocketPanelProps> = ({ websocket, tabId
                   Maximum reconnection attempts when the connection closes abruptly.
                 </p>
               </div>
-              <input
-                type="number"
-                className="websocket-panel__setting-input"
+              <NumericInput
                 value={websocket.settings?.reconnectionAttempts ?? 0}
-                onChange={(e) => handleSettingsChange('reconnectionAttempts', parseInt(e.target.value) || 0)}
+                onChange={(value: number) => handleSettingsChange('reconnectionAttempts', value)}
                 min={0}
+                defaultValue={0}
+                className="websocket-panel__setting-input"
               />
             </div>
             
@@ -834,12 +834,12 @@ export const WebSocketPanel: React.FC<WebSocketPanelProps> = ({ websocket, tabId
                   Interval between each reconnection attempt in milliseconds.
                 </p>
               </div>
-              <input
-                type="number"
-                className="websocket-panel__setting-input"
+              <NumericInput
                 value={websocket.settings?.reconnectionInterval ?? 5000}
-                onChange={(e) => handleSettingsChange('reconnectionInterval', parseInt(e.target.value) || 0)}
+                onChange={(value: number) => handleSettingsChange('reconnectionInterval', value)}
                 min={0}
+                defaultValue={5000}
+                className="websocket-panel__setting-input"
               />
             </div>
             
@@ -850,12 +850,12 @@ export const WebSocketPanel: React.FC<WebSocketPanelProps> = ({ websocket, tabId
                   Maximum allowed message size in MB. To receive messages of any size, set to 0.
                 </p>
               </div>
-              <input
-                type="number"
-                className="websocket-panel__setting-input"
+              <NumericInput
                 value={websocket.settings?.maxMessageSize ?? 10}
-                onChange={(e) => handleSettingsChange('maxMessageSize', parseInt(e.target.value) || 0)}
+                onChange={(value: number) => handleSettingsChange('maxMessageSize', value)}
                 min={0}
+                defaultValue={10}
+                className="websocket-panel__setting-input"
               />
             </div>
           </div>

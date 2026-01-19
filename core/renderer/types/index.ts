@@ -32,6 +32,7 @@ export interface Folder {
   requests: Request[];
   folders: Folder[];
   collapsed?: boolean;
+  isDeprecated?: boolean; // Mark folder as deprecated
 }
 
 // Collection type (protocol/API type)
@@ -128,6 +129,7 @@ export interface Collection {
   updatedAt: number;
   // UI state
   collapsed?: boolean;
+  order?: number; // Display order within workspace
   // Spec import/sync fields
   specSource?: SpecSource;
   importedAt?: number; // Timestamp when originally imported
@@ -195,6 +197,7 @@ export interface AuthConfig {
 export interface Request {
   id: string;
   name: string;
+  description?: string; // Optional markdown description for the request
   method: HttpMethod;
   url: string;
   headers: KeyValuePair[];
@@ -207,6 +210,7 @@ export interface Request {
     post: string;
   };
   tags?: string[]; // Tags for categorizing and searching requests
+  isDeprecated?: boolean; // Mark request as deprecated
   collectionId?: string;
   folderId?: string;
   workspaceId?: string; // Workspace this request belongs to (for unsaved requests)
@@ -388,6 +392,14 @@ export interface WebSocketConnection {
   collectionId?: string;
 }
 
+// Proxy profile for CORS proxy configuration
+export interface ProxyProfile {
+  id: string;
+  name: string;
+  url: string; // Proxy URL (e.g., "https://proxy.echolon.app")
+  isDefault?: boolean; // Whether this is a predefined profile
+}
+
 export interface AppSettings {
   theme: 'light' | 'dark' | 'system';
   colorScheme: ColorScheme;
@@ -416,6 +428,9 @@ export interface AppSettings {
   mockingSaveDebounceMs?: number; // Debounce time for saving captured requests (default: 1000)
   mockingShowQuickTest?: boolean; // Show Quick Test section in mocking panel (default: true)
   mockingAutoSave?: boolean; // Auto-save mocked response on blur (default: false)
+  // CORS Proxy settings (for web mode)
+  proxyProfiles?: ProxyProfile[]; // List of proxy profiles
+  activeProxyProfileId?: string | null; // Currently selected proxy profile ID (null = no proxy)
 }
 
 export interface ConsoleEntry {

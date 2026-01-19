@@ -1,12 +1,13 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import ace from 'ace-builds';
 import { Button, Input, Dropdown, TabBar, EditableTable, Tooltip, CodeEditor, TagInput } from '@/components/ui';
-import { SendIcon, CodeIcon, HistoryIcon, CopyIcon, CheckIcon, SocketIcon } from '@/components/ui/icons';
-import { useRequest, useEnvironments, useTheme, useCollections, useApp } from '@/contexts';
+import { SendIcon, CodeIcon, HistoryIcon, CopyIcon, CheckIcon, SocketIcon, ShieldIcon } from '@/components/ui/icons';
+import { useRequest, useEnvironments, useTheme, useCollections, useApp, useWebModeOptional } from '@/contexts';
 import { storageManager } from '@/services';
 import { HTTP_METHODS, METHOD_COLORS, DEFAULT_HEADERS } from '../../../../shared/constants';
-import { HttpMethod, KeyValuePair, Collection, AuthType } from '@/types';
+import { HttpMethod, KeyValuePair, Collection, AuthType, AuthConfig } from '@/types';
 import { extractSpecResponseInfo, buildResolvedUrl } from '@/utils';
+import { isElectron } from '@/utils';
 import { APP_VERSION } from '@/utils/environment';
 import { ResponseViewer } from './ResponseViewer';
 import { EnvironmentEditor } from './EnvironmentEditor';
@@ -21,6 +22,46 @@ const CUSTOM_METHOD_COLOR = '#9ca3af';
 
 const getMethodColor = (method: string): string => {
   return METHOD_COLORS[method] || CUSTOM_METHOD_COLOR;
+};
+
+// Simple markdown renderer for description preview
+const renderMarkdown = (text: string): string => {
+  let html = text
+    // Escape HTML
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    // Code blocks (must be before inline code)
+    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+    // Inline code
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    // Headers
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    // Bold
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // Italic
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // Links
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+    // Unordered lists
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    // Ordered lists
+    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+    // Line breaks
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/\n/g, '<br/>');
+  
+  // Wrap in paragraph if not already wrapped
+  if (!html.startsWith('<h') && !html.startsWith('<pre') && !html.startsWith('<li')) {
+    html = '<p>' + html + '</p>';
+  }
+  
+  // Wrap consecutive li elements in ul
+  html = html.replace(/(<li>.*?<\/li>)+/g, '<ul>$&</ul>');
+  
+  return html;
 };
 
 // Sample script type
@@ -229,7 +270,7 @@ console.log('Body preview:', res.body.substring(0, 500));`,
   },
 ];
 
-type RequestTab = 'params' | 'auth' | 'headers' | 'body' | 'scripts' | 'tags' | 'settings';
+type RequestTab = 'params' | 'auth' | 'headers' | 'body' | 'scripts' | 'tags' | 'description' | 'settings';
 
 const requestTabs = [
   { id: 'params', title: 'Params' },
@@ -238,6 +279,7 @@ const requestTabs = [
   { id: 'body', title: 'Body' },
   { id: 'scripts', title: 'Scripts' },
   { id: 'tags', title: 'Tags' },
+  { id: 'description', title: 'Description' },
  // { id: 'settings', title: 'Settings' },
 ];
 
@@ -266,15 +308,31 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
   } = useRequest();
   const { activeEnvironment, environments } = useEnvironments();
   const { collections, updateRequest: updateCollectionRequest } = useCollections();
-  const { customHttpMethods, addCustomHttpMethod, settings, updateSettings } = useApp();
+  const { customHttpMethods, addCustomHttpMethod, settings, updateSettings, openSettingsModal, isWebMode } = useApp();
+  const webMode = useWebModeOptional();
+  const viewMode = webMode?.viewMode ?? 'tabs';
+  const readonly = webMode?.readonly ?? false;
+  
+  // In reference view mode (web), hide the tab bar
+  const hideTabBar = isWebMode && viewMode === 'reference';
+  
+  // Track if we've auto-opened a tab to prevent infinite loops
+  const hasAutoOpenedTab = useRef(false);
+  
+  // Get active proxy profile (works in both web and Electron modes)
+  const activeProxyProfile = useMemo(() => {
+    if (!settings.activeProxyProfileId) return null;
+    return settings.proxyProfiles?.find(p => p.id === settings.activeProxyProfileId) || null;
+  }, [settings.activeProxyProfileId, settings.proxyProfiles]);
   const [activeRequestTab, setActiveRequestTabState] = useState<RequestTab>(() => {
     // Restore active request tab from localStorage
     const saved = localStorage.getItem('echolon_active_request_tab');
-    if (saved && ['params', 'auth', 'headers', 'body', 'scripts', 'tags', 'settings'].includes(saved)) {
+    if (saved && ['params', 'auth', 'headers', 'body', 'scripts', 'tags', 'description', 'settings'].includes(saved)) {
       return saved as RequestTab;
     }
     return 'params';
   });
+  const [descriptionPreviewMode, setDescriptionPreviewMode] = useState(false);
   
   // Wrapper to persist active request tab
   const setActiveRequestTab = useCallback((tab: RequestTab) => {
@@ -295,6 +353,19 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
   const [urlCopied, setUrlCopied] = useState(false);
   const resizeRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+
+  // In readonly web mode, auto-open collection reference tab if no tab is active
+  // This ensures we never show the empty state in embedded readonly mode
+  useEffect(() => {
+    if (!isWebMode || !readonly || hasAutoOpenedTab.current) return;
+    if (activeTab) return; // Already have an active tab
+    if (collections.length === 0) return; // No collections yet
+    
+    // Auto-open the first collection's reference tab
+    hasAutoOpenedTab.current = true;
+    addCollectionTab(collections[0], 'reference');
+    console.log('[CenterPanel] Auto-opened collection reference tab for readonly web mode');
+  }, [isWebMode, readonly, activeTab, collections, addCollectionTab]);
 
   // Setup editor with search functionality (CMD+F / Ctrl+F)
   const handleEditorLoad = useCallback((editor: any) => {
@@ -627,6 +698,27 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
     }
   };
 
+  // Helper to update auth - syncs both tab state and collection
+  const handleAuthChange = (authUpdate: Partial<AuthConfig>) => {
+    if (!activeTabId || !request) return;
+    const newAuth: AuthConfig = { ...request.auth, ...authUpdate };
+    console.log('[CenterPanel] handleAuthChange called:', { 
+      requestId: request.id, 
+      requestName: request.name,
+      collectionId: request.collectionId,
+      authUpdate, 
+      newAuth 
+    });
+    updateRequest(activeTabId, { auth: newAuth });
+    // Also sync to collection
+    if (request.collectionId) {
+      console.log('[CenterPanel] Syncing auth to collection:', request.collectionId);
+      updateCollectionRequest(request.collectionId, request.id, { auth: newAuth });
+    } else {
+      console.warn('[CenterPanel] Request has no collectionId - auth not synced to collection');
+    }
+  };
+
   // Memoized onChange handler for headers table (handles system User-Agent toggling and inherited header overrides)
   const handleHeadersTableChange = useCallback((allHeaders: KeyValuePair[]) => {
     if (!request) return;
@@ -799,24 +891,26 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
 
   return (
     <div className="center-panel">
-      {/* Request Tabs */}
-      <TabBar
-        tabs={tabItems}
-        activeTab={activeTabId || ''}
-        onTabChange={setActiveTab}
-        onTabClose={closeTab}
-        onTabReorder={(newTabs) => {
-          // Build new tabs order: workspace tabs in new order, other tabs unchanged
-          const workspaceTabIds = new Set(tabs.map(t => t.id));
-          const otherTabs = allTabs.filter(t => !workspaceTabIds.has(t.id));
-          const reorderedWorkspaceTabs = newTabs.map(t => tabs.find(tab => tab.id === t.id)!);
-          reorderTabs([...reorderedWorkspaceTabs, ...otherTabs]);
-        }}
-        onTabRename={handleTabRename}
-        onNewTab={() => addTab()}
-        showAddButton
-        className="center-panel__tabs"
-      />
+      {/* Request Tabs - hidden in reference view mode (web) */}
+      {!hideTabBar && (
+        <TabBar
+          tabs={tabItems}
+          activeTab={activeTabId || ''}
+          onTabChange={setActiveTab}
+          onTabClose={closeTab}
+          onTabReorder={(newTabs) => {
+            // Build new tabs order: workspace tabs in new order, other tabs unchanged
+            const workspaceTabIds = new Set(tabs.map(t => t.id));
+            const otherTabs = allTabs.filter(t => !workspaceTabIds.has(t.id));
+            const reorderedWorkspaceTabs = newTabs.map(t => tabs.find(tab => tab.id === t.id)!);
+            reorderTabs([...reorderedWorkspaceTabs, ...otherTabs]);
+          }}
+          onTabRename={handleTabRename}
+          onNewTab={() => addTab()}
+          showAddButton
+          className="center-panel__tabs"
+        />
+      )}
 
       {/* Environment Editor */}
       {activeTab?.type === 'environment' && activeTab.environmentId ? (
@@ -853,16 +947,29 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                 customPlaceholder="Custom..."
                 customColor="#9ca3af"
               />
-              <Input
-                value={request.url}
-                onChange={handleUrlChange}
-                placeholder="Enter request URL"
-                supportVariables
-                collectionEnvironment={selectedCollectionEnv}
-                pathParams={request.pathParams}
-                onNavigateToVariable={handleNavigateToVariable}
-                className="center-panel__url"
-              />
+              <div className="center-panel__url-wrapper">
+                <Input
+                  value={request.url}
+                  onChange={handleUrlChange}
+                  placeholder="Enter request URL"
+                  supportVariables
+                  collectionEnvironment={selectedCollectionEnv}
+                  pathParams={request.pathParams}
+                  onNavigateToVariable={handleNavigateToVariable}
+                  className="center-panel__url"
+                />
+                {activeProxyProfile && (
+                  <Tooltip content={`Using proxy: ${activeProxyProfile.name}\n${activeProxyProfile.url}`}>
+                    <button
+                      className="center-panel__proxy-indicator"
+                      onClick={() => openSettingsModal('proxy')}
+                      title="Proxy active - click to configure"
+                    >
+                      <ShieldIcon />
+                    </button>
+                  </Tooltip>
+                )}
+              </div>
               <Button
                 variant="primary"
                 size="md"
@@ -930,6 +1037,9 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                       <span className="center-panel__option-badge">
                         {request.tags?.length || 0}
                       </span>
+                    )}
+                    {tab.id === 'description' && request.description && (
+                      <span className="center-panel__option-badge center-panel__option-badge--dot" />
                     )}
                   </button>
                 ))}
@@ -1032,11 +1142,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                       ]}
                       value={request.auth.type}
                       onChange={(type) => {
-                        if (activeTabId) {
-                          updateRequest(activeTabId, { 
-                            auth: { ...request.auth, type: type as AuthType } 
-                          });
-                        }
+                        handleAuthChange({ type: type as AuthType });
                       }}
                     />
                   </div>
@@ -1048,14 +1154,9 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                         <Input
                           value={request.auth.basic?.username || ''}
                           onChange={(e) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  basic: { ...request.auth.basic, username: e.target.value, password: request.auth.basic?.password || '' },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              basic: { ...request.auth.basic, username: e.target.value, password: request.auth.basic?.password || '' },
+                            });
                           }}
                           supportVariables
                         />
@@ -1066,14 +1167,9 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                           type="password"
                           value={request.auth.basic?.password || ''}
                           onChange={(e) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  basic: { ...request.auth.basic, username: request.auth.basic?.username || '', password: e.target.value },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              basic: { ...request.auth.basic, username: request.auth.basic?.username || '', password: e.target.value },
+                            });
                           }}
                           supportVariables
                         />
@@ -1088,14 +1184,9 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                         <Input
                           value={request.auth.bearer?.token || ''}
                           onChange={(e) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  bearer: { token: e.target.value },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              bearer: { token: e.target.value },
+                            });
                           }}
                           supportVariables
                         />
@@ -1110,19 +1201,14 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                         <Input
                           value={request.auth.apiKey?.key || ''}
                           onChange={(e) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  apiKey: { 
-                                    ...request.auth.apiKey, 
-                                    key: e.target.value,
-                                    value: request.auth.apiKey?.value || '',
-                                    addTo: request.auth.apiKey?.addTo || 'header'
-                                  },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              apiKey: { 
+                                ...request.auth.apiKey, 
+                                key: e.target.value,
+                                value: request.auth.apiKey?.value || '',
+                                addTo: request.auth.apiKey?.addTo || 'header'
+                              },
+                            });
                           }}
                           supportVariables
                         />
@@ -1132,19 +1218,14 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                         <Input
                           value={request.auth.apiKey?.value || ''}
                           onChange={(e) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  apiKey: { 
-                                    ...request.auth.apiKey, 
-                                    key: request.auth.apiKey?.key || '',
-                                    value: e.target.value,
-                                    addTo: request.auth.apiKey?.addTo || 'header'
-                                  },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              apiKey: { 
+                                ...request.auth.apiKey, 
+                                key: request.auth.apiKey?.key || '',
+                                value: e.target.value,
+                                addTo: request.auth.apiKey?.addTo || 'header'
+                              },
+                            });
                           }}
                           supportVariables
                         />
@@ -1158,19 +1239,14 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                           ]}
                           value={request.auth.apiKey?.addTo || 'header'}
                           onChange={(addTo) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  apiKey: { 
-                                    ...request.auth.apiKey,
-                                    key: request.auth.apiKey?.key || '',
-                                    value: request.auth.apiKey?.value || '',
-                                    addTo: addTo as 'header' | 'query'
-                                  },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              apiKey: { 
+                                ...request.auth.apiKey,
+                                key: request.auth.apiKey?.key || '',
+                                value: request.auth.apiKey?.value || '',
+                                addTo: addTo as 'header' | 'query'
+                              },
+                            });
                           }}
                         />
                       </div>
@@ -1190,20 +1266,15 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                           ]}
                           value={request.auth.oauth2?.grantType || 'authorization_code'}
                           onChange={(grantType) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  oauth2: { 
-                                    ...request.auth.oauth2,
-                                    grantType: grantType as 'authorization_code' | 'client_credentials' | 'password' | 'implicit',
-                                    accessToken: request.auth.oauth2?.accessToken || '',
-                                    tokenType: request.auth.oauth2?.tokenType || 'Bearer',
-                                    clientId: request.auth.oauth2?.clientId || '',
-                                  },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              oauth2: { 
+                                ...request.auth.oauth2,
+                                grantType: grantType as 'authorization_code' | 'client_credentials' | 'password' | 'implicit',
+                                accessToken: request.auth.oauth2?.accessToken || '',
+                                tokenType: request.auth.oauth2?.tokenType || 'Bearer',
+                                clientId: request.auth.oauth2?.clientId || '',
+                              },
+                            });
                           }}
                         />
                       </div>
@@ -1212,20 +1283,15 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                         <Input
                           value={request.auth.oauth2?.accessToken || ''}
                           onChange={(e) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  oauth2: { 
-                                    ...request.auth.oauth2,
-                                    grantType: request.auth.oauth2?.grantType || 'authorization_code',
-                                    accessToken: e.target.value,
-                                    tokenType: request.auth.oauth2?.tokenType || 'Bearer',
-                                    clientId: request.auth.oauth2?.clientId || '',
-                                  },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              oauth2: { 
+                                ...request.auth.oauth2,
+                                grantType: request.auth.oauth2?.grantType || 'authorization_code',
+                                accessToken: e.target.value,
+                                tokenType: request.auth.oauth2?.tokenType || 'Bearer',
+                                clientId: request.auth.oauth2?.clientId || '',
+                              },
+                            });
                           }}
                           placeholder="Enter access token or use token URL to fetch"
                           supportVariables
@@ -1236,20 +1302,15 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                         <Input
                           value={request.auth.oauth2?.tokenType || 'Bearer'}
                           onChange={(e) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  oauth2: { 
-                                    ...request.auth.oauth2,
-                                    grantType: request.auth.oauth2?.grantType || 'authorization_code',
-                                    accessToken: request.auth.oauth2?.accessToken || '',
-                                    tokenType: e.target.value,
-                                    clientId: request.auth.oauth2?.clientId || '',
-                                  },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              oauth2: { 
+                                ...request.auth.oauth2,
+                                grantType: request.auth.oauth2?.grantType || 'authorization_code',
+                                accessToken: request.auth.oauth2?.accessToken || '',
+                                tokenType: e.target.value,
+                                clientId: request.auth.oauth2?.clientId || '',
+                              },
+                            });
                           }}
                           supportVariables
                         />
@@ -1259,20 +1320,15 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                         <Input
                           value={request.auth.oauth2?.clientId || ''}
                           onChange={(e) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  oauth2: { 
-                                    ...request.auth.oauth2,
-                                    grantType: request.auth.oauth2?.grantType || 'authorization_code',
-                                    accessToken: request.auth.oauth2?.accessToken || '',
-                                    tokenType: request.auth.oauth2?.tokenType || 'Bearer',
-                                    clientId: e.target.value,
-                                  },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              oauth2: { 
+                                ...request.auth.oauth2,
+                                grantType: request.auth.oauth2?.grantType || 'authorization_code',
+                                accessToken: request.auth.oauth2?.accessToken || '',
+                                tokenType: request.auth.oauth2?.tokenType || 'Bearer',
+                                clientId: e.target.value,
+                              },
+                            });
                           }}
                           supportVariables
                         />
@@ -1283,21 +1339,16 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                           type="password"
                           value={request.auth.oauth2?.clientSecret || ''}
                           onChange={(e) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  oauth2: { 
-                                    ...request.auth.oauth2,
-                                    grantType: request.auth.oauth2?.grantType || 'authorization_code',
-                                    accessToken: request.auth.oauth2?.accessToken || '',
-                                    tokenType: request.auth.oauth2?.tokenType || 'Bearer',
-                                    clientId: request.auth.oauth2?.clientId || '',
-                                    clientSecret: e.target.value,
-                                  },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              oauth2: { 
+                                ...request.auth.oauth2,
+                                grantType: request.auth.oauth2?.grantType || 'authorization_code',
+                                accessToken: request.auth.oauth2?.accessToken || '',
+                                tokenType: request.auth.oauth2?.tokenType || 'Bearer',
+                                clientId: request.auth.oauth2?.clientId || '',
+                                clientSecret: e.target.value,
+                              },
+                            });
                           }}
                           supportVariables
                         />
@@ -1307,21 +1358,16 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                         <Input
                           value={request.auth.oauth2?.tokenUrl || ''}
                           onChange={(e) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  oauth2: { 
-                                    ...request.auth.oauth2,
-                                    grantType: request.auth.oauth2?.grantType || 'authorization_code',
-                                    accessToken: request.auth.oauth2?.accessToken || '',
-                                    tokenType: request.auth.oauth2?.tokenType || 'Bearer',
-                                    clientId: request.auth.oauth2?.clientId || '',
-                                    tokenUrl: e.target.value,
-                                  },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              oauth2: { 
+                                ...request.auth.oauth2,
+                                grantType: request.auth.oauth2?.grantType || 'authorization_code',
+                                accessToken: request.auth.oauth2?.accessToken || '',
+                                tokenType: request.auth.oauth2?.tokenType || 'Bearer',
+                                clientId: request.auth.oauth2?.clientId || '',
+                                tokenUrl: e.target.value,
+                              },
+                            });
                           }}
                           placeholder="https://oauth.example.com/token"
                           supportVariables
@@ -1332,21 +1378,16 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                         <Input
                           value={request.auth.oauth2?.scope || ''}
                           onChange={(e) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  oauth2: { 
-                                    ...request.auth.oauth2,
-                                    grantType: request.auth.oauth2?.grantType || 'authorization_code',
-                                    accessToken: request.auth.oauth2?.accessToken || '',
-                                    tokenType: request.auth.oauth2?.tokenType || 'Bearer',
-                                    clientId: request.auth.oauth2?.clientId || '',
-                                    scope: e.target.value,
-                                  },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              oauth2: { 
+                                ...request.auth.oauth2,
+                                grantType: request.auth.oauth2?.grantType || 'authorization_code',
+                                accessToken: request.auth.oauth2?.accessToken || '',
+                                tokenType: request.auth.oauth2?.tokenType || 'Bearer',
+                                clientId: request.auth.oauth2?.clientId || '',
+                                scope: e.target.value,
+                              },
+                            });
                           }}
                           placeholder="read write profile"
                           supportVariables
@@ -1362,17 +1403,12 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                         <Input
                           value={request.auth.jwt?.token || ''}
                           onChange={(e) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  jwt: { 
-                                    ...request.auth.jwt,
-                                    token: e.target.value,
-                                  },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              jwt: { 
+                                ...request.auth.jwt,
+                                token: e.target.value,
+                              },
+                            });
                           }}
                           placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
                           supportVariables
@@ -1383,18 +1419,13 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                         <Input
                           value={request.auth.jwt?.prefix || 'Bearer'}
                           onChange={(e) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  jwt: { 
-                                    ...request.auth.jwt,
-                                    token: request.auth.jwt?.token || '',
-                                    prefix: e.target.value,
-                                  },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              jwt: { 
+                                ...request.auth.jwt,
+                                token: request.auth.jwt?.token || '',
+                                prefix: e.target.value,
+                              },
+                            });
                           }}
                           placeholder="Bearer"
                           supportVariables
@@ -1405,18 +1436,13 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                         <Input
                           value={request.auth.jwt?.headerName || 'Authorization'}
                           onChange={(e) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  jwt: { 
-                                    ...request.auth.jwt,
-                                    token: request.auth.jwt?.token || '',
-                                    headerName: e.target.value,
-                                  },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              jwt: { 
+                                ...request.auth.jwt,
+                                token: request.auth.jwt?.token || '',
+                                headerName: e.target.value,
+                              },
+                            });
                           }}
                           placeholder="Authorization"
                           supportVariables
@@ -1432,18 +1458,13 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                         <Input
                           value={request.auth.digest?.username || ''}
                           onChange={(e) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  digest: { 
-                                    ...request.auth.digest,
-                                    username: e.target.value,
-                                    password: request.auth.digest?.password || '',
-                                  },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              digest: { 
+                                ...request.auth.digest,
+                                username: e.target.value,
+                                password: request.auth.digest?.password || '',
+                              },
+                            });
                           }}
                           supportVariables
                         />
@@ -1454,18 +1475,13 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                           type="password"
                           value={request.auth.digest?.password || ''}
                           onChange={(e) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  digest: { 
-                                    ...request.auth.digest,
-                                    username: request.auth.digest?.username || '',
-                                    password: e.target.value,
-                                  },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              digest: { 
+                                ...request.auth.digest,
+                                username: request.auth.digest?.username || '',
+                                password: e.target.value,
+                              },
+                            });
                           }}
                           supportVariables
                         />
@@ -1475,19 +1491,14 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                         <Input
                           value={request.auth.digest?.realm || ''}
                           onChange={(e) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  digest: { 
-                                    ...request.auth.digest,
-                                    username: request.auth.digest?.username || '',
-                                    password: request.auth.digest?.password || '',
-                                    realm: e.target.value,
-                                  },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              digest: { 
+                                ...request.auth.digest,
+                                username: request.auth.digest?.username || '',
+                                password: request.auth.digest?.password || '',
+                                realm: e.target.value,
+                              },
+                            });
                           }}
                           supportVariables
                         />
@@ -1503,19 +1514,14 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                           ]}
                           value={request.auth.digest?.algorithm || 'MD5'}
                           onChange={(algorithm) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  digest: { 
-                                    ...request.auth.digest,
-                                    username: request.auth.digest?.username || '',
-                                    password: request.auth.digest?.password || '',
-                                    algorithm: algorithm as 'MD5' | 'MD5-sess' | 'SHA-256' | 'SHA-256-sess',
-                                  },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              digest: { 
+                                ...request.auth.digest,
+                                username: request.auth.digest?.username || '',
+                                password: request.auth.digest?.password || '',
+                                algorithm: algorithm as 'MD5' | 'MD5-sess' | 'SHA-256' | 'SHA-256-sess',
+                              },
+                            });
                           }}
                         />
                       </div>
@@ -1529,20 +1535,15 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                         <Input
                           value={request.auth.awsSignature?.accessKeyId || ''}
                           onChange={(e) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  awsSignature: { 
-                                    ...request.auth.awsSignature,
-                                    accessKeyId: e.target.value,
-                                    secretAccessKey: request.auth.awsSignature?.secretAccessKey || '',
-                                    region: request.auth.awsSignature?.region || '',
-                                    service: request.auth.awsSignature?.service || '',
-                                  },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              awsSignature: { 
+                                ...request.auth.awsSignature,
+                                accessKeyId: e.target.value,
+                                secretAccessKey: request.auth.awsSignature?.secretAccessKey || '',
+                                region: request.auth.awsSignature?.region || '',
+                                service: request.auth.awsSignature?.service || '',
+                              },
+                            });
                           }}
                           supportVariables
                         />
@@ -1553,20 +1554,15 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                           type="password"
                           value={request.auth.awsSignature?.secretAccessKey || ''}
                           onChange={(e) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  awsSignature: { 
-                                    ...request.auth.awsSignature,
-                                    accessKeyId: request.auth.awsSignature?.accessKeyId || '',
-                                    secretAccessKey: e.target.value,
-                                    region: request.auth.awsSignature?.region || '',
-                                    service: request.auth.awsSignature?.service || '',
-                                  },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              awsSignature: { 
+                                ...request.auth.awsSignature,
+                                accessKeyId: request.auth.awsSignature?.accessKeyId || '',
+                                secretAccessKey: e.target.value,
+                                region: request.auth.awsSignature?.region || '',
+                                service: request.auth.awsSignature?.service || '',
+                              },
+                            });
                           }}
                           supportVariables
                         />
@@ -1576,20 +1572,15 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                         <Input
                           value={request.auth.awsSignature?.region || ''}
                           onChange={(e) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  awsSignature: { 
-                                    ...request.auth.awsSignature,
-                                    accessKeyId: request.auth.awsSignature?.accessKeyId || '',
-                                    secretAccessKey: request.auth.awsSignature?.secretAccessKey || '',
-                                    region: e.target.value,
-                                    service: request.auth.awsSignature?.service || '',
-                                  },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              awsSignature: { 
+                                ...request.auth.awsSignature,
+                                accessKeyId: request.auth.awsSignature?.accessKeyId || '',
+                                secretAccessKey: request.auth.awsSignature?.secretAccessKey || '',
+                                region: e.target.value,
+                                service: request.auth.awsSignature?.service || '',
+                              },
+                            });
                           }}
                           placeholder="us-east-1"
                           supportVariables
@@ -1600,20 +1591,15 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                         <Input
                           value={request.auth.awsSignature?.service || ''}
                           onChange={(e) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  awsSignature: { 
-                                    ...request.auth.awsSignature,
-                                    accessKeyId: request.auth.awsSignature?.accessKeyId || '',
-                                    secretAccessKey: request.auth.awsSignature?.secretAccessKey || '',
-                                    region: request.auth.awsSignature?.region || '',
-                                    service: e.target.value,
-                                  },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              awsSignature: { 
+                                ...request.auth.awsSignature,
+                                accessKeyId: request.auth.awsSignature?.accessKeyId || '',
+                                secretAccessKey: request.auth.awsSignature?.secretAccessKey || '',
+                                region: request.auth.awsSignature?.region || '',
+                                service: e.target.value,
+                              },
+                            });
                           }}
                           placeholder="s3, execute-api, etc."
                           supportVariables
@@ -1624,21 +1610,16 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                         <Input
                           value={request.auth.awsSignature?.sessionToken || ''}
                           onChange={(e) => {
-                            if (activeTabId) {
-                              updateRequest(activeTabId, {
-                                auth: {
-                                  ...request.auth,
-                                  awsSignature: { 
-                                    ...request.auth.awsSignature,
-                                    accessKeyId: request.auth.awsSignature?.accessKeyId || '',
-                                    secretAccessKey: request.auth.awsSignature?.secretAccessKey || '',
-                                    region: request.auth.awsSignature?.region || '',
-                                    service: request.auth.awsSignature?.service || '',
-                                    sessionToken: e.target.value,
-                                  },
-                                },
-                              });
-                            }
+                            handleAuthChange({
+                              awsSignature: { 
+                                ...request.auth.awsSignature,
+                                accessKeyId: request.auth.awsSignature?.accessKeyId || '',
+                                secretAccessKey: request.auth.awsSignature?.secretAccessKey || '',
+                                region: request.auth.awsSignature?.region || '',
+                                service: request.auth.awsSignature?.service || '',
+                                sessionToken: e.target.value,
+                              },
+                            });
                           }}
                           supportVariables
                         />
@@ -1697,7 +1678,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                         onLoad={handleEditorLoad}
                         placeholder={request.body.type === 'json' ? '{\n  "key": "value"\n}' : 'Enter request body'}
                         width="100%"
-                        height="200px"
+                        height="100%"
                         supportVariables
                         collectionEnvironment={selectedCollectionEnv}
                       />
@@ -1851,6 +1832,52 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                     }}
                     placeholder="Type a tag and press Enter..."
                   />
+                </div>
+              )}
+
+              {activeRequestTab === 'description' && (
+                <div className="center-panel__description">
+                  <div className="center-panel__description-toolbar">
+                    <div className="center-panel__description-tabs">
+                      <button
+                        className={`center-panel__description-tab ${!descriptionPreviewMode ? 'center-panel__description-tab--active' : ''}`}
+                        onClick={() => setDescriptionPreviewMode(false)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className={`center-panel__description-tab ${descriptionPreviewMode ? 'center-panel__description-tab--active' : ''}`}
+                        onClick={() => setDescriptionPreviewMode(true)}
+                      >
+                        Preview
+                      </button>
+                    </div>
+                  </div>
+                  <div className="center-panel__description-editor">
+                    {!descriptionPreviewMode ? (
+                      <textarea
+                        className="center-panel__description-textarea"
+                        placeholder="Add a description for this request (supports markdown)..."
+                        value={request.description || ''}
+                        onChange={(e) => {
+                          if (activeTabId) {
+                            updateRequest(activeTabId, { description: e.target.value });
+                            // Also sync to collection
+                            if (request.collectionId) {
+                              updateCollectionRequest(request.collectionId, request.id, { description: e.target.value });
+                            }
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div 
+                        className="center-panel__description-preview"
+                        dangerouslySetInnerHTML={{ 
+                          __html: renderMarkdown(request.description || '*No description*') 
+                        }}
+                      />
+                    )}
+                  </div>
                 </div>
               )}
 

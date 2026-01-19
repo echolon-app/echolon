@@ -479,15 +479,7 @@ export const RequestHistoryModal: React.FC<RequestHistoryModalProps> = ({
                       </button>
                     </div>
                     <div className="request-history-modal__details-actions">
-                      <Tooltip content="Copy response body">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          icon={<CopyIcon />}
-                          onClick={handleCopyResponse}
-                          disabled={!selectedEntry.response?.body}
-                        />
-                      </Tooltip>
+                    
                       <Tooltip content="Load this request">
                         <Button
                           variant="secondary"

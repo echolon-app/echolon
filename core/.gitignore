@@ -33,3 +33,6 @@ coverage/
 *.tmp
 *.temp
 
+
+# Bundle analyzer
+stats.html

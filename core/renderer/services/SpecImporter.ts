@@ -286,11 +286,15 @@ export class OpenAPIAdapter implements SpecImporterAdapter {
     const groups: Map<string, Request[]> = new Map();
     // Track used tags for better folder naming
     const tagDescriptions: Map<string, string> = new Map();
+    // Track tag order from the spec's tags array
+    const tagOrder: string[] = [];
     
-    // Extract tag descriptions from spec if available
+    // Extract tag descriptions and order from spec if available
     if (doc.tags) {
       for (const tag of doc.tags as Array<{name: string; description?: string}>) {
         tagDescriptions.set(tag.name, tag.description || '');
+        // Store the tag name with first letter capitalized (matching getGroupName behavior)
+        tagOrder.push(tag.name.charAt(0).toUpperCase() + tag.name.slice(1));
       }
     }
 
@@ -328,8 +332,22 @@ export class OpenAPIAdapter implements SpecImporterAdapter {
       collection.folders.push(folder);
     }
 
-    // Sort folders alphabetically
-    collection.folders.sort((a, b) => a.name.localeCompare(b.name));
+    // Sort folders based on tags array order from the spec, then alphabetically for any remaining
+    collection.folders.sort((a, b) => {
+      const aIndex = tagOrder.indexOf(a.name);
+      const bIndex = tagOrder.indexOf(b.name);
+      
+      // If both are in tag order, use that order
+      if (aIndex !== -1 && bIndex !== -1) {
+        return aIndex - bIndex;
+      }
+      // If only a is in tag order, it comes first
+      if (aIndex !== -1) return -1;
+      // If only b is in tag order, it comes first
+      if (bIndex !== -1) return 1;
+      // Neither is in tag order, sort alphabetically
+      return a.name.localeCompare(b.name);
+    });
 
     return collection;
   }
@@ -439,6 +457,7 @@ export class OpenAPIAdapter implements SpecImporterAdapter {
     return {
       id: uuidv4(),
       name: operation.summary || `${method.toUpperCase()} ${path}`,
+      description: operation.description || undefined,
       method: method.toUpperCase() as HttpMethod,
       url: `${urlPrefix}${path}`,
       headers,
@@ -919,6 +938,7 @@ interface PostmanCollection {
 
 interface PostmanItem {
   name: string;
+  description?: string;
   item?: PostmanItem[]; // For folders
   request?: PostmanRequest; // For requests
   response?: PostmanResponse[];
@@ -1142,6 +1162,12 @@ export class PostmanAdapter implements SpecImporterAdapter {
       }
     }
 
+    // Process items (can be folders or requests)
+    const { folders, requests } = this.processItems(doc.item, doc);
+
+    // Check if all requests share the same auth - if so, set it at collection level
+    const sharedAuth = this.detectSharedAuth(requests, folders);
+    
     const collection: Collection = {
       id: uuidv4(),
       name: doc.info.name || 'Imported Postman Collection',
@@ -1149,18 +1175,103 @@ export class PostmanAdapter implements SpecImporterAdapter {
       requests: [],
       folders: [],
       variables: variables.length > 0 ? variables : undefined,
-      auth: this.convertAuth(doc.auth),
+      auth: sharedAuth || this.convertAuth(doc.auth),
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
 
-    // Process items (can be folders or requests)
-    const { folders, requests } = this.processItems(doc.item, doc);
+    // If shared auth was detected, remove auth from individual requests
+    if (sharedAuth) {
+      this.clearRequestAuth(requests);
+      this.clearFolderAuth(folders);
+    }
 
     collection.folders = folders;
     collection.requests = requests;
 
     return collection;
+  }
+
+  // Detect if all requests share the same auth configuration
+  private detectSharedAuth(requests: Request[], folders: Folder[]): AuthConfig | null {
+    const allAuths: AuthConfig[] = [];
+    
+    // Collect auth from root requests
+    for (const req of requests) {
+      if (req.auth && req.auth.type !== 'none') {
+        allAuths.push(req.auth);
+      }
+    }
+    
+    // Collect auth from folder requests recursively
+    const collectFolderAuth = (folder: Folder) => {
+      for (const req of folder.requests) {
+        if (req.auth && req.auth.type !== 'none') {
+          allAuths.push(req.auth);
+        }
+      }
+      for (const subFolder of folder.folders) {
+        collectFolderAuth(subFolder);
+      }
+    };
+    
+    for (const folder of folders) {
+      collectFolderAuth(folder);
+    }
+    
+    // If no auth found, return null
+    if (allAuths.length === 0) {
+      return null;
+    }
+    
+    // Check if all auth configs are the same
+    const firstAuth = allAuths[0];
+    const allSame = allAuths.every(auth => this.authConfigsEqual(auth, firstAuth));
+    
+    if (allSame) {
+      return firstAuth;
+    }
+    
+    return null;
+  }
+
+  // Compare two auth configs for equality
+  private authConfigsEqual(a: AuthConfig, b: AuthConfig): boolean {
+    if (a.type !== b.type) return false;
+    
+    switch (a.type) {
+      case 'basic':
+        return a.basic?.username === b.basic?.username && 
+               a.basic?.password === b.basic?.password;
+      case 'bearer':
+        return a.bearer?.token === b.bearer?.token;
+      case 'apiKey':
+        return a.apiKey?.key === b.apiKey?.key && 
+               a.apiKey?.value === b.apiKey?.value &&
+               a.apiKey?.addTo === b.apiKey?.addTo;
+      case 'oauth2':
+        return a.oauth2?.accessToken === b.oauth2?.accessToken &&
+               a.oauth2?.tokenType === b.oauth2?.tokenType;
+      case 'none':
+        return true;
+      default:
+        return JSON.stringify(a) === JSON.stringify(b);
+    }
+  }
+
+  // Clear auth from requests (set to 'none')
+  private clearRequestAuth(requests: Request[]): void {
+    for (const req of requests) {
+      req.auth = { type: 'none' };
+    }
+  }
+
+  // Clear auth from folder requests recursively
+  private clearFolderAuth(folders: Folder[]): void {
+    for (const folder of folders) {
+      this.clearRequestAuth(folder.requests);
+      this.clearFolderAuth(folder.folders);
+    }
   }
 
   private processItems(items: PostmanItem[], doc: PostmanCollection): { folders: Folder[]; requests: Request[] } {
@@ -1215,6 +1326,7 @@ export class PostmanAdapter implements SpecImporterAdapter {
     return {
       id: uuidv4(),
       name: item.name,
+      description: item.description || postmanReq.description || undefined,
       method: (postmanReq.method || 'GET').toUpperCase() as HttpMethod,
       url,
       headers,
@@ -1432,7 +1544,7 @@ export class PostmanAdapter implements SpecImporterAdapter {
            (trimmed.startsWith('[') && trimmed.endsWith(']'));
   }
 
-  private convertAuth(auth?: PostmanAuth): { type: 'none' | 'basic' | 'bearer' | 'api-key' | 'oauth2'; username?: string; password?: string; token?: string; apiKey?: string; apiKeyHeader?: string; oauth2AccessToken?: string } | undefined {
+  private convertAuth(auth?: PostmanAuth): AuthConfig | undefined {
     if (!auth) return undefined;
 
     switch (auth.type) {
@@ -1440,8 +1552,10 @@ export class PostmanAdapter implements SpecImporterAdapter {
         const basicAuth = this.getAuthValues(auth.basic);
         return {
           type: 'basic',
-          username: basicAuth['username'] || '',
-          password: basicAuth['password'] || '',
+          basic: {
+            username: basicAuth['username'] || '',
+            password: basicAuth['password'] || '',
+          },
         };
       }
 
@@ -1449,16 +1563,21 @@ export class PostmanAdapter implements SpecImporterAdapter {
         const bearerAuth = this.getAuthValues(auth.bearer);
         return {
           type: 'bearer',
-          token: bearerAuth['token'] || '',
+          bearer: {
+            token: bearerAuth['token'] || '',
+          },
         };
       }
 
       case 'apikey': {
         const apiKeyAuth = this.getAuthValues(auth.apikey);
         return {
-          type: 'api-key',
-          apiKey: apiKeyAuth['value'] || apiKeyAuth['key'] || '',
-          apiKeyHeader: apiKeyAuth['key'] || 'X-API-Key',
+          type: 'apiKey',
+          apiKey: {
+            key: apiKeyAuth['key'] || 'X-API-Key',
+            value: apiKeyAuth['value'] || '',
+            addTo: (apiKeyAuth['in'] === 'query' ? 'query' : 'header') as 'header' | 'query',
+          },
         };
       }
 
@@ -1466,7 +1585,13 @@ export class PostmanAdapter implements SpecImporterAdapter {
         const oauth2Auth = this.getAuthValues(auth.oauth2);
         return {
           type: 'oauth2',
-          oauth2AccessToken: oauth2Auth['accessToken'] || oauth2Auth['access_token'] || '',
+          oauth2: {
+            grantType: 'client_credentials',
+            accessToken: oauth2Auth['accessToken'] || oauth2Auth['access_token'] || '',
+            tokenType: oauth2Auth['tokenType'] || 'Bearer',
+            clientId: oauth2Auth['clientId'] || oauth2Auth['client_id'] || '',
+            clientSecret: oauth2Auth['clientSecret'] || oauth2Auth['client_secret'] || '',
+          },
         };
       }
 

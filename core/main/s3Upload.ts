@@ -5,11 +5,11 @@
  * AWS credentials are never stored in the desktop app.
  */
 
-import { net } from 'electron';
+import { net, app } from 'electron';
 
-// In development, use localhost; in production, use the deployed API
-const isDev = !require('electron').app.isPackaged;
-const API_BASE_URL = process.env.ECHOLON_API_URL || (isDev ? 'http://localhost:3500' : 'https://api.echolon.app');
+// Use getter functions to avoid accessing app.isPackaged before app is ready
+const getIsDev = () => !app.isPackaged;
+const getApiBaseUrl = () => process.env.ECHOLON_API_URL || (getIsDev() ? 'http://localhost:3500' : 'https://api.echolon.app');
 const BASE_URL = 'https://api.echolon.app';
 
 // Manifest structure for tracking versions
@@ -78,7 +78,7 @@ async function apiRequest<T>(
   body?: object
 ): Promise<T> {
   return new Promise((resolve, reject) => {
-    const url = `${API_BASE_URL}${endpoint}`;
+    const url = `${getApiBaseUrl()}${endpoint}`;
     const request = net.request({
       method,
       url,

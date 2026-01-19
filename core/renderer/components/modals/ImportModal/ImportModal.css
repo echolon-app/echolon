@@ -418,7 +418,6 @@
 
 .import-modal__base-url-value {
   color: var(--text-secondary) !important;
-  max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
 }

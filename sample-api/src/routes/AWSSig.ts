@@ -224,7 +224,7 @@ function validateAwsSignature(
  * /auth/aws-sig/test:
  *   get:
  *     tags:
- *       - Authentication/AWS Sig V4
+ *       - 7. Authentication/AWS Sig V4
  *     summary: Test AWS Signature v4 Authentication
  *     description: |
  *       Tests AWS Signature Version 4 authentication.
@@ -349,7 +349,7 @@ router.get('/test', (req: Request, res: Response) => {
  * /auth/aws-sig/test:
  *   post:
  *     tags:
- *       - Authentication/AWS Sig V4
+ *       - 7. Authentication/AWS Sig V4
  *     summary: Test AWS Signature v4 with POST body
  *     description: |
  *       Tests AWS Signature Version 4 authentication with a POST request body.
@@ -461,7 +461,7 @@ router.post('/test', (req: Request, res: Response) => {
  * /auth/aws-sig/test-session:
  *   get:
  *     tags:
- *       - Authentication/AWS Sig V4
+ *       - 7. Authentication/AWS Sig V4
  *     summary: Test AWS Signature v4 with Session Token
  *     description: |
  *       Tests AWS Signature Version 4 authentication with temporary credentials (session token).
@@ -568,7 +568,7 @@ router.get('/test-session', (req: Request, res: Response) => {
  * /auth/aws-sig/credentials:
  *   get:
  *     tags:
- *       - Authentication/AWS Sig V4
+ *       - 7. Authentication/AWS Sig V4
  *     summary: Get AWS Signature v4 test credentials
  *     description: Returns the test credentials for AWS Signature v4 authentication
  *     responses:

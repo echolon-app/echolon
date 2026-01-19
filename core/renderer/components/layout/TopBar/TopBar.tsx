@@ -5,8 +5,9 @@ import {
   ChevronDownIcon, CheckIcon, PlusIcon, EditIcon, TrashIcon, GlobeIcon,
   TabsIcon, ListIcon, GitHubIcon, ArrowUpIcon, ArrowDownIcon, RefreshIcon, GitBranchIcon
 } from '@/components/ui/icons';
-import { useApp, useRequest, useWorkspace, useEnvironments, useCollections, useWebMode, useFileStorage, useGitHub, useGitOptional } from '@/contexts';
+import { useApp, useRequest, useWorkspace, useEnvironments, useCollections, useWebMode, useFileStorage, useGitHub, useGitOptional, useToast } from '@/contexts';
 import './TopBar.css';
+import '@/components/ui/Modal/Modal.css';
 
 interface WorkspaceModalProps {
   isOpen: boolean;
@@ -171,7 +172,7 @@ export const TopBar: React.FC = () => {
   const { workspaces, activeWorkspace, setActiveWorkspace, addWorkspace, updateWorkspace, deleteWorkspace, selectedWorkspaceEnvironment, selectWorkspaceEnvironment } = useWorkspace();
   const { activeEnvironments, selectedEnvironment, selectEnvironment, addEnvironment } = useEnvironments();
   const { collections, setActiveCollectionEnvironment } = useCollections();
-  const { readonly, isWebMode, availableVersions, currentVersion, setCurrentVersion, versionsLoading, selectedEnvironmentId, setSelectedEnvironmentId } = useWebMode();
+  const { readonly, isWebMode, availableVersions, currentVersion, setCurrentVersion, versionsLoading, selectedEnvironmentId, setSelectedEnvironmentId, loadedCollection } = useWebMode();
   const { echolonPath } = useFileStorage();
   const { 
     isAuthenticated: isGitHubAuthenticated, 
@@ -182,6 +183,7 @@ export const TopBar: React.FC = () => {
     pushWorkspaceChanges, 
     pullWorkspaceChanges 
   } = useGitHub();
+  const { success: showSuccessToast } = useToast();
   const git = useGitOptional();
   const gitInitialized = git?.isInitialized ?? false;
   const gitHasChanges = git?.hasChanges ?? (() => false);
@@ -196,6 +198,7 @@ export const TopBar: React.FC = () => {
   const [pushModalOpen, setPushModalOpen] = useState(false);
   const [commitMessage, setCommitMessage] = useState('');
   const [pushError, setPushError] = useState<string | null>(null);
+  const [gitErrorModalOpen, setGitErrorModalOpen] = useState(false);
   const [versionDropdownOpen, setVersionDropdownOpen] = useState(false);
   
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -208,45 +211,56 @@ export const TopBar: React.FC = () => {
   // Get the current collection based on active tab
   // Handles: collection tabs, request tabs with collectionId, or fallback search
   const currentCollection = useMemo(() => {
-    if (!activeTab) return null;
-    
     // If this is a collection tab, use its collectionId directly
-    if (activeTab.type === 'collection' && activeTab.collectionId) {
+    if (activeTab?.type === 'collection' && activeTab.collectionId) {
       return collections.find(c => c.id === activeTab.collectionId) || null;
     }
     
     // For request tabs, try direct collectionId lookup
-    if (activeTab.request?.collectionId) {
+    if (activeTab?.request?.collectionId) {
       return collections.find(c => c.id === activeTab.request?.collectionId) || null;
     }
     
     // Fallback: find collection containing this request by ID
-    const requestId = activeTab.request?.id;
-    if (!requestId) return null;
-    
-    // Helper to recursively search folders for a request
-    const searchFolders = (folders: typeof collections[0]['folders']): boolean => {
-      if (!folders) return false;
-      for (const folder of folders) {
-        if (folder.requests?.some(r => r.id === requestId)) return true;
-        if (searchFolders(folder.folders)) return true;
+    const requestId = activeTab?.request?.id;
+    if (requestId) {
+      // Helper to recursively search folders for a request
+      const searchFolders = (folders: typeof collections[0]['folders']): boolean => {
+        if (!folders) return false;
+        for (const folder of folders) {
+          if (folder.requests?.some(r => r.id === requestId)) return true;
+          if (searchFolders(folder.folders)) return true;
+        }
+        return false;
+      };
+      
+      for (const collection of collections) {
+        // Check direct requests
+        if (collection.requests?.some(r => r.id === requestId)) {
+          return collection;
+        }
+        // Check requests in folders (recursively)
+        if (searchFolders(collection.folders)) {
+          return collection;
+        }
       }
-      return false;
-    };
+    }
     
-    for (const collection of collections) {
-      // Check direct requests
-      if (collection.requests?.some(r => r.id === requestId)) {
-        return collection;
+    // In web mode, fall back to the loaded collection or first collection
+    // This ensures collection environments are available for the environment dropdown
+    if (isWebMode) {
+      // Prefer the explicitly loaded collection from spec URL
+      if (loadedCollection) {
+        return loadedCollection;
       }
-      // Check requests in folders (recursively)
-      if (searchFolders(collection.folders)) {
-        return collection;
+      // Fall back to first collection in the list
+      if (collections.length > 0) {
+        return collections[0];
       }
     }
     
     return null;
-  }, [activeTab, collections]);
+  }, [activeTab, collections, isWebMode, loadedCollection]);
 
   // Environment options for AutoComplete - show global + workspace + collection environments
   // Priority: Collection > Workspace > Global
@@ -301,7 +315,7 @@ export const TopBar: React.FC = () => {
     }
 
     return options;
-  }, [activeEnvironments, activeWorkspace?.environments, activeWorkspace?.id, currentCollection]);
+  }, [activeEnvironments, activeWorkspace?.environments, activeWorkspace?.id, currentCollection, isWebMode]);
 
   const handleEnvironmentChange = (envId: string | null) => {
     // In web mode, persist the selection to localStorage
@@ -400,6 +414,7 @@ export const TopBar: React.FC = () => {
       setPushModalOpen(false);
       setCommitMessage('');
       setGitHubDropdownOpen(false);
+      showSuccessToast('Changes pushed successfully');
     } else {
       setPushError(result.error || 'Push failed');
     }
@@ -437,8 +452,8 @@ export const TopBar: React.FC = () => {
 
   const handleSaveWorkspace = (name: string, description?: string, color?: string) => {
     if (workspaceModalMode === 'create') {
-      const newWorkspace = addWorkspace(name, description, color);
-      setActiveWorkspace(newWorkspace.id);
+      // addWorkspace already sets the new workspace as active
+      addWorkspace(name, description, color);
     } else if (editingWorkspace) {
       updateWorkspace(editingWorkspace.id, { name, description, color });
     }
@@ -724,10 +739,10 @@ export const TopBar: React.FC = () => {
             emptyMessage="No environments found"
             size="sm"
             allowClear={false}
-            onCreate={handleCreateEnvironment}
-            createLabel="Create environment"
-            onCreateClick={openNewEnvironmentModal}
-            createButtonLabel="New Environment"
+            onCreate={readonly ? undefined : handleCreateEnvironment}
+            createLabel={readonly ? undefined : "Create environment"}
+            onCreateClick={readonly ? undefined : openNewEnvironmentModal}
+            createButtonLabel={readonly ? undefined : "New Environment"}
             leadingIcon={<GlobeIcon />}
             className="top-bar__environment-select"
           />
@@ -801,7 +816,16 @@ export const TopBar: React.FC = () => {
             
             {pushError && (
               <div className="top-bar__push-error">
-                {pushError}
+                <div className="top-bar__push-error-text">
+                  {pushError.length > 80 ? pushError.substring(0, 80) + '...' : pushError}
+                </div>
+                <button 
+                  type="button"
+                  className="top-bar__push-error-details"
+                  onClick={() => setGitErrorModalOpen(true)}
+                >
+                  View Full Error
+                </button>
               </div>
             )}
             
@@ -826,6 +850,44 @@ export const TopBar: React.FC = () => {
                   {isSyncing ? 'Pushing...' : 'Push'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Git Error Details Modal */}
+      {gitErrorModalOpen && pushError && (
+        <div className="modal-overlay" onClick={() => setGitErrorModalOpen(false)}>
+          <div className="modal modal--lg" onClick={e => e.stopPropagation()}>
+            <div className="modal__header">
+              <h2 className="modal__title" style={{ color: 'var(--color-error)' }}>GitHub Error</h2>
+              <button 
+                className="modal__close"
+                onClick={() => setGitErrorModalOpen(false)}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="modal__content">
+              <pre className="git-error-modal__message">{pushError}</pre>
+            </div>
+            <div className="modal__footer">
+              <button 
+                className="git-error-modal__copy"
+                onClick={() => {
+                  navigator.clipboard.writeText(pushError);
+                }}
+              >
+                Copy Error
+              </button>
+              <button 
+                className="git-error-modal__ok"
+                onClick={() => setGitErrorModalOpen(false)}
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

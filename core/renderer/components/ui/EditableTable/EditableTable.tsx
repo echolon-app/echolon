@@ -137,7 +137,7 @@ export const EditableTable: React.FC<EditableTableProps> = ({
         {showSecureToggle && (
           <div className="editable-table__cell editable-table__cell--secure">
             <Tooltip content="Mark as secret" position="top">
-              <LockIcon />
+              <span className="editable-table__header-icon"><LockIcon /></span>
             </Tooltip>
           </div>
         )}

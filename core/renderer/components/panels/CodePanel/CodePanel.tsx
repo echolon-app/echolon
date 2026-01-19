@@ -1,18 +1,4 @@
-import React, { useState, useMemo } from 'react';
-import 'ace-builds/src-noconflict/mode-sh';
-import 'ace-builds/src-noconflict/mode-golang';
-import 'ace-builds/src-noconflict/mode-java';
-import 'ace-builds/src-noconflict/mode-kotlin';
-import 'ace-builds/src-noconflict/mode-csharp';
-import 'ace-builds/src-noconflict/mode-php';
-import 'ace-builds/src-noconflict/mode-ruby';
-import 'ace-builds/src-noconflict/mode-rust';
-import 'ace-builds/src-noconflict/mode-swift';
-import 'ace-builds/src-noconflict/mode-dart';
-import 'ace-builds/src-noconflict/mode-c_cpp';
-import 'ace-builds/src-noconflict/mode-r';
-import 'ace-builds/src-noconflict/mode-objectivec';
-import 'ace-builds/src-noconflict/mode-ocaml';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Button, Dropdown, CodeEditor, CopyIcon, CheckIcon, CloseIcon } from '@/components/ui';
 import { useRequest, useEnvironments, useTheme, useApp, useCollections } from '@/contexts';
 import { CODE_FORMATS } from '@/utils/codeGenerators';
@@ -20,6 +6,33 @@ import { Collection } from '@/types';
 import { APP_VERSION } from '@/utils/environment';
 import { v4 as uuidv4 } from 'uuid';
 import './CodePanel.css';
+
+// Dynamically load ace modes on demand - each becomes a separate chunk
+// Common modes (json, text, javascript, html, xml, css, python) are statically loaded in CodeEditor
+const aceModeLoaders: Record<string, () => Promise<unknown>> = {
+  sh: () => import('ace-builds/src-noconflict/mode-sh'),
+  golang: () => import('ace-builds/src-noconflict/mode-golang'),
+  java: () => import('ace-builds/src-noconflict/mode-java'),
+  kotlin: () => import('ace-builds/src-noconflict/mode-kotlin'),
+  csharp: () => import('ace-builds/src-noconflict/mode-csharp'),
+  php: () => import('ace-builds/src-noconflict/mode-php'),
+  ruby: () => import('ace-builds/src-noconflict/mode-ruby'),
+  rust: () => import('ace-builds/src-noconflict/mode-rust'),
+  swift: () => import('ace-builds/src-noconflict/mode-swift'),
+  dart: () => import('ace-builds/src-noconflict/mode-dart'),
+  c_cpp: () => import('ace-builds/src-noconflict/mode-c_cpp'),
+  r: () => import('ace-builds/src-noconflict/mode-r'),
+  objectivec: () => import('ace-builds/src-noconflict/mode-objectivec'),
+  ocaml: () => import('ace-builds/src-noconflict/mode-ocaml'),
+};
+
+const loadedModes = new Set<string>();
+
+async function loadAceMode(mode: string): Promise<void> {
+  if (loadedModes.has(mode) || !aceModeLoaders[mode]) return;
+  await aceModeLoaders[mode]();
+  loadedModes.add(mode);
+}
 
 export const CodePanel: React.FC = () => {
   const { resolvedTheme } = useTheme();
@@ -87,6 +100,11 @@ export const CodePanel: React.FC = () => {
   const selectedFormat = useMemo(() => {
     return CODE_FORMATS.find(f => f.id === formatId) || CODE_FORMATS[0];
   }, [formatId]);
+
+  // Dynamically load ace mode when format changes
+  useEffect(() => {
+    loadAceMode(selectedFormat.aceMode);
+  }, [selectedFormat.aceMode]);
 
   const code = useMemo(() => {
     if (!effectiveRequest) return '';

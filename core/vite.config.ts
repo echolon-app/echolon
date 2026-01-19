@@ -2,9 +2,12 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import electron from 'vite-plugin-electron';
 import electronRenderer from 'vite-plugin-electron-renderer';
+import { visualizer } from 'rollup-plugin-visualizer';
 import path from 'path';
 import { builtinModules } from 'module';
 import pkg from './package.json';
+
+const analyze = process.env.ANALYZE === 'true';
 
 console.log('ENV', process.env.ENV);
 
@@ -78,6 +81,17 @@ export default defineConfig({
   build: {
     outDir: 'dist/renderer',
     emptyOutDir: true,
+    rollupOptions: {
+      plugins: analyze ? [
+        visualizer({
+          filename: 'stats.html',
+          open: true,
+          gzipSize: true,
+          brotliSize: true,
+          template: 'treemap', // treemap | sunburst | network
+        }),
+      ] : [],
+    },
   },
   server: {
     port: 5173,

@@ -158,7 +158,7 @@ function validateUserCredentials(username: string, password: string) {
  * /auth/oauth2/authorize:
  *   get:
  *     tags:
- *       - Authentication/OAuth 2.0
+ *       - 6. Authentication/OAuth 2.0
  *     summary: OAuth 2.0 Authorization Endpoint
  *     description: |
  *       Initiates the OAuth 2.0 authorization flow. This endpoint is used for:
@@ -319,7 +319,7 @@ router.get('/authorize', (req: Request, res: Response) => {
  * /auth/oauth2/token:
  *   post:
  *     tags:
- *       - Authentication/OAuth 2.0
+ *       - 6. Authentication/OAuth 2.0
  *     summary: OAuth 2.0 Token Endpoint
  *     description: |
  *       Exchange credentials for an access token. Supports multiple grant types:
@@ -758,7 +758,7 @@ router.post('/token', express.urlencoded({ extended: true }), (req: Request, res
  * /auth/oauth2/resource:
  *   get:
  *     tags:
- *       - Authentication/OAuth 2.0
+ *       - 6. Authentication/OAuth 2.0
  *     summary: OAuth 2.0 Protected Resource
  *     description: |
  *       A protected resource that requires a valid OAuth 2.0 access token.
@@ -853,7 +853,7 @@ router.get('/resource', (req: Request, res: Response) => {
  * /auth/oauth2/revoke:
  *   post:
  *     tags:
- *       - Authentication/OAuth 2.0
+ *       - 6. Authentication/OAuth 2.0
  *     summary: OAuth 2.0 Token Revocation
  *     description: |
  *       Revoke an access token or refresh token.
@@ -909,7 +909,7 @@ router.post('/revoke', express.urlencoded({ extended: true }), (req: Request, re
  * /auth/oauth2/introspect:
  *   post:
  *     tags:
- *       - Authentication/OAuth 2.0
+ *       - 6. Authentication/OAuth 2.0
  *     summary: OAuth 2.0 Token Introspection
  *     description: |
  *       Introspect an access token to check its validity and metadata.
@@ -980,7 +980,7 @@ router.post('/introspect', express.urlencoded({ extended: true }), (req: Request
  * /auth/oauth2/credentials:
  *   get:
  *     tags:
- *       - Authentication/OAuth 2.0
+ *       - 6. Authentication/OAuth 2.0
  *     summary: Get OAuth 2.0 test credentials
  *     description: Returns all test credentials for OAuth 2.0 authentication
  *     responses:

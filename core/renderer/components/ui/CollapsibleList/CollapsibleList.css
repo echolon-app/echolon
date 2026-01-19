@@ -1,3 +1,7 @@
+.collapsible-list {
+  position: relative;
+}
+
 .collapsible-list__header {
   position: relative;
   display: flex;
@@ -118,13 +122,14 @@
   padding-left: var(--spacing-lg);
 }
 
+/* Collapsible List Item */
 .collapsible-list-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
   padding: var(--spacing-xs) var(--spacing-sm);
   cursor: pointer;
-  border-radius: var(--radius-md);
   transition: background-color var(--transition-fast);
 }
 
@@ -132,12 +137,12 @@
   background-color: var(--bg-hover);
 }
 
-/*.collapsible-list-item--active {
-  background-color: var(--bg-active);
-}*/
+.collapsible-list-item--active {
+  background-color: var(--color-primary-alpha-light);
+}
 
 .collapsible-list-item--active:hover {
-  background-color: var(--bg-active);
+  background-color: var(--color-primary-alpha);
 }
 
 .collapsible-list-item__icon {
@@ -165,88 +170,71 @@
   font-weight: 500;
 }
 
-/* Drag and drop styles */
-.collapsible-list--drag-over {
-  outline: 2px dashed var(--color-primary);
-  outline-offset: -2px;
-  background-color: var(--color-primary-bg, rgba(34, 197, 94, 0.1));
-  border-radius: var(--radius-md);
-}
-
-.collapsible-list--drag-over > .collapsible-list__header {
-  background-color: transparent;
-}
-
-/* Header drop indicator (for dropping onto closed folders) */
-.collapsible-list__header--drag-over {
-  background-color: var(--color-primary-bg, rgba(34, 197, 94, 0.15)) !important;
-  outline: 2px dashed var(--color-primary);
-  outline-offset: -2px;
-}
-
-.collapsible-list__header--drag-over::after {
-  content: '↳ Drop here';
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: var(--font-xs);
-  color: var(--color-primary);
-  font-weight: 500;
-  background-color: var(--color-primary);
-  color: white;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-}
-
+/* Draggable styles */
+.collapsible-list[draggable="true"],
 .collapsible-list-item[draggable="true"] {
   cursor: grab;
 }
 
+.collapsible-list[draggable="true"]:active,
 .collapsible-list-item[draggable="true"]:active {
   cursor: grabbing;
 }
 
+.collapsible-list--dragging,
 .collapsible-list-item--dragging {
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
-/* Drop position indicators */
-.collapsible-list-item {
-  position: relative;
-}
-
-.collapsible-list-item__drop-indicator {
+/* Drop indicator line - appears between items */
+.collapsible-list__drop-line,
+.collapsible-list-item__drop-line {
   position: absolute;
-  left: 0;
-  right: 0;
+  left: 4px;
+  right: 4px;
   height: 2px;
   background-color: var(--color-primary);
   pointer-events: none;
-  z-index: 10;
+  z-index: 100;
 }
 
-.collapsible-list-item__drop-indicator::before {
+.collapsible-list__drop-line::before,
+.collapsible-list-item__drop-line::before {
   content: '';
   position: absolute;
-  left: 0;
-  width: 6px;
-  height: 6px;
+  left: -3px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
   background-color: var(--color-primary);
   border-radius: 50%;
-  transform: translateY(-2px);
 }
 
-.collapsible-list-item__drop-indicator--before {
-  top: -1px;
+.collapsible-list__drop-line--before,
+.collapsible-list-item__drop-line--before {
+  top: 0;
 }
 
-.collapsible-list-item__drop-indicator--after {
-  bottom: -1px;
+.collapsible-list__drop-line--after,
+.collapsible-list-item__drop-line--after {
+  bottom: 0;
 }
 
-/* Visual feedback when hovering with a dragged item */
-.collapsible-list-item--drop-before,
-.collapsible-list-item--drop-after {
-  background-color: var(--color-primary-bg, rgba(34, 197, 94, 0.08));
+/* Drop inside indicator - box highlight for dropping INTO folders/collections */
+.collapsible-list--drop-inside {
+  outline: 2px dashed var(--color-primary);
+  outline-offset: -2px;
+  background-color: var(--color-primary-bg, rgba(99, 102, 241, 0.1));
+  border-radius: var(--radius-md);
+}
+
+.collapsible-list--drop-inside > .collapsible-list__header {
+  background-color: transparent;
+}
+
+.collapsible-list-item--drop-inside {
+  outline: 2px dashed var(--color-primary);
+  outline-offset: -2px;
+  background-color: var(--color-primary-bg, rgba(99, 102, 241, 0.1));
 }

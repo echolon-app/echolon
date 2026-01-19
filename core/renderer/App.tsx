@@ -249,7 +249,7 @@ export const App: React.FC = () => {
   }, [dataLoading, settings.debugMode, timings, addToast]);
 
   // Determine which panel to show in center
-  // In web mode with reference view, show API Reference Panel
+  // In web mode with reference view, show the Collection's Reference tab via CenterPanel
   // Otherwise show the standard CenterPanel or MockingPanel
   const centerPanelContent = (() => {
     // Mocking panel takes precedence (but only in Electron)
@@ -257,12 +257,13 @@ export const App: React.FC = () => {
       return <MockingPanel />;
     }
     
-    // Reference view - show vertical list of all requests
-    if (viewMode === 'reference') {
+    // Reference view in web mode - show CenterPanel (which will display the collection's Reference tab)
+    // In desktop mode, show the standalone APIReferencePanel
+    if (viewMode === 'reference' && !isWebMode) {
       return <APIReferencePanel />;
     }
     
-    // Default tabs view
+    // Default: CenterPanel (tabs view, or reference view in web mode)
     return <CenterPanel onShowCodePanel={showCodePanel} />;
   })();
 

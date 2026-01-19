@@ -369,8 +369,10 @@ export const EnvironmentsProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // Priority: Collection > Workspace > Global
   const getVariableWithSource = useCallback((key: string, collectionEnv: CollectionEnvironment | null, workspaceEnv?: WorkspaceEnvironment | null): ResolvedVariable | null => {
     // 1. Check collection environment first (highest priority)
+  
     if (collectionEnv) {
       const collectionVar = collectionEnv.variables.find(v => v.key === key && v.enabled);
+
       if (collectionVar) {
         return {
           key: collectionVar.key,

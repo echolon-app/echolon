@@ -4,6 +4,7 @@
   --color-primary: #6366f1;
   --color-primary-hover: #4f46e5;
   --color-primary-light: #818cf8;
+  --accent-primary-alpha: color-mix(in srgb, var(--color-primary) 15%, transparent);
   --color-secondary: #ec4899;
   --color-accent: #14b8a6;
 

@@ -24,7 +24,11 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   const { isWebMode, isWebFileSystemEnabled, enableWebFileSystem } = useFileStorage();
   const webMode = useWebModeOptional();
   const readonly = webMode?.readonly ?? false;
-  const sidebarVisible = sidebarState !== 'hidden';
+  const viewMode = webMode?.viewMode ?? 'tabs';
+  
+  // In reference view mode (web), hide only the sidebar (not the left panel)
+  const isReferenceView = isWebMode && viewMode === 'reference';
+  const sidebarVisible = sidebarState !== 'hidden' && !isReferenceView;
   
   // Resizable panel widths - load from localStorage
   const [leftPanelWidth, setLeftPanelWidth] = useState(() => {

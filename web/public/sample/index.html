@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <title>Echolon Demo</title>
+  <link rel="stylesheet" href="/assets/index-latest.css" />
+</head>
+<body>
+  <div id="echolon"></div>
+  <!-- 
+    Demo mode page for landing page interactive demos.
+    When ?demo=xxx is in URL, DemoModeInitializer opens specific tabs.
+    The Sample API spec is always loaded to provide the real requests.
+  -->
+  <script
+    id="api-reference"
+    data-theme="dark"
+    data-readonly="true"
+    data-url="https://sample-api.echolon.app/openapi.json"
+  ></script>
+  <script>
+    // Configure view mode based on URL params
+    const urlParams = new URLSearchParams(window.location.search);
+    const isDemo = urlParams.has('demo');
+    
+    // In demo mode, use tabs view; otherwise use reference view
+    if (!isDemo) {
+      document.getElementById('api-reference').setAttribute('data-view', 'reference');
+      document.getElementById('api-reference').setAttribute('data-title', 'Sample API Reference');
+      document.getElementById('api-reference').setAttribute('data-initial-request', 'Get All Tasks');
+    }
+  </script>
+  <script type="module" src="/assets/index-latest.js"></script>
+</body>
+</html>

@@ -15,19 +15,8 @@ export const EnvironmentEditor: React.FC<EnvironmentEditorProps> = ({ environmen
   const { settings } = useApp();
   
   const environment = environments.find(e => e.id === environmentId);
-  
-  if (!environment) {
-    return (
-      <div className="environment-editor environment-editor--not-found">
-        <div className="environment-editor__empty">
-          <GlobeIcon />
-          <h3>Environment Not Found</h3>
-          <p>This environment may have been deleted.</p>
-        </div>
-      </div>
-    );
-  }
 
+  // All hooks must be called before any early returns
   const handleNameChange = useCallback((newName: string) => {
     updateEnvironment(environmentId, { name: newName });
     
@@ -56,10 +45,24 @@ export const EnvironmentEditor: React.FC<EnvironmentEditorProps> = ({ environmen
 
   // Ensure there's at least one empty row - use stable ID to prevent cursor jumping
   const variablesWithEmpty = useMemo(() => {
+    if (!environment) return [{ id: `empty-${environmentId}`, key: '', value: '', enabled: true }];
     return environment.variables.length === 0
       ? [{ id: `empty-${environmentId}`, key: '', value: '', enabled: true }]
       : environment.variables;
-  }, [environment.variables, environmentId]);
+  }, [environment?.variables, environmentId]);
+
+  // Early return AFTER all hooks
+  if (!environment) {
+    return (
+      <div className="environment-editor environment-editor--not-found">
+        <div className="environment-editor__empty">
+          <GlobeIcon />
+          <h3>Environment Not Found</h3>
+          <p>This environment may have been deleted.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="environment-editor">

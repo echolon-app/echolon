@@ -15,20 +15,67 @@ import {
   GitHubProvider,
   FileStorageProvider,
   DataLoaderProvider,
+  useRequest,
 } from '../core/renderer/contexts';
 import { ToastContainer } from '../core/renderer/components/ui';
+import { DemoModeInitializer } from '../core/renderer/components/DemoModeInitializer';
 import { specImporter } from '../core/renderer/services';
 import { useCollections } from '../core/renderer/contexts/CollectionsContext';
+import { useEnvironments } from '../core/renderer/contexts/EnvironmentsContext';
 import { useWebMode } from '../core/renderer/contexts/WebModeContext';
+import { Collection, Folder, Request, Environment } from '../core/renderer/types';
 import '../core/renderer/styles/index.css';
 import './styles.css';
+
+// Helper to find a request by name in a collection (searches folders recursively)
+const findRequestByName = (collection: Collection, name: string): Request | null => {
+  const searchInRequests = (requests: Request[]): Request | null => {
+    return requests.find(r => r.name.toLowerCase().includes(name.toLowerCase())) || null;
+  };
+  
+  const searchInFolders = (folders: Folder[]): Request | null => {
+    for (const folder of folders) {
+      const found = searchInRequests(folder.requests || []);
+      if (found) return found;
+      if (folder.folders) {
+        const foundInSubfolder = searchInFolders(folder.folders);
+        if (foundInSubfolder) return foundInSubfolder;
+      }
+    }
+    return null;
+  };
+  
+  // Search in root requests first
+  const rootRequest = searchInRequests(collection.requests || []);
+  if (rootRequest) return rootRequest;
+  
+  // Search in folders
+  return searchInFolders(collection.folders || []);
+};
 
 // Spec loader component that fetches and loads the OpenAPI spec as initial collection
 // Unlike before, this doesn't block the app - it loads the spec in the background
 const SpecLoader: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { specUrl, setLoadedCollection, corsProxy } = useWebMode();
+  const { specUrl, setLoadedCollection, corsProxy, initialRequest, viewMode, readonly } = useWebMode();
   const { addWebModeCollection, collections } = useCollections();
+  const { addWebModeEnvironment, selectEnvironment } = useEnvironments();
+  const { addTab, addCollectionTab, tabs, clearAllTabs } = useRequest();
   const hasLoaded = useRef(false);
+  const hasOpenedTab = useRef(false);
+  const hasClearedTabs = useRef(false);
+
+  // In readonly mode, clear any stale tabs from localStorage on initial load
+  // This prevents showing empty state when restored tabs reference non-existent collections
+  useEffect(() => {
+    if (!readonly || hasClearedTabs.current) return;
+    hasClearedTabs.current = true;
+    
+    // Clear tabs if there are any (they would reference stale collection IDs)
+    if (tabs.length > 0) {
+      clearAllTabs();
+      console.log('[SpecLoader] Cleared stale tabs for readonly mode');
+    }
+  }, [readonly, tabs.length, clearAllTabs]);
 
   useEffect(() => {
     // Skip if no specUrl, already loaded, or collections already exist
@@ -67,6 +114,29 @@ const SpecLoader: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           addWebModeCollection(result.collection);
           setLoadedCollection(result.collection);
           
+          // Add collection environments as global environments
+          if (result.collection.environments && result.collection.environments.length > 0) {
+            let firstEnvId: string | null = null;
+            for (const collEnv of result.collection.environments) {
+              // Convert collection environment to global environment
+              const globalEnv: Environment = {
+                id: collEnv.id,
+                name: collEnv.name,
+                variables: collEnv.variables || [],
+                isActive: false,
+              };
+              addWebModeEnvironment(globalEnv);
+              if (!firstEnvId) {
+                firstEnvId = collEnv.id;
+              }
+            }
+            // Select the first environment as active
+            if (firstEnvId) {
+              selectEnvironment(firstEnvId);
+              console.log('[SpecLoader] Selected environment:', firstEnvId);
+            }
+          }
+          
           console.log('[SpecLoader] Loaded initial collection from:', specUrl);
         } else {
           console.error('[SpecLoader] Failed to parse spec from:', specUrl);
@@ -79,7 +149,33 @@ const SpecLoader: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     };
 
     loadSpec();
-  }, [specUrl, corsProxy, addWebModeCollection, setLoadedCollection, collections.length]);
+  }, [specUrl, corsProxy, addWebModeCollection, setLoadedCollection, collections.length, addWebModeEnvironment, selectEnvironment]);
+
+  // Open initial tab after collection is loaded
+  useEffect(() => {
+    if (hasOpenedTab.current || collections.length === 0 || tabs.length > 0) return;
+    
+    const collection = collections[0];
+    
+    // In reference view mode, open the collection's Reference tab
+    if (viewMode === 'reference') {
+      hasOpenedTab.current = true;
+      addCollectionTab(collection, 'reference');
+      console.log('[SpecLoader] Opened collection Reference tab');
+      return;
+    }
+    
+    // Otherwise, open the initial request if specified
+    if (initialRequest) {
+      const request = findRequestByName(collection, initialRequest);
+      if (request) {
+        hasOpenedTab.current = true;
+        const requestWithCollection = { ...request, collectionId: collection.id };
+        addTab(requestWithCollection);
+        console.log('[SpecLoader] Opened initial request tab:', request.name);
+      }
+    }
+  }, [initialRequest, viewMode, collections, addTab, addCollectionTab, tabs.length]);
 
   // Always render the app - spec loading happens in the background
   return <>{children}</>;
@@ -88,12 +184,23 @@ const SpecLoader: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 // Main Web App component
 const WebApp: React.FC = () => {
   return (
-    <SpecLoader>
-      <App />
-      <ToastContainer />
-    </SpecLoader>
+    <DemoModeInitializer>
+      <SpecLoader>
+        <App />
+        <ToastContainer />
+      </SpecLoader>
+    </DemoModeInitializer>
   );
 };
+
+// Demo modes for landing page interactive demos
+export type DemoMode = 
+  | 'request-editor'
+  | 'variables'
+  | 'git'
+  | 'publishing'
+  | 'mocking'
+  | null;
 
 // Mount function for programmatic use
 export interface MountOptions {
@@ -105,6 +212,9 @@ export interface MountOptions {
   readonly?: boolean;
   title?: string;
   versionsUrl?: string;
+  demoMode?: DemoMode;
+  hideBanner?: boolean;
+  initialRequest?: string; // Name of request to open on load
 }
 
 export function mount(options: MountOptions): () => void {
@@ -124,9 +234,14 @@ export function mount(options: MountOptions): () => void {
     readonly: options.readonly,
     title: options.title,
     versionsUrl: options.versionsUrl,
+    demoMode: options.demoMode,
+    hideBanner: options.hideBanner,
+    initialRequest: options.initialRequest,
   };
 
   const root = ReactDOM.createRoot(container);
+
+  console.log('[WebApp] Rendering WebApp');
 
   root.render(
     <React.StrictMode>
@@ -194,6 +309,15 @@ function autoInit() {
   const readonly = readonlyAttr === 'true' || readonlyAttr === '';
   const title = scriptTag.getAttribute('data-title') || undefined;
   const versionsUrl = scriptTag.getAttribute('data-versions-url') || undefined;
+  
+  // Parse URL parameters for demo mode and hideBanner
+  const urlParams = new URLSearchParams(window.location.search);
+  const demoModeParam = urlParams.get('demo') as DemoMode;
+  const demoMode = demoModeParam || (scriptTag.getAttribute('data-demo') as DemoMode) || undefined;
+  const hideBannerParam = urlParams.has('hideBanner');
+  const hideBannerAttr = scriptTag.getAttribute('data-hide-banner');
+  const hideBanner = hideBannerParam || hideBannerAttr === 'true' || hideBannerAttr === '';
+  const initialRequest = scriptTag.getAttribute('data-initial-request') || undefined;
 
   mount({
     container,
@@ -204,6 +328,9 @@ function autoInit() {
     readonly,
     title,
     versionsUrl,
+    demoMode,
+    hideBanner,
+    initialRequest,
   });
 }
 

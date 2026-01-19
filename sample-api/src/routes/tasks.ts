@@ -137,7 +137,7 @@ export const seedTasks = () => {
  * /tasks:
  *   get:
  *     tags:
- *       - Tasks
+ *       - 1. Tasks
  *     summary: Get all tasks
  *     description: Returns a list of all tasks
  *     parameters:
@@ -200,10 +200,117 @@ router.get('/', async (req: Request, res: Response) => {
 
 /**
  * @openapi
+ * /tasks/html:
+ *   get:
+ *     tags:
+ *       - 1. Tasks
+ *     summary: Get all tasks as HTML
+ *     description: Returns an HTML page displaying all tasks
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pending, in_progress, completed]
+ *         description: Filter by status
+ *       - in: query
+ *         name: priority
+ *         schema:
+ *           type: string
+ *           enum: [low, medium, high]
+ *         description: Filter by priority
+ *     responses:
+ *       200:
+ *         description: HTML page with tasks list
+ *         content:
+ *           text/html:
+ *             schema:
+ *               type: string
+ */
+router.get('/html', (req: Request, res: Response) => {
+  let result = Array.from(tasks.values());
+  
+  const { status, priority } = req.query;
+  
+  if (status) {
+    result = result.filter(t => t.status === status);
+  }
+  
+  if (priority) {
+    result = result.filter(t => t.priority === priority);
+  }
+
+  const escapeHtml = (text: string): string => {
+    const map: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+    return text.replace(/[&<>"']/g, char => map[char]);
+  };
+
+  let cards = '';
+  if (result.length === 0) {
+    cards = `<div class="empty">No tasks found</div>`;
+  } else {
+    for (const task of result) {
+      cards += `
+        <div class="card">
+          <div class="card-title">${escapeHtml(task.title)}</div>
+          ${task.description ? `<p class="description">${escapeHtml(task.description)}</p>` : ''}
+          <div class="card-meta">
+            <span class="badge badge-${task.status}">${task.status.replace('_', ' ')}</span>
+            <span class="badge badge-${task.priority}">${task.priority} priority</span>
+            <span class="timestamp">Created: ${new Date(task.createdAt).toLocaleDateString()}</span>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tasks - Sample API</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #e4e4e7; min-height: 100vh; padding: 2rem; }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { font-size: 2rem; margin-bottom: 1.5rem; color: #f4f4f5; border-bottom: 2px solid #3b82f6; padding-bottom: 0.5rem; }
+    .card { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; transition: transform 0.2s, box-shadow 0.2s; }
+    .card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3); }
+    .card-title { font-size: 1.25rem; font-weight: 600; color: #f4f4f5; margin-bottom: 0.5rem; }
+    .card-meta { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.75rem; }
+    .badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; }
+    .badge-pending { background: #f59e0b; color: #1a1a2e; }
+    .badge-in_progress { background: #3b82f6; color: #fff; }
+    .badge-completed { background: #10b981; color: #fff; }
+    .badge-low { background: #6b7280; color: #fff; }
+    .badge-medium { background: #f59e0b; color: #1a1a2e; }
+    .badge-high { background: #ef4444; color: #fff; }
+    .description { color: #a1a1aa; font-size: 0.9rem; line-height: 1.5; }
+    .timestamp { color: #71717a; font-size: 0.8rem; }
+    .empty { text-align: center; padding: 3rem; color: #71717a; }
+    .count { color: #71717a; font-size: 0.9rem; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Tasks</h1>
+    <p class="count">${result.length} task${result.length !== 1 ? 's' : ''} found</p>
+    ${cards}
+  </div>
+</body>
+</html>`;
+  
+  res.setHeader('Content-Type', 'text/html');
+  res.send(html);
+});
+
+/**
+ * @openapi
  * /tasks/{id}:
  *   get:
  *     tags:
- *       - Tasks
+ *       - 1. Tasks
  *     summary: Get task by ID
  *     description: Returns a single task by its ID
  *     parameters:
@@ -246,7 +353,7 @@ router.get('/:id', (req: Request, res: Response) => {
  * /tasks:
  *   post:
  *     tags:
- *       - Tasks
+ *       - 1. Tasks
  *     summary: Create a new task
  *     description: Creates a new task with the provided data
  *     requestBody:
@@ -292,7 +399,7 @@ router.post('/', (req: Request, res: Response) => {
  * /tasks/{id}:
  *   put:
  *     tags:
- *       - Tasks
+ *       - 1. Tasks
  *     summary: Update a task
  *     description: Updates an existing task with the provided data
  *     parameters:
@@ -346,7 +453,7 @@ router.put('/:id', (req: Request, res: Response) => {
  * /tasks/{id}:
  *   delete:
  *     tags:
- *       - Tasks
+ *       - 1. Tasks
  *     summary: Delete a task
  *     description: Deletes a task by its ID
  *     parameters:

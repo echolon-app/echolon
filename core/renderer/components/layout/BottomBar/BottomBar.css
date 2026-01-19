@@ -128,3 +128,11 @@
     transform: scale(1.2);
   }
 }
+
+/* Separator */
+.bottom-bar__separator {
+  width: 1px;
+  height: 14px;
+  background-color: var(--border-primary);
+  margin: 0 4px;
+}

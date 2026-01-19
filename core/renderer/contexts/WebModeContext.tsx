@@ -5,6 +5,15 @@ import { specImporter } from '@/services';
 
 export type ViewMode = 'tabs' | 'reference';
 
+// Demo modes for landing page interactive demos
+export type DemoMode = 
+  | 'request-editor'    // Advanced request editor with content types, search, schema preview
+  | 'variables'         // Variable support with tooltips, scopes, functions
+  | 'git'              // Git integration demo
+  | 'publishing'       // API public sharing workflow
+  | 'mocking'          // Mock server demo
+  | null;
+
 export interface PublicSpecVersion {
   version: string;
   publishedAt?: string;
@@ -22,6 +31,9 @@ export interface WebModeConfig {
   readonly?: boolean;
   title?: string;
   versionsUrl?: string;
+  demoMode?: DemoMode;
+  hideBanner?: boolean;
+  initialRequest?: string; // Name of request to open on load
 }
 
 interface WebModeContextValue {
@@ -62,6 +74,15 @@ interface WebModeContextValue {
   // Environment selection (persisted to localStorage)
   selectedEnvironmentId: string | null;
   setSelectedEnvironmentId: (envId: string | null) => void;
+  
+  // Demo mode for landing page interactive demos
+  demoMode: DemoMode;
+  
+  // Hide banner (for iframe embeds)
+  hideBanner: boolean;
+  
+  // Initial request to open on load
+  initialRequest: string | null;
 }
 
 const WebModeContext = createContext<WebModeContextValue | null>(null);
@@ -82,6 +103,7 @@ const getScriptConfig = (): WebModeConfig => {
   if (!scriptTag) return {};
   
   const readonlyAttr = scriptTag.getAttribute('data-readonly');
+  const hideBannerAttr = scriptTag.getAttribute('data-hide-banner');
   
   return {
     specUrl: scriptTag.getAttribute('data-url') || undefined,
@@ -91,6 +113,8 @@ const getScriptConfig = (): WebModeConfig => {
     readonly: readonlyAttr === 'true' || readonlyAttr === '',
     title: scriptTag.getAttribute('data-title') || undefined,
     versionsUrl: scriptTag.getAttribute('data-versions-url') || undefined,
+    demoMode: (scriptTag.getAttribute('data-demo') as DemoMode) || undefined,
+    hideBanner: hideBannerAttr === 'true' || hideBannerAttr === '',
   };
 };
 
@@ -135,6 +159,15 @@ export const WebModeProvider: React.FC<WebModeProviderProps> = ({ children, conf
   
   // Page title
   const title = initialConfig.title || null;
+  
+  // Demo mode for landing page interactive demos
+  const demoMode: DemoMode = initialConfig.demoMode || null;
+  
+  // Hide banner for iframe embeds
+  const hideBanner = initialConfig.hideBanner ?? false;
+  
+  // Initial request to open on load
+  const initialRequest = initialConfig.initialRequest || null;
   
   // Version switching state
   const [versionsUrl] = useState<string | null>(initialConfig.versionsUrl || null);
@@ -286,6 +319,9 @@ export const WebModeProvider: React.FC<WebModeProviderProps> = ({ children, conf
     versionsLoading,
     selectedEnvironmentId,
     setSelectedEnvironmentId,
+    demoMode,
+    hideBanner,
+    initialRequest,
   }), [
     isWebMode,
     corsProxy,
@@ -307,6 +343,9 @@ export const WebModeProvider: React.FC<WebModeProviderProps> = ({ children, conf
     versionsLoading,
     selectedEnvironmentId,
     setSelectedEnvironmentId,
+    demoMode,
+    hideBanner,
+    initialRequest,
   ]);
   
   return (

@@ -196,6 +196,8 @@ export const GITHUB_CHANNELS = {
   // Batch operations
   PUSH_CHANGES: 'github-push-changes',
   PULL_LATEST: 'github-pull-latest',
+  // Workspace linking
+  SETUP_WORKSPACE_GIT: 'github-setup-workspace-git',
 } as const;
 
 // ==================== Type exports ====================

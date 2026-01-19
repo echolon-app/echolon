@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useCallback, Component, ErrorInfo, ReactNode } from 'react';
-import { Modal, Button, SimpleInput, Dropdown } from '@/components/ui';
+import { Modal, Button, SimpleInput, NumericInput, Dropdown } from '@/components/ui';
 import { useApp, useTheme, COLOR_SCHEMES, useGitHub, useWebModeOptional, useUpdateOptional, useFileStorage } from '@/contexts';
 import { 
   SettingsIcon, CodeIcon, SendIcon, CreditCardIcon, CheckIcon, InfoIcon,
   PaletteIcon, RefreshIcon, FolderIcon, GitHubIcon, ExternalLinkIcon, ServerIcon, DownloadIcon, RocketIcon,
-  EyeIcon, EyeOffIcon, WarningIcon
+  EyeIcon, EyeOffIcon, WarningIcon, ShieldIcon, TrashIcon, PlusIcon
 } from '@/components/ui/icons';
+import { v4 as uuidv4 } from 'uuid';
+import type { ProxyProfile, AppSettings } from '@/types';
+import { DEFAULT_PROXY_PROFILES } from '@/services/LocalStorageManager';
 import { fileStorageManager } from '@/services';
 import { isElectron } from '@/utils';
 import { APP_VERSION, BUILD_TIMESTAMP } from '@/utils/environment';
@@ -82,8 +85,255 @@ interface Plan {
 
 import type { SettingsTab } from '@/contexts/AppContext';
 
+// URL validation helper
+function isValidProxyUrl(url: string): { valid: boolean; error?: string } {
+  if (!url.trim()) {
+    return { valid: false, error: 'URL is required' };
+  }
+  
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return { valid: false, error: 'URL must use http or https protocol' };
+    }
+    return { valid: true };
+  } catch {
+    return { valid: false, error: 'Invalid URL format' };
+  }
+}
+
+// Proxy Settings Component
+interface ProxySettingsProps {
+  settings: AppSettings;
+  updateSettings: (updates: Partial<AppSettings>) => void;
+  openSettingsModal: (tab?: SettingsTab) => void;
+}
+
+const ProxySettings: React.FC<ProxySettingsProps> = ({ settings, updateSettings }) => {
+  const [newProfileName, setNewProfileName] = useState('');
+  const [newProfileUrl, setNewProfileUrl] = useState('');
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingUrl, setEditingUrl] = useState<string>('');
+  
+  const proxyProfiles = settings.proxyProfiles || DEFAULT_PROXY_PROFILES;
+  const activeProfileId = settings.activeProxyProfileId;
+  const activeProfile = activeProfileId ? proxyProfiles.find((p: ProxyProfile) => p.id === activeProfileId) : null;
+  
+  // Initialize editingUrl when active profile changes
+  useEffect(() => {
+    if (activeProfile && !activeProfile.isDefault) {
+      setEditingUrl(activeProfile.url);
+    }
+  }, [activeProfile]);
+  
+  const handleSelectProfile = (profileId: string | null) => {
+    updateSettings({ activeProxyProfileId: profileId });
+  };
+  
+  const handleAddProfile = () => {
+    const validation = isValidProxyUrl(newProfileUrl);
+    if (!validation.valid) {
+      setUrlError(validation.error || 'Invalid URL');
+      return;
+    }
+    
+    if (!newProfileName.trim()) {
+      setUrlError('Profile name is required');
+      return;
+    }
+    
+    const newProfile: ProxyProfile = {
+      id: uuidv4(),
+      name: newProfileName.trim(),
+      url: newProfileUrl.trim(),
+    };
+    
+    // Add profile and select it
+    updateSettings({
+      proxyProfiles: [...proxyProfiles, newProfile],
+      activeProxyProfileId: newProfile.id,
+    });
+    
+    setNewProfileName('');
+    setNewProfileUrl('');
+    setUrlError(null);
+    setShowAddForm(false);
+  };
+  
+  const handleDeleteProfile = (profileId: string) => {
+    const profile = proxyProfiles.find((p: ProxyProfile) => p.id === profileId);
+    if (profile?.isDefault) {
+      return; // Can't delete default profiles
+    }
+    
+    const updatedProfiles = proxyProfiles.filter((p: ProxyProfile) => p.id !== profileId);
+    const updates: Partial<AppSettings> = { proxyProfiles: updatedProfiles };
+    
+    // If deleted profile was active, switch to no proxy
+    if (activeProfileId === profileId) {
+      updates.activeProxyProfileId = null;
+    }
+    
+    updateSettings(updates);
+  };
+  
+  const handleUpdateProfileUrl = (profileId: string, url: string) => {
+    setEditingUrl(url);
+    const validation = isValidProxyUrl(url);
+    if (!validation.valid) {
+      return;
+    }
+    
+    const updatedProfiles = proxyProfiles.map((p: ProxyProfile) => 
+      p.id === profileId ? { ...p, url } : p
+    );
+    updateSettings({ proxyProfiles: updatedProfiles });
+  };
+  
+  return (
+    <div className="settings-modal__panel">
+      <div className="settings-modal__panel-header">
+        <h2>Request Proxy</h2>
+        <p>Route requests through a proxy server</p>
+      </div>
+
+      <div className="settings-modal__section">
+        <h3>Proxy Profile</h3>
+        <p className="settings-modal__field-description" style={{ marginBottom: 'var(--spacing-sm)' }}>
+          Select a proxy profile to route requests through. When enabled, requests will be proxied to bypass CORS restrictions.
+        </p>
+        
+        <div className="settings-modal__proxy-selector">
+          <Dropdown
+            options={[
+              { value: 'none', label: 'No Proxy (direct requests)' },
+              ...proxyProfiles.map((p: ProxyProfile) => ({
+                value: p.id,
+                label: p.name,
+              })),
+            ]}
+            value={activeProfileId || 'none'}
+            onChange={(value) => handleSelectProfile(value === 'none' ? null : value)}
+          />
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={() => setShowAddForm(true)}
+            icon={<PlusIcon />}
+            title="Add custom proxy"
+          />
+        </div>
+        
+        {/* Show selected profile details */}
+        {activeProfile && (
+          <div className="settings-modal__proxy-detail">
+            <div className="settings-modal__proxy-detail-header">
+              <span className="settings-modal__proxy-detail-name">
+                {activeProfile.name}
+                {activeProfile.isDefault && <span className="settings-modal__proxy-badge">Built-in</span>}
+              </span>
+              {!activeProfile.isDefault && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleDeleteProfile(activeProfile.id)}
+                  icon={<TrashIcon />}
+                  title="Delete profile"
+                />
+              )}
+            </div>
+            <div className="settings-modal__proxy-detail-url">
+              {activeProfile.isDefault ? (
+                <code>{activeProfile.url}</code>
+              ) : (
+                <SimpleInput
+                  value={editingUrl}
+                  onChange={(e) => handleUpdateProfileUrl(activeProfile.id, e.target.value)}
+                  placeholder="https://proxy.example.com"
+                />
+              )}
+            </div>
+          </div>
+        )}
+        
+        {/* Add new profile form */}
+        {showAddForm && (
+          <div className="settings-modal__proxy-add-form">
+            <div className="settings-modal__field">
+              <label>Profile Name</label>
+              <SimpleInput
+                value={newProfileName}
+                onChange={(e) => setNewProfileName(e.target.value)}
+                placeholder="My Custom Proxy"
+                autoFocus
+              />
+            </div>
+            <div className="settings-modal__field">
+              <label>Proxy URL</label>
+              <SimpleInput
+                value={newProfileUrl}
+                onChange={(e) => {
+                  setNewProfileUrl(e.target.value);
+                  setUrlError(null);
+                }}
+                placeholder="https://proxy.example.com"
+              />
+              {urlError && (
+                <p className="settings-modal__field-description" style={{ color: 'var(--color-error)', marginTop: 4 }}>
+                  {urlError}
+                </p>
+              )}
+            </div>
+            <div className="settings-modal__proxy-add-actions">
+              <Button variant="secondary" size="sm" onClick={() => {
+                setShowAddForm(false);
+                setNewProfileName('');
+                setNewProfileUrl('');
+                setUrlError(null);
+              }}>
+                Cancel
+              </Button>
+              <Button variant="primary" size="sm" onClick={handleAddProfile}>
+                Create Profile
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="settings-modal__section">
+        <h3>How It Works</h3>
+        <p className="settings-modal__field-description">
+          A proxy server forwards your API requests, which can be useful for:
+        </p>
+        <ul className="settings-modal__plan-features" style={{ marginTop: 8, marginBottom: 12 }}>
+          <li><CheckIcon /> <strong>Web App:</strong> Bypass CORS restrictions that block browser requests</li>
+          <li><CheckIcon /> <strong>Desktop App:</strong> Route traffic through a specific server for debugging or compliance</li>
+          <li><CheckIcon /> <strong>Both:</strong> Access APIs that are only reachable from the proxy server's network</li>
+        </ul>
+        <div className="settings-modal__about-info" style={{ marginTop: 12 }}>
+          <div className="settings-modal__about-row">
+            <span className="settings-modal__about-label">Pattern</span>
+            <span className="settings-modal__about-value">
+              <code>proxy.echolon.app/{'{scheme}'}/{'{host}'}/{'{path}'}</code>
+            </span>
+          </div>
+          <div className="settings-modal__about-row">
+            <span className="settings-modal__about-label">Example</span>
+            <span className="settings-modal__about-value">
+              <code>proxy.echolon.app/https/api.github.com/repos/octocat/hello-world</code>
+            </span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+};
+
 export const SettingsModal: React.FC = () => {
-  const { settingsModalOpen, settingsModalTab, closeSettingsModal, settings, updateSettings, isWebMode } = useApp();
+  const { settingsModalOpen, settingsModalTab, closeSettingsModal, openSettingsModal, settings, updateSettings, isWebMode } = useApp();
   const { theme, setTheme, colorScheme, setColorScheme } = useTheme();
   const { isAuthenticated, user, logout, loginWithPAT } = useGitHub();
   const webMode = useWebModeOptional();
@@ -314,13 +564,14 @@ export const SettingsModal: React.FC = () => {
     }
   };
 
-  const allTabs: { id: SettingsTab; label: string; icon: React.ReactNode; electronOnly?: boolean }[] = [
+  const allTabs: { id: SettingsTab; label: string; icon: React.ReactNode; electronOnly?: boolean; webOnly?: boolean }[] = [
     { id: 'general', label: 'General', icon: <SettingsIcon /> },
     { id: 'storage', label: 'Storage', icon: <FolderIcon /> }, // Available in web mode too
     { id: 'github', label: 'GitHub', icon: <GitHubIcon />, electronOnly: true },
     { id: 'theming', label: 'Theming', icon: <PaletteIcon /> },
     { id: 'editor', label: 'Editor', icon: <CodeIcon /> },
     { id: 'requests', label: 'Requests', icon: <SendIcon /> },
+    { id: 'proxy', label: 'Proxy', icon: <ShieldIcon /> }, // CORS proxy for web mode, optional in Electron
     { id: 'mocking', label: 'Mocking', icon: <ServerIcon />, electronOnly: true },
     { id: 'subscription', label: 'Subscription', icon: <CreditCardIcon /> },
     { id: 'updates', label: 'Updates', icon: <DownloadIcon />, electronOnly: true },
@@ -358,8 +609,12 @@ export const SettingsModal: React.FC = () => {
     }
   };
   
-  // Filter out Electron-only tabs when in web mode
-  const tabs = allTabs.filter(tab => !isWebMode || !tab.electronOnly);
+  // Filter out Electron-only tabs when in web mode, and web-only tabs when in Electron mode
+  const tabs = allTabs.filter(tab => {
+    if (isWebMode && tab.electronOnly) return false;
+    if (!isWebMode && tab.webOnly) return false;
+    return true;
+  });
 
   // Arrow key navigation for tabs
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -438,8 +693,7 @@ export const SettingsModal: React.FC = () => {
         <div className="settings-modal__content">
           {activeTab === 'general' && (
             <div className="settings-modal__panel">
-              <div>SETTINGS</div>
-             {/*} <div className="settings-modal__panel-header">
+             <div className="settings-modal__panel-header">
                 <h2>General</h2>
                 <p>Customize the appearance and behavior of Echolon</p>
               </div>
@@ -468,13 +722,13 @@ export const SettingsModal: React.FC = () => {
                   <p className="settings-modal__field-description">
                     Base font size for the application (10-20px)
                   </p>
-                  <SimpleInput
-                    type="number"
-                    value={settings.fontSize?.toString() ?? "13"}
-                    onChange={(e) => updateSettings({ fontSize: parseInt(e.target.value) || 13 })}
-                    min={10}
-                    max={20}
-                  />
+                  <NumericInput
+                  value={settings.fontSize}
+                  onChange={(value: number) => updateSettings({ fontSize: value })}
+                  min={10}
+                  max={20}
+                  defaultValue={13}
+                />
                 </div>
               </div>
 
@@ -495,7 +749,7 @@ export const SettingsModal: React.FC = () => {
                   </p>
                 </div>
               </div>
-              */}
+             
 
              
             </div>
@@ -794,11 +1048,7 @@ export const SettingsModal: React.FC = () => {
                 
                 {isAuthenticated && user ? (
                   <div className="settings-modal__github-connected">
-                    <img 
-                      src={user.avatar_url} 
-                      alt={user.login}
-                      className="settings-modal__github-avatar"
-                    />
+                   
                     <div className="settings-modal__github-info">
                       <div className="settings-modal__github-name">
                         {user.name || user.login}
@@ -1085,12 +1335,12 @@ export const SettingsModal: React.FC = () => {
                   <p className="settings-modal__field-description">
                     Maximum time to wait for a response (in milliseconds)
                   </p>
-                  <SimpleInput
-                    type="number"
-                    value={settings.requestTimeout?.toString()}
-                    onChange={(e) => updateSettings({ requestTimeout: parseInt(e.target.value) || 30000 })}
+                  <NumericInput
+                    value={settings.requestTimeout}
+                    onChange={(value: number) => updateSettings({ requestTimeout: value })}
                     min={1000}
                     max={300000}
+                    defaultValue={30000}
                   />
                 </div>
 
@@ -1174,12 +1424,12 @@ export const SettingsModal: React.FC = () => {
                   <p className="settings-modal__field-description">
                     Maximum number of requests to keep in history
                   </p>
-                  <SimpleInput
-                    type="number"
-                    value={(settings.maxHistoryEntries ?? 100).toString()}
-                    onChange={(e) => updateSettings({ maxHistoryEntries: parseInt(e.target.value) || 100 })}
+                  <NumericInput
+                    value={settings.maxHistoryEntries}
+                    onChange={(value: number) => updateSettings({ maxHistoryEntries: value })}
                     min={10}
                     max={1000}
+                    defaultValue={100}
                   />
                 </div>
                 
@@ -1188,16 +1438,24 @@ export const SettingsModal: React.FC = () => {
                   <p className="settings-modal__field-description">
                     Binary responses (images, PDFs, etc.) larger than this will be excluded from history to save disk space. Set to 0 to always exclude binary responses.
                   </p>
-                  <SimpleInput
-                    type="number"
-                    value={(settings.historyMaxBinarySize ?? 50).toString()}
-                    onChange={(e) => updateSettings({ historyMaxBinarySize: parseInt(e.target.value) || 0 })}
+                  <NumericInput
+                    value={settings.historyMaxBinarySize}
+                    onChange={(value: number) => updateSettings({ historyMaxBinarySize: value })}
                     min={0}
                     max={10000}
+                    defaultValue={50}
                   />
                 </div>
               </div>
             </div>
+          )}
+
+          {activeTab === 'proxy' && (
+            <ProxySettings 
+              settings={settings} 
+              updateSettings={updateSettings}
+              openSettingsModal={openSettingsModal}
+            />
           )}
 
           {activeTab === 'mocking' && (
@@ -1247,12 +1505,12 @@ export const SettingsModal: React.FC = () => {
                   <p className="settings-modal__field-description">
                     Maximum number of requests to keep in the capture history. Older requests will be automatically removed when this limit is reached.
                   </p>
-                  <SimpleInput
-                    type="number"
-                    value={(settings.mockingMaxCapturedRequests ?? 1000).toString()}
-                    onChange={(e) => updateSettings({ mockingMaxCapturedRequests: parseInt(e.target.value) || 1000 })}
+                  <NumericInput
+                    value={settings.mockingMaxCapturedRequests}
+                    onChange={(value: number) => updateSettings({ mockingMaxCapturedRequests: value })}
                     min={100}
                     max={10000}
+                    defaultValue={1000}
                   />
                 </div>
 
@@ -1261,13 +1519,12 @@ export const SettingsModal: React.FC = () => {
                   <p className="settings-modal__field-description">
                     Time to wait before saving captured requests to disk. Lower values save more frequently but may impact performance during high traffic.
                   </p>
-                  <SimpleInput
-                    type="number"
-                    value={(settings.mockingSaveDebounceMs ?? 1000).toString()}
-                    onChange={(e) => updateSettings({ mockingSaveDebounceMs: parseInt(e.target.value) || 1000 })}
+                  <NumericInput
+                    value={settings.mockingSaveDebounceMs}
+                    onChange={(value: number) => updateSettings({ mockingSaveDebounceMs: value })}
                     min={100}
                     max={10000}
-                    step={100}
+                    defaultValue={1000}
                   />
                 </div>
               </div>

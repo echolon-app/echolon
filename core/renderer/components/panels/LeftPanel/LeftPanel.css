@@ -6,8 +6,27 @@
 }
 
 .left-panel__header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
   padding: var(--spacing-sm);
   border-bottom: 1px solid var(--border-primary);
+}
+
+.left-panel__header .search-input {
+  flex: 1;
+}
+
+.left-panel__header-action {
+  flex-shrink: 0;
+  padding: var(--spacing-xs) !important;
+  min-width: 28px;
+  min-height: 28px;
+}
+
+.left-panel__header-action svg {
+  width: 14px;
+  height: 14px;
 }
 
 .left-panel__actions {
@@ -46,6 +65,10 @@
   padding: var(--spacing-2xl);
   text-align: center;
   color: var(--text-tertiary);
+}
+
+.left-panel__empty svg {
+  width: 48px;
 }
 
 .left-panel__empty p {
@@ -105,6 +128,37 @@
   align-items: center;
   gap: var(--spacing-sm);
   width: 100%;
+}
+
+.environment-item__delete {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  opacity: 0;
+  transition: all var(--transition-fast);
+}
+
+.environment-item__delete svg {
+  width: 12px;
+  height: 12px;
+}
+
+.collapsible-list-item:hover .environment-item__delete {
+  opacity: 1;
+}
+
+.environment-item__delete:hover {
+  color: var(--color-error);
+  background-color: rgba(239, 68, 68, 0.1);
 }
 
 .environment-item__toggle {
@@ -337,14 +391,16 @@
 
 /* Reference scroll sync highlighting - requests */
 .reference-active-request .collapsible-list-item {
-  background-color: var(--accent-primary-bg, rgba(59, 130, 246, 0.15));
-  border-left: 3px solid var(--accent-primary);
+  background-color: var(--color-primary-alpha-light);
+  border-left: 3px solid var(--color-primary);
   margin-left: -1px;
 }
 
 .reference-active-request .collapsible-list-item__content {
-  color: var(--accent-primary);
+  color: var(--color-primary);
   font-weight: 500;
+  height:21.5px; /* Same as height of the input if editing */
+  line-height: 21.5px;
 }
 
 /* Standalone drop zone */
@@ -444,4 +500,93 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Collection drag and drop */
+.collection-drag-wrapper {
+  position: relative;
+}
+
+/* Workspace drag and drop */
+.workspace-drag-wrapper {
+  position: relative;
+}
+
+/* Delete Confirmation Modal */
+.left-panel__delete-modal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-md);
+  text-align: center;
+  padding: var(--spacing-md);
+}
+
+.left-panel__delete-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-error-bg, rgba(239, 68, 68, 0.1));
+  color: var(--color-error);
+}
+
+.left-panel__delete-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.left-panel__delete-message {
+  margin: 0;
+  font-size: var(--font-md);
+  color: var(--text-primary);
+}
+
+.left-panel__delete-message strong {
+  color: var(--color-error);
+}
+
+.left-panel__delete-warning {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-tertiary);
+  line-height: 1.5;
+  max-width: 320px;
+}
+
+.left-panel__delete-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+  width: 100%;
+  justify-content: center;
+}
+
+.left-panel__delete-actions .btn {
+  min-width: 120px;
+}
+
+/* Deprecated Request Styling */
+.request-name--deprecated {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.collapsible-list-item--deprecated .collapsible-list-item__content {
+  opacity: 0.6;
+}
+
+.collapsible-list-item--deprecated .method-badge {
+  opacity: 0.6;
+}
+
+/* Deprecated Folder Styling */
+.collapsible-list--deprecated > .collapsible-list__header {
+  opacity: 0.6;
+}
+
+.collapsible-list--deprecated > .collapsible-list__header .collapsible-list__title {
+  text-decoration: line-through;
 }

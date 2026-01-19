@@ -33,15 +33,26 @@ interface FileWatcher {
 class FileStorageManager extends EventEmitter {
   private static instance: FileStorageManager;
   private watchers: Map<string, FileWatcher> = new Map();
-  private echolonPath: string;
-  private paths: EcholonPaths;
+  private echolonPath: string | null = null;
+  private paths: EcholonPaths | null = null;
   private debounceTimers: Map<string, NodeJS.Timeout> = new Map();
+  private initialized = false;
 
   private constructor() {
     super();
-    // Default path - will be overridden by config if exists
-    this.echolonPath = this.getDefaultEcholonPath();
-    this.paths = this.getEcholonPaths(this.echolonPath);
+    // Don't initialize paths here - wait until app is ready
+    // Paths will be initialized lazily when first accessed or in initialize()
+  }
+
+  /**
+   * Ensure paths are initialized (called lazily when paths are first needed)
+   */
+  private ensurePathsInitialized(): void {
+    if (!this.initialized) {
+      this.echolonPath = this.getDefaultEcholonPath();
+      this.paths = this.getEcholonPaths(this.echolonPath);
+      this.initialized = true;
+    }
   }
 
   static getInstance(): FileStorageManager {
@@ -76,12 +87,15 @@ class FileStorageManager extends EventEmitter {
    */
   async initialize(): Promise<{ success: boolean; error?: string }> {
     try {
+      // Ensure paths are initialized (requires app to be ready)
+      this.ensurePathsInitialized();
+      
       // Try to load existing config to get custom path
-      if (fs.existsSync(this.paths.config)) {
-        const configData = await this.readJsonFile<EcholonConfig>(this.paths.config);
+      if (fs.existsSync(this.paths!.config)) {
+        const configData = await this.readJsonFile<EcholonConfig>(this.paths!.config);
         if (configData && configData.echolonPath && configData.echolonPath !== this.echolonPath) {
           this.echolonPath = configData.echolonPath;
-          this.paths = this.getEcholonPaths(this.echolonPath);
+          this.paths = this.getEcholonPaths(this.echolonPath!);
         }
       }
 
@@ -100,25 +114,25 @@ class FileStorageManager extends EventEmitter {
    */
   private async ensureDirectoryStructure(): Promise<void> {
     // Create root directory
-    if (!fs.existsSync(this.paths.root)) {
-      fs.mkdirSync(this.paths.root, { recursive: true });
+    if (!fs.existsSync(this.paths!.root)) {
+      fs.mkdirSync(this.paths!.root, { recursive: true });
     }
 
     // Create workspaces directory
-    if (!fs.existsSync(this.paths.workspaces)) {
-      fs.mkdirSync(this.paths.workspaces, { recursive: true });
+    if (!fs.existsSync(this.paths!.workspaces)) {
+      fs.mkdirSync(this.paths!.workspaces, { recursive: true });
     }
 
     // Create default config if it doesn't exist
-    if (!fs.existsSync(this.paths.config)) {
-      const defaultConfig = createDefaultConfig(this.echolonPath);
-      await this.writeJsonFile(this.paths.config, defaultConfig);
+    if (!fs.existsSync(this.paths!.config)) {
+      const defaultConfig = createDefaultConfig(this.echolonPath!);
+      await this.writeJsonFile(this.paths!.config, defaultConfig);
     }
 
     // Create default environments file if it doesn't exist
-    if (!fs.existsSync(this.paths.environments)) {
+    if (!fs.existsSync(this.paths!.environments)) {
       const defaultEnvs = createDefaultEnvironmentsFile();
-      await this.writeJsonFile(this.paths.environments, defaultEnvs);
+      await this.writeJsonFile(this.paths!.environments, defaultEnvs);
     }
 
     // Create default workspace if none exists
@@ -194,14 +208,14 @@ class FileStorageManager extends EventEmitter {
   /**
    * Get the current Echolon path
    */
-  getEcholonPath(): string {
+  getEcholonPath(): string | null {
     return this.echolonPath;
   }
 
   /**
    * Get the current paths configuration
    */
-  getPaths(): EcholonPaths {
+  getPaths(): EcholonPaths | null {
     return this.paths;
   }
 
@@ -243,7 +257,7 @@ class FileStorageManager extends EventEmitter {
     const result = await dialog.showOpenDialog({
       properties: ['openDirectory', 'createDirectory'],
       title: 'Select Echolon Storage Directory',
-      defaultPath: this.echolonPath,
+      defaultPath: this.echolonPath ?? undefined,
     });
 
     if (result.canceled || result.filePaths.length === 0) {
@@ -257,7 +271,7 @@ class FileStorageManager extends EventEmitter {
    * Open the Echolon directory in the system file manager
    */
   async openInFileManager(): Promise<void> {
-    await shell.openPath(this.echolonPath);
+    await shell.openPath(this.echolonPath ?? '');
   }
 
   // ==================== Config Operations ====================
@@ -266,14 +280,14 @@ class FileStorageManager extends EventEmitter {
    * Read the global config
    */
   async readConfig(): Promise<EcholonConfig | null> {
-    return this.readJsonFile<EcholonConfig>(this.paths.config);
+    return this.readJsonFile<EcholonConfig>(this.paths?.config ?? '');
   }
 
   /**
    * Write the global config
    */
   async writeConfig(config: EcholonConfig): Promise<boolean> {
-    return this.writeJsonFile(this.paths.config, config);
+    return this.writeJsonFile(this.paths?.config ?? '', config);
   }
 
   /**
@@ -292,14 +306,14 @@ class FileStorageManager extends EventEmitter {
    * Read global environments
    */
   async readEnvironments(): Promise<GlobalEnvironmentsFile | null> {
-    return this.readJsonFile<GlobalEnvironmentsFile>(this.paths.environments);
+    return this.readJsonFile<GlobalEnvironmentsFile>(this.paths?.environments ?? '');
   }
 
   /**
    * Write global environments
    */
   async writeEnvironments(environments: GlobalEnvironmentsFile): Promise<boolean> {
-    return this.writeJsonFile(this.paths.environments, environments);
+    return this.writeJsonFile(this.paths?.environments ?? '', environments);
   }
 
   // ==================== Data File Operations ====================
@@ -316,7 +330,7 @@ class FileStorageManager extends EventEmitter {
       console.error('Invalid data filename:', filename);
       return null;
     }
-    return path.join(this.echolonPath, `${safeFilename}.json`);
+    return path.join(this.echolonPath ?? '', `${safeFilename}.json`);
   }
 
   /**
@@ -344,10 +358,10 @@ class FileStorageManager extends EventEmitter {
    */
   getWorkspaceDirectories(): string[] {
     try {
-      if (!fs.existsSync(this.paths.workspaces)) {
+      if (!fs.existsSync(this.paths?.workspaces ?? '')) {
         return [];
       }
-      return fs.readdirSync(this.paths.workspaces, { withFileTypes: true })
+      return fs.readdirSync(this.paths?.workspaces ?? '', { withFileTypes: true })
         .filter(dirent => dirent.isDirectory())
         .map(dirent => dirent.name);
     } catch (error) {
@@ -360,7 +374,7 @@ class FileStorageManager extends EventEmitter {
    * Get the path to a workspace directory
    */
   getWorkspacePath(workspaceName: string): string {
-    return path.join(this.paths.workspaces, workspaceName);
+    return path.join(this.paths?.workspaces ?? '', workspaceName);
   }
 
   /**
@@ -960,7 +974,7 @@ class FileStorageManager extends EventEmitter {
    * Check if the Echolon directory is initialized
    */
   isInitialized(): boolean {
-    return fs.existsSync(this.paths.config) && fs.existsSync(this.paths.workspaces);
+    return fs.existsSync(this.paths?.config ?? '') && fs.existsSync(this.paths?.workspaces ?? '');
   }
 }
 

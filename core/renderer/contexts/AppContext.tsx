@@ -10,7 +10,7 @@ type SidebarState = 'hidden' | 'collapsed' | 'expanded';
 
 export type ViewMode = 'tabs' | 'reference';
 
-export type SettingsTab = 'general' | 'storage' | 'github' | 'theming' | 'editor' | 'requests' | 'mocking' | 'subscription' | 'updates' | 'about';
+export type SettingsTab = 'general' | 'storage' | 'github' | 'theming' | 'editor' | 'requests' | 'proxy' | 'mocking' | 'subscription' | 'updates' | 'about';
 
 // Check if running in web mode (not Electron)
 // Uses the shared isElectron utility for consistent detection

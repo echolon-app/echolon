@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button, Tooltip } from '@/components/ui';
 import { SidebarIcon, PanelLeftIcon, ConsoleIcon, ClearIcon, ThunderboltIcon, MailIcon, BookIcon } from '@/components/ui/icons';
 import { useApp, useMocking, useUpdateOptional, useWebModeOptional } from '@/contexts';
 import { APP_VERSION } from '@/utils/environment';
+import { DemoRecorderControls } from '@/components/DemoRecorder';
+import '@/components/DemoRecorder.css';
 import './BottomBar.css';
 
 export const BottomBar: React.FC = () => {
@@ -24,6 +26,19 @@ export const BottomBar: React.FC = () => {
   const update = useUpdateOptional();
   const webMode = useWebModeOptional();
   const isWebMode = webMode?.isWebMode ?? false;
+  const viewMode = webMode?.viewMode ?? 'tabs';
+  
+  // Check if record controls should be shown (only when ?record-controls=true)
+  const [showRecordControls, setShowRecordControls] = useState(false);
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      setShowRecordControls(params.get('record-controls') === 'true');
+    }
+  }, []);
+  
+  // In reference view mode (web), hide sidebar toggle buttons
+  const hideToggleButtons = isWebMode && viewMode === 'reference';
 
   const handleSupportClick = async () => {
     const version = APP_VERSION || 'unknown';
@@ -80,8 +95,8 @@ Please describe the issue you're experiencing:
   };
 
   const handleVersionClick = () => {
-    // Open settings modal with Updates tab
-    openSettingsModal('updates');
+    // In web mode, open About tab; in desktop, open Updates tab
+    openSettingsModal(isWebMode ? 'about' : 'updates');
   };
 
   const handleBusinessClick = async () => {
@@ -119,16 +134,20 @@ Please describe the issue you're experiencing:
   return (
     <div className="bottom-bar">
       <div className="bottom-bar__left">
-        <Tooltip content={getSidebarTooltip()} position="top">
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={cycleSidebarState}
-            className={sidebarState !== 'hidden' ? 'active' : ''}
-          >
-            <SidebarIcon />
-          </Button>
-        </Tooltip>
+        {/* Sidebar toggle - hidden in reference view mode (web) */}
+        {!hideToggleButtons && (
+          <Tooltip content={getSidebarTooltip()} position="top">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={cycleSidebarState}
+              className={sidebarState !== 'hidden' ? 'active' : ''}
+            >
+              <SidebarIcon />
+            </Button>
+          </Tooltip>
+        )}
+        {/* Left panel toggle - always visible */}
         <Tooltip content={leftPanelVisible ? 'Hide collections panel' : 'Show collections panel'} position="top">
           <Button 
             variant="ghost" 
@@ -176,9 +195,17 @@ Please describe the issue you're experiencing:
       </div>
 
       <div className="bottom-bar__right">
+        {/* Screenshot and recording controls - only shown when ?record-controls=true */}
+        {showRecordControls && (
+          <>
+            <DemoRecorderControls />
+            <div className="bottom-bar__separator" />
+          </>
+        )}
+        
         {/* Version indicator */}
         <Tooltip 
-          content={hasUpdateAvailable ? `Update v${update.updateInfo?.version} available` : 'Update settings'} 
+          content={isWebMode ? 'About' : (hasUpdateAvailable ? `Update v${update.updateInfo?.version} available` : 'Update settings')} 
           position="top"
         >
           <button 

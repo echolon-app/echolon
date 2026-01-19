@@ -41,15 +41,24 @@ const headings = [
     <p>
       Echolon supports multiple body formats:
     </p>
+    {/* Check ResponseViewer.tsx for the supported body types */}
     <ul class="list">
-      <li>JSON</li>
-      <li>XML</li>
-      <li>Form data (URL encoded)</li>
-      <li>Multipart form data</li>
-      <li>Raw text/XML/HTML</li>
-      <li>Base64 encoded</li>
-      <li>Binary files</li>
+      <li>auto</li>
+      <li>json</li>
+      <li>html</li>
+      <li>xml</li>
+      <li>javascript</li>
+      <li>raw</li>
+      <li>hex</li>
+      <li>base64</li>
     </ul>
+
+
+    For HTML you can also preview the response in the response viewer as actually rendered HTML.
+
+    <img src="/images/response-viewer-html-preview.png" alt="Response viewer HTML preview" />
+
+
   </div>
 </DocsLayout>
 

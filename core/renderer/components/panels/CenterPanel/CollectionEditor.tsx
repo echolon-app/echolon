@@ -1021,8 +1021,23 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
   // All flat sections for rendering
   const allFlatSections = useMemo(() => {
     if (!collection) return [];
+    const sections: FolderSection[] = [];
+    
+    // Include root-level requests as a section (for echolon format collections)
+    if (collection.requests && collection.requests.length > 0) {
+      sections.push({
+        id: 'root-requests',
+        name: 'Requests',
+        requests: collection.requests,
+        subFolders: [],
+      });
+    }
+    
+    // Add folder sections
     const folderSecs = getFolderSectionsForReference(collection.folders);
-    return flattenSectionsRecursive(folderSecs);
+    sections.push(...flattenSectionsRecursive(folderSecs));
+    
+    return sections;
   }, [collection, getFolderSectionsForReference, flattenSectionsRecursive]);
 
   // Calculate active section from scroll position (for scroll sync)
@@ -1360,8 +1375,8 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
 
   // Toggle folder expanded state (uses collection data - syncs with LeftPanel)
   const toggleFolderExpanded = (folderId: string) => {
-    // For "root" section (requests not in folders), we don't have a folder to toggle
-    if (folderId === 'root') return;
+    // For "root" or "root-requests" section (requests not in folders), we don't have a folder to toggle
+    if (folderId === 'root' || folderId === 'root-requests') return;
     
     // Find the folder to get its current collapsed state
     const findFolder = (folders: Folder[]): Folder | null => {
@@ -1381,7 +1396,7 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
 
   // Check if a folder is expanded (uses collection data - syncs with LeftPanel)
   const isFolderExpanded = (folderId: string): boolean => {
-    if (folderId === 'root') return true; // Root is always "expanded"
+    if (folderId === 'root' || folderId === 'root-requests') return true; // Root is always "expanded"
     
     const findFolder = (folders: Folder[]): Folder | null => {
       for (const folder of folders) {
@@ -1515,7 +1530,7 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
               ref={handleReferenceContentRef}
               onScroll={handleReferenceScroll}
             >
-              {folderSections.length === 0 ? (
+              {allFlatSections.length === 0 ? (
                 <div className="collection-editor__reference-empty">
                   <FolderIcon />
                   <p>No requests in this collection</p>
@@ -1532,7 +1547,19 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
                       className="reference-section"
                       data-section-id={section.id}
                     >
-                      <h2 className="reference-section__title">{section.name}</h2>
+                      <div className="reference-section__header">
+                        <h2 className="reference-section__title">{section.name}</h2>
+                        {/* Show More Button - next to title */}
+                        {section.requests.length > 0 && (
+                          <button
+                            className="reference-section__toggle"
+                            onClick={() => toggleFolderExpanded(section.id)}
+                          >
+                            {isFolderExpanded(section.id) ? 'Show Less' : 'Show More'}
+                            <ChevronDownIcon />
+                          </button>
+                        )}
+                      </div>
                       
                       {/* Operations Card */}
                       {section.requests.length > 0 && (
@@ -1556,17 +1583,6 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
                             ))}
                           </div>
                         </div>
-                      )}
-
-                      {/* Show More Button */}
-                      {section.requests.length > 0 && (
-                        <button
-                          className="reference-section__toggle"
-                          onClick={() => toggleFolderExpanded(section.id)}
-                        >
-                          {isFolderExpanded(section.id) ? 'Show Less' : 'Show More'}
-                          <ChevronDownIcon />
-                        </button>
                       )}
 
                       {/* Expanded Request Details - only render if section is visible (virtualization) */}
@@ -1853,7 +1869,7 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
             <div className="collection-editor__section-description">
               <p>
                 Set default authentication for all requests in this collection.
-                Request-specific auth settings will override this.
+                Request-specific auth settings will override this. It is recommended to use variables here for sensitive data.
               </p>
             </div>
             

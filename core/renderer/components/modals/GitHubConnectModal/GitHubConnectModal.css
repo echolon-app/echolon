@@ -327,9 +327,7 @@
   border-bottom: none;
 }
 
-.github-connect-modal__repo-item:hover {
-  background: var(--bg-secondary);
-}
+
 
 .github-connect-modal__repo-item--selected {
   background: var(--accent-primary-alpha);

@@ -520,11 +520,11 @@ function setupIpcHandlers(): void {
       const path = await import('path');
       
       // Read directory contents
-      const entries = await fs.readdir(echolonPath, { withFileTypes: true });
+      const entries = await fs.readdir(echolonPath ?? '', { withFileTypes: true });
       
       // Delete each entry recursively
       for (const entry of entries) {
-        const fullPath = path.join(echolonPath, entry.name);
+        const fullPath = path.join(echolonPath ?? '', entry.name);
         if (entry.isDirectory()) {
           await fs.rm(fullPath, { recursive: true, force: true });
         } else {
@@ -899,7 +899,15 @@ function setupIpcHandlers(): void {
 
   // Authentication
   ipcMain.handle(GITHUB_CHANNELS.AUTH_WITH_PAT, async (_event, token: string) => {
-    return githubManager.authenticateWithPAT(token);
+    const result = await githubManager.authenticateWithPAT(token);
+    // Also set git credentials for isomorphic-git operations
+    if (result.success && result.data) {
+      gitManager.setCredentials({
+        username: result.data.login,
+        password: token,
+      });
+    }
+    return result;
   });
 
   ipcMain.handle(GITHUB_CHANNELS.START_OAUTH, async () => {
@@ -908,6 +916,8 @@ function setupIpcHandlers(): void {
 
   ipcMain.handle(GITHUB_CHANNELS.LOGOUT, () => {
     githubManager.logout();
+    // Also clear git credentials
+    gitManager.setCredentials(null);
     return { success: true };
   });
 
@@ -919,8 +929,21 @@ function setupIpcHandlers(): void {
     return githubManager.isAuthenticated();
   });
 
-  ipcMain.handle(GITHUB_CHANNELS.SET_ACCESS_TOKEN, (_event, token: string | null) => {
+  ipcMain.handle(GITHUB_CHANNELS.SET_ACCESS_TOKEN, async (_event, token: string | null) => {
     githubManager.setAccessToken(token);
+    // Also sync git credentials for isomorphic-git operations
+    if (token) {
+      // Get the username from the current user (token is being restored)
+      const userResult = await githubManager.getCurrentUser();
+      if (userResult.success && userResult.data) {
+        gitManager.setCredentials({
+          username: userResult.data.login,
+          password: token,
+        });
+      }
+    } else {
+      gitManager.setCredentials(null);
+    }
     return { success: true };
   });
 
@@ -984,6 +1007,45 @@ function setupIpcHandlers(): void {
 
   ipcMain.handle(GITHUB_CHANNELS.PULL_LATEST, async (_event, { owner, repo, branch }: { owner: string; repo: string; branch: string }) => {
     return githubManager.pullLatest(owner, repo, branch);
+  });
+
+  // Setup git for a workspace when linking to GitHub
+  ipcMain.handle(GITHUB_CHANNELS.SETUP_WORKSPACE_GIT, async (_event, { workspaceName, owner, repo }: { workspaceName: string; owner: string; repo: string }) => {
+    try {
+      const workspacePath = fileStorageManager.getWorkspacePath(workspaceName);
+      
+      // Initialize git if not already a repo
+      const isRepo = await gitManager.isRepo(workspacePath);
+      if (!isRepo) {
+        const initResult = await gitManager.init(workspacePath);
+        if (!initResult.success) {
+          return { success: false, error: initResult.error || 'Failed to initialize git repository' };
+        }
+        // Create .gitignore
+        await gitManager.createGitignore(workspacePath);
+      }
+      
+      // Check if origin remote already exists
+      const remotesResult = await gitManager.listRemotes(workspacePath);
+      if (remotesResult.success && remotesResult.remotes) {
+        const hasOrigin = remotesResult.remotes.some(r => r.name === 'origin');
+        if (hasOrigin) {
+          // Remove existing origin to set the new one
+          await gitManager.removeRemote(workspacePath, 'origin');
+        }
+      }
+      
+      // Add the origin remote
+      const remoteUrl = `https://github.com/${owner}/${repo}.git`;
+      const addRemoteResult = await gitManager.addRemote(workspacePath, 'origin', remoteUrl);
+      if (!addRemoteResult.success) {
+        return { success: false, error: addRemoteResult.error || 'Failed to add remote' };
+      }
+      
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to setup git for workspace' };
+    }
   });
 
   // ==================== Public Specs Handlers ====================

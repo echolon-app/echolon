@@ -22,6 +22,7 @@ export interface EchoMetadata {
   modifiedAt: string; // ISO 8601 date string
   workspaceId: string;
   collapsed?: boolean; // UI state - whether collection is collapsed in sidebar
+  order?: number; // Custom order for sorting collections in sidebar
 }
 
 /**
@@ -40,6 +41,7 @@ export interface EchoRequest {
   id: string;
   operationId?: string;
   name: string;
+  description?: string; // Optional markdown description
   method: string;
   url: string;
   headers: KeyValuePair[];
@@ -52,6 +54,7 @@ export interface EchoRequest {
     post: string;
   };
   tags?: string[]; // Tags for categorizing and searching requests
+  isDeprecated?: boolean; // Mark request as deprecated
 }
 
 /**
@@ -63,6 +66,7 @@ export interface EchoFolder {
   requests: EchoRequest[];
   folders: EchoFolder[];
   collapsed?: boolean;
+  isDeprecated?: boolean; // Mark folder as deprecated
 }
 
 /**
@@ -205,6 +209,7 @@ export interface EcholonConfig {
     };
     sidebarView?: string;
     activeWorkspaceId?: string;
+    workspaceOrder?: string[]; // Array of workspace IDs in display order
   };
 }
 

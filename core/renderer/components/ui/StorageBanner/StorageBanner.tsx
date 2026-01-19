@@ -21,6 +21,12 @@ export const StorageBanner: React.FC<StorageBannerProps> = ({
   const [isDismissed, setIsDismissed] = useState(() => {
     return localStorage.getItem(BANNER_DISMISSED_KEY) === 'true';
   });
+  
+  // Check for ?hideBanner query parameter
+  const [hiddenByParam] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.has('hideBanner');
+  });
   const [isExiting, setIsExiting] = useState(false);
 
   // Reset dismissed state if storage was cleared
@@ -42,7 +48,8 @@ export const StorageBanner: React.FC<StorageBannerProps> = ({
   // - Storage is already enabled
   // - Banner was dismissed
   // - Readonly mode (embedded viewer)
-  if (!isWebMode || isStorageEnabled || isDismissed || readonly) {
+  // - ?hideBanner query parameter is present
+  if (!isWebMode || isStorageEnabled || isDismissed || readonly || hiddenByParam) {
     return null;
   }
 

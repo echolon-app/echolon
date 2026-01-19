@@ -14,6 +14,7 @@ import { CapturedRequest, MockedResponse, KeyValuePair, MockMode } from '@/types
 import { METHOD_COLORS } from '../../../../shared/constants';
 import { formatLogTime, formatDateTime } from '@/utils';
 import './MockingPanel.css';
+import { NumericInput } from '@/components/ui/NumericInput/NumericInput';
 
 // Default cloud server URL
 const DEFAULT_CLOUD_SERVER_URL = 'https://proxy.echolon.app';
@@ -780,12 +781,9 @@ export const MockingPanel: React.FC = () => {
     }
   };
 
-  const handlePortChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePortChange = (value: number) => {
     if (activeMockApi) {
-      const port = parseInt(e.target.value, 10);
-      if (!isNaN(port) && port > 0 && port < 65536) {
-        updateMockApi(activeMockApi.id, { port });
-      }
+      updateMockApi(activeMockApi.id, { port: value });
     }
   };
 
@@ -1312,12 +1310,13 @@ export const MockingPanel: React.FC = () => {
           {!isCloudMode && (
             <div className="mocking-panel__port-input">
               <label>Port:</label>
-              <Input
-                type="number"
+              <NumericInput
                 value={activeMockApi.port}
-                onChange={handlePortChange}
-                size="sm"
-                disabled={activeMockApi.isRunning}
+                onChange={(value: number) => handlePortChange(value)}
+                min={1}
+                max={65535}
+                defaultValue={8080}
+                className="mocking-panel__port-input-input"
               />
             </div>
           )}
@@ -2000,16 +1999,14 @@ export const MockingPanel: React.FC = () => {
                         <div className="mocking-panel__response-meta mocking-panel__response-meta--inline">
                           <div className="mocking-panel__field-inline">
                             <label>Status</label>
-                            <Input
-                              style={{ width: '60px' }}
-                              type="number"
+                            <NumericInput
                               value={editedResponse.status || 200}
-                              onChange={(e) => setEditedResponse(prev => ({ 
-                                ...prev, 
-                                status: parseInt(e.target.value, 10) 
-                              }))}
+                              onChange={(value: number) => setEditedResponse(prev => ({ ...prev, status: value }))}
                               onBlur={handleAutoSave}
-                              size="sm"
+                              min={100}
+                              max={599}
+                              defaultValue={200}
+                              className="mocking-panel__status-input"
                             />
                           </div>
                           <div className="mocking-panel__field-inline">

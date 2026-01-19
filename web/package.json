@@ -13,7 +13,10 @@
     "build": "vite build",
     "build:lib": "BUILD_MODE=lib vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && set -a && source .env.production && set +a && ./scripts/deploy.sh"
+    "deploy": "npm run build && set -a && source .env.production && set +a && ./scripts/deploy.sh",
+    "publish:npm": "./scripts/publish.sh",
+    "publish:npm:dry": "./scripts/publish.sh --dry-run",
+    "prepublishOnly": "npm run build:lib"
   },
   "keywords": [
     "api",

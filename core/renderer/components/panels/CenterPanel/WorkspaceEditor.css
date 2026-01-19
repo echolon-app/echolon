@@ -126,6 +126,43 @@
   box-shadow: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--text-primary);
 }
 
+/* Custom color picker button */
+.workspace-editor__color-btn--custom {
+  position: relative;
+  background: conic-gradient(
+    from 0deg,
+    #ff0000, #ff8000, #ffff00, #80ff00,
+    #00ff00, #00ff80, #00ffff, #0080ff,
+    #0000ff, #8000ff, #ff00ff, #ff0080, #ff0000
+  );
+}
+
+.workspace-editor__color-btn--custom::after {
+  content: '+';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.workspace-editor__color-btn--custom.workspace-editor__color-btn--active::after {
+  content: '';
+}
+
+/* Hidden color input */
+.workspace-editor__color-input-hidden {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* Textarea */
 .workspace-editor__textarea {
   width: 100%;
@@ -506,6 +543,11 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+}
+
+.workspace-editor__environment-switch {
+  display: flex;
+  align-items: center;
 }
 
 .workspace-editor__environment-variables {

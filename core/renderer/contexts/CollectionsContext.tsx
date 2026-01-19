@@ -44,6 +44,10 @@ interface CollectionsContextValue {
   checkForUpdates: (collectionId: string) => Promise<PendingSpecChanges | null>;
   // File storage helpers
   refreshCollections: () => Promise<void>;
+  // Reordering
+  reorderCollections: (fromIndex: number, toIndex: number) => void;
+  sortCollections: (direction: 'asc' | 'desc') => void;
+  reorderFolders: (collectionId: string, fromIndex: number, toIndex: number, parentFolderId?: string) => void;
 }
 
 const CollectionsContext = createContext<CollectionsContextValue | null>(null);
@@ -270,10 +274,17 @@ export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     saveQueueRef.current.set(collection.id, timeout);
   }, [getWorkspaceNameById, shouldSkipFileOps, getStorageManager]);
 
-  // Filter collections by active workspace
+  // Filter collections by active workspace and sort by order
   const collections = useMemo(() => {
-    if (!activeWorkspaceId) return allCollections;
-    return allCollections.filter(c => c.workspaceId === activeWorkspaceId);
+    const filtered = activeWorkspaceId 
+      ? allCollections.filter(c => c.workspaceId === activeWorkspaceId)
+      : allCollections;
+    // Sort by order property (if set), otherwise maintain original order
+    return [...filtered].sort((a, b) => {
+      const orderA = a.order ?? Infinity;
+      const orderB = b.order ?? Infinity;
+      return orderA - orderB;
+    });
   }, [allCollections, activeWorkspaceId]);
 
   const addCollection = useCallback(async (name: string, description?: string, type?: CollectionType): Promise<Collection | null> => {
@@ -707,7 +718,8 @@ export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
           const updateFolders = (folders: Folder[]): Folder[] =>
             folders.map(f => {
               if (f.id === parentFolderId) {
-                return { ...f, folders: [...f.folders, newFolder] };
+                // Insert at the beginning
+                return { ...f, folders: [newFolder, ...f.folders] };
               }
               return { ...f, folders: updateFolders(f.folders) };
             });
@@ -721,9 +733,10 @@ export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
           return updated;
         }
 
+        // Insert at the beginning
         const updated = {
           ...c,
-          folders: [...c.folders, newFolder],
+          folders: [newFolder, ...c.folders],
           updatedAt: Date.now(),
         };
         saveCollectionToFile(updated);
@@ -1087,6 +1100,122 @@ export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     await refreshData();
   }, [refreshData]);
 
+  // Reorder collections by moving from one index to another
+  const reorderCollections = useCallback((fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return;
+    
+    setAllCollections(prev => {
+      // Get collections in current workspace
+      const workspaceCollections = activeWorkspaceId
+        ? prev.filter(c => c.workspaceId === activeWorkspaceId)
+        : prev;
+      const otherCollections = activeWorkspaceId
+        ? prev.filter(c => c.workspaceId !== activeWorkspaceId)
+        : [];
+      
+      // Sort by order first to match the displayed order in the UI
+      const sortedWorkspaceCollections = [...workspaceCollections].sort((a, b) => {
+        const orderA = a.order ?? Infinity;
+        const orderB = b.order ?? Infinity;
+        return orderA - orderB;
+      });
+      
+      // Perform the reorder on the sorted array
+      const [removed] = sortedWorkspaceCollections.splice(fromIndex, 1);
+      sortedWorkspaceCollections.splice(toIndex, 0, removed);
+      
+      // Update order index on each collection
+      const updatedCollections = sortedWorkspaceCollections.map((c, idx) => ({
+        ...c,
+        order: idx,
+        updatedAt: Date.now(),
+      }));
+      
+      // Save each reordered collection
+      updatedCollections.forEach(c => saveCollectionToFile(c));
+      
+      return [...otherCollections, ...updatedCollections];
+    });
+  }, [activeWorkspaceId, saveCollectionToFile]);
+
+  // Sort collections alphabetically
+  const sortCollections = useCallback((direction: 'asc' | 'desc') => {
+    setAllCollections(prev => {
+      // Get collections in current workspace
+      const workspaceCollections = activeWorkspaceId
+        ? prev.filter(c => c.workspaceId === activeWorkspaceId)
+        : prev;
+      const otherCollections = activeWorkspaceId
+        ? prev.filter(c => c.workspaceId !== activeWorkspaceId)
+        : [];
+      
+      // Sort by name
+      const sortedCollections = [...workspaceCollections].sort((a, b) => {
+        const comparison = a.name.localeCompare(b.name);
+        return direction === 'asc' ? comparison : -comparison;
+      });
+      
+      // Update order index on each collection
+      const updatedCollections = sortedCollections.map((c, idx) => ({
+        ...c,
+        order: idx,
+        updatedAt: Date.now(),
+      }));
+      
+      // Save each reordered collection
+      updatedCollections.forEach(c => saveCollectionToFile(c));
+      
+      return [...otherCollections, ...updatedCollections];
+    });
+  }, [activeWorkspaceId, saveCollectionToFile]);
+
+  // Reorder folders within a collection (or within a parent folder)
+  const reorderFolders = useCallback((collectionId: string, fromIndex: number, toIndex: number, parentFolderId?: string) => {
+    if (fromIndex === toIndex) return;
+    
+    setAllCollections(prev => {
+      const newCollections = prev.map(c => {
+        if (c.id !== collectionId) return c;
+        
+        if (parentFolderId) {
+          // Reorder within a parent folder
+          const reorderInFolders = (folders: Folder[]): Folder[] =>
+            folders.map(f => {
+              if (f.id === parentFolderId) {
+                const newSubFolders = [...f.folders];
+                const [removed] = newSubFolders.splice(fromIndex, 1);
+                newSubFolders.splice(toIndex, 0, removed);
+                return { ...f, folders: newSubFolders };
+              }
+              return { ...f, folders: reorderInFolders(f.folders) };
+            });
+          
+          const updated = {
+            ...c,
+            folders: reorderInFolders(c.folders),
+            updatedAt: Date.now(),
+          };
+          saveCollectionToFile(updated);
+          return updated;
+        } else {
+          // Reorder at collection root level
+          const newFolders = [...c.folders];
+          const [removed] = newFolders.splice(fromIndex, 1);
+          newFolders.splice(toIndex, 0, removed);
+          
+          const updated = {
+            ...c,
+            folders: newFolders,
+            updatedAt: Date.now(),
+          };
+          saveCollectionToFile(updated);
+          return updated;
+        }
+      });
+      return newCollections;
+    });
+  }, [saveCollectionToFile]);
+
   return (
     <CollectionsContext.Provider
       value={{
@@ -1121,6 +1250,9 @@ export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
         clearPendingChanges,
         checkForUpdates,
         refreshCollections,
+        reorderCollections,
+        sortCollections,
+        reorderFolders,
       }}
     >
       {children}

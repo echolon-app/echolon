@@ -62,8 +62,10 @@ interface GitHubContextValue {
 const GitHubContext = createContext<GitHubContextValue | null>(null);
 
 export const GitHubProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  //console.log('[GitHubProvider] Rendering GitHubProvider');
   const webMode = useWebModeOptional();
   const isWebMode = webMode?.isWebMode ?? false;
+  //console.log('[GitHubContext] isWebMode:', isWebMode);
   const { activeWorkspaceId, activeWorkspace, getWorkspaceNameById } = useWorkspace();
   
   // Auth state
@@ -249,6 +251,17 @@ export const GitHubProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     
     // Also register with sync service
     await githubSyncService.linkRepository(workspaceId, workspaceName, owner, repo, branch);
+    
+    // Setup git in the workspace (init + add remote)
+    if (!isWebMode) {
+      const electronAPI = window.electronAPI as { githubSetupWorkspaceGit?: (workspaceName: string, owner: string, repo: string) => Promise<{ success: boolean; error?: string }> } | undefined;
+      if (electronAPI?.githubSetupWorkspaceGit) {
+        const setupResult = await electronAPI.githubSetupWorkspaceGit(workspaceName, owner, repo);
+        if (!setupResult.success) {
+          console.error('Failed to setup git for workspace:', setupResult.error);
+        }
+      }
+    }
     
     // Save to config (skip in web mode)
     if (!isWebMode) {

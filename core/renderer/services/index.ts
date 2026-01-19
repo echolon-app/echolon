@@ -19,3 +19,5 @@ export { publicSpecsService } from './PublicSpecsService';
 export { generatePublicSpecHtml, generateVersionsJson } from './PublicSpecHtmlGenerator';
 export { getScriptCompletions, filterCompletions } from './ScriptCompletions';
 export type { ScriptContext, ScriptCompletion } from './ScriptCompletions';
+export { default as demoDataProvider, getDemoData } from './DemoDataProvider';
+export type { DemoData, DemoMode } from './DemoDataProvider';

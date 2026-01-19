@@ -19,6 +19,7 @@ A powerful, git-native and local-first API client built with Electron and React.
 - **cURL Export**: Export requests as cURL commands
 - **Dark/Light Mode**: Beautiful themes for any preference
 - **Completely Local**: All data stored locally, no account required
+- **Git Client**: Integrated Git Client to share workspaces/collections with your team
 
 ## Commercial
 
@@ -41,6 +42,8 @@ If you want to build the project yourself it is 100% free.
 ### Repo structure
 
 - core -> Echolon electron app
+- docs -> astro based documentation
+- sample-api -> Echolon sample api 
 - web -> Echolon web version
 
 ### Prerequisites

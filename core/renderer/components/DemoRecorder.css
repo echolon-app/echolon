@@ -1,0 +1,72 @@
+/* Demo Recorder Controls - matches BottomBar button style */
+.demo-recorder-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+/* Button style matching .bottom-bar .btn */
+.demo-recorder-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.demo-recorder-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.demo-recorder-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.demo-recorder-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Recording state - wider to accommodate time */
+.demo-recorder-btn--recording {
+  width: auto;
+  padding: 0 6px;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+  animation: recording-pulse 1.5s ease-in-out infinite;
+}
+
+.demo-recorder-btn--recording:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+@keyframes recording-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Recording time display */
+.demo-recorder-time {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  margin-left: 2px;
+}
+
+/* Status message */
+.demo-recorder-status {
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}

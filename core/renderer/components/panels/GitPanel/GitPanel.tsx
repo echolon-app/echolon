@@ -1,9 +1,10 @@
 import React, { useState, useCallback } from 'react';
-import { useGit } from '@/contexts/GitContext';
+import { useGitOptional } from '@/contexts/GitContext';
 import { useGitHub } from '@/contexts/GitHubContext';
 import { useApp } from '@/contexts/AppContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useRequest } from '@/contexts/RequestContext';
+import { useWebMode } from '@/contexts/WebModeContext';
 import { isElectron } from '@/utils';
 import { 
   GitBranchIcon, GitCommitIcon, GitPullRequestIcon, RefreshIcon, 
@@ -20,44 +21,48 @@ interface GitPanelProps {
 }
 
 export const GitPanel: React.FC<GitPanelProps> = ({ onConnectClick, onOpenDiff }) => {
+  const gitContext = useGitOptional();
+  const { isWebMode } = useWebMode();
+  
+  // Destructure git context if available, otherwise use safe defaults
   const {
-    isInitialized,
-    isLoading,
-    error,
-    status,
-    commits,
-    branches,
-    currentBranch,
-    remotes,
-    workspacePath,
+    isInitialized = false,
+    isLoading = false,
+    error = null,
+    status = null,
+    commits = [],
+    branches = [],
+    currentBranch = null,
+    remotes = [],
+    workspacePath = null,
     
-    initRepo,
-    refreshAll,
+    initRepo = async () => ({ success: false, error: 'Git not available' }),
+    refreshAll = async () => {},
     
-    stageFile,
-    stageAll,
-    unstageFile,
-    discardChanges,
+    stageFile = async () => ({ success: false, error: 'Git not available' }),
+    stageAll = async () => ({ success: false, error: 'Git not available' }),
+    unstageFile = async () => ({ success: false, error: 'Git not available' }),
+    discardChanges = async () => ({ success: false, error: 'Git not available' }),
     
-    commit,
+    commit = async () => ({ success: false, error: 'Git not available' }),
     
-    createBranch,
-    checkoutBranch,
-    deleteBranch,
+    createBranch = async () => ({ success: false, error: 'Git not available' }),
+    checkoutBranch = async () => ({ success: false, error: 'Git not available' }),
+    deleteBranch = async () => ({ success: false, error: 'Git not available' }),
     
-    addRemote,
-    removeRemote,
+    addRemote = async () => ({ success: false, error: 'Git not available' }),
+    removeRemote = async () => ({ success: false, error: 'Git not available' }),
     
-    push,
-    pull,
+    push = async () => ({ success: false, error: 'Git not available' }),
+    pull = async () => ({ success: false, error: 'Git not available' }),
     
-    getTotalChanges,
-    hasChanges,
-  } = useGit();
+    getTotalChanges = () => 0,
+    hasChanges = () => false,
+  } = gitContext || {};
 
   const { isAuthenticated, user } = useGitHub();
   const { setSidebarView } = useApp();
-  const { info, error: showError } = useToast();
+  const { info, success: showSuccess, error: showError } = useToast();
   const { addDiffTab } = useRequest();
 
   const [activeTab, setActiveTab] = useState<TabType>('changes');
@@ -80,6 +85,7 @@ export const GitPanel: React.FC<GitPanelProps> = ({ onConnectClick, onOpenDiff }
   const [newRemoteName, setNewRemoteName] = useState('origin');
   const [newRemoteUrl, setNewRemoteUrl] = useState('');
   const [isEditingRemote, setIsEditingRemote] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
 
   // Open remote modal (for add or edit)
   const openRemoteModal = useCallback((edit: boolean = false) => {
@@ -135,9 +141,12 @@ export const GitPanel: React.FC<GitPanelProps> = ({ onConnectClick, onOpenDiff }
   // Handle push
   const handlePush = useCallback(async () => {
     setIsPushing(true);
-    await push();
+    const result = await push();
     setIsPushing(false);
-  }, [push]);
+    if (result.success) {
+      showSuccess('Changes pushed successfully');
+    }
+  }, [push, showSuccess]);
 
   // Handle pull
   const handlePull = useCallback(async () => {
@@ -229,6 +238,30 @@ export const GitPanel: React.FC<GitPanelProps> = ({ onConnectClick, onOpenDiff }
     
     return date.toLocaleDateString();
   };
+
+  // Git not available (web mode)
+  if (!gitContext) {
+    return (
+      <div className="git-panel">
+        <div className="git-panel__header">
+          <h3>
+            <GitBranchIcon />
+            Git
+          </h3>
+        </div>
+        <div className="git-panel__not-connected">
+          <GitBranchIcon />
+          <h4>Git Not Available</h4>
+          <p>
+            {isWebMode 
+              ? 'Git version control is only available in the desktop app.'
+              : 'Git functionality is not available.'
+            }
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // No workspace selected
   if (!workspacePath) {
@@ -346,7 +379,15 @@ export const GitPanel: React.FC<GitPanelProps> = ({ onConnectClick, onOpenDiff }
       {error && (
         <div className="git-panel__error">
           <XIcon />
-          <span>{error}</span>
+          <span>{error.length > 60 ? error.substring(0, 60) + '...' : error}</span>
+          {error.length > 60 && (
+            <button 
+              className="git-panel__error-details-btn"
+              onClick={() => setShowErrorModal(true)}
+            >
+              Details
+            </button>
+          )}
         </div>
       )}
 
@@ -755,6 +796,37 @@ export const GitPanel: React.FC<GitPanelProps> = ({ onConnectClick, onOpenDiff }
               >
                 <CheckIcon />
                 Save Remote
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Git Error Details Modal */}
+      {showErrorModal && error && (
+        <div className="git-panel__error-modal-overlay" onClick={() => setShowErrorModal(false)}>
+          <div className="git-panel__error-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="git-panel__error-modal-header">
+              <h4>Git Error</h4>
+              <button onClick={() => setShowErrorModal(false)}>
+                <XIcon />
+              </button>
+            </div>
+            <div className="git-panel__error-modal-body">
+              <pre className="git-panel__error-modal-content">{error}</pre>
+            </div>
+            <div className="git-panel__error-modal-footer">
+              <button 
+                className="git-panel__modal-cancel"
+                onClick={() => navigator.clipboard.writeText(error)}
+              >
+                Copy Error
+              </button>
+              <button 
+                className="git-panel__modal-confirm"
+                onClick={() => setShowErrorModal(false)}
+              >
+                Close
               </button>
             </div>
           </div>

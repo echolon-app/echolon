@@ -144,12 +144,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
         return evaluateFunction(parsed.functionName, parsed.parameters);
       }
     }
-    
+
     if (getVariableWithSource) {
       const resolved = getVariableWithSource(varName, collectionEnvironment || null);
       return resolved ? resolved.value : null;
     }
-    
+
     // Fallback to just active environment
     if (!activeEnvironment) return null;
     const variable = activeEnvironment.variables.find(v => v.key === varName && v.enabled);
@@ -428,8 +428,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
         const varName = fullMatch.slice(2, -2); // Remove {{ and }}
         const isFunc = isFunction(varName);
         const varValue = getVariableValue(varName);
+       
         const isValid = varValue !== null || isFunc;
-        
+
         // Apply environment color explicitly when valid
         // Convert hex color to rgba for background with 20% opacity
         let varStyle: React.CSSProperties | undefined;
@@ -570,7 +571,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
 
   // Track previous environment to detect actual environment changes (not just currentValue changes)
   const prevEnvironmentRef = useRef<typeof activeEnvironment>(null);
-  const prevEnvColorRef = useRef<string | null>(null);
+  // Use undefined as initial value to distinguish from "color is null" vs "never set"
+  const prevEnvColorRef = useRef<string | null | undefined>(undefined);
   
   // Re-render variable highlighting only when environment actually changes
   useEffect(() => {
@@ -598,6 +600,24 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
       updateEditableDisplay(newValue, isFocused);
     }
   }, [envColor, supportVariables, currentValue, updateEditableDisplay, isFocused]);
+  
+  // Track previous collection environment to detect when it loads/changes
+  const prevCollectionEnvRef = useRef<typeof collectionEnvironment>(undefined);
+  
+  // Re-render when collection environment becomes available or changes
+  // This handles the timing issue where collectionEnvironment is not yet loaded on page reload
+  useEffect(() => {
+    // Skip if we're currently handling user input
+    if (isHandlingInputRef.current) return;
+    
+    // Only re-render if collectionEnvironment reference actually changed
+    if (supportVariables && editableRef.current && collectionEnvironment !== prevCollectionEnvRef.current) {
+      prevCollectionEnvRef.current = collectionEnvironment;
+      const newValue = String(currentValue || '');
+      // Force re-render to update variable validation state, preserve cursor if focused
+      updateEditableDisplay(newValue, isFocused);
+    }
+  }, [collectionEnvironment, supportVariables, currentValue, updateEditableDisplay, isFocused]);
 
   const emitChange = useCallback((newValue: string) => {
     setLocalValue(newValue);

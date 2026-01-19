@@ -234,7 +234,7 @@ export const GitHubConnectModal: React.FC<GitHubConnectModalProps> = ({
               {/* User info */}
               {user && (
                 <div className="github-connect-modal__user-info">
-                  <img src={user.avatar_url} alt={user.login} />
+ 
                   <div className="user-details">
                     <div className="user-name">{user.name || user.login}</div>
                     <div className="user-login">@{user.login}</div>

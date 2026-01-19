@@ -1,5 +1,15 @@
 import { STORAGE_KEYS } from '../../shared/constants';
-import { Collection, Environment, HistoryEntry, AppSettings, Tab, Workspace, ColorScheme } from '@/types';
+import { Collection, Environment, HistoryEntry, AppSettings, Tab, Workspace, ColorScheme, ProxyProfile } from '@/types';
+
+// Default proxy profiles
+export const DEFAULT_PROXY_PROFILES: ProxyProfile[] = [
+  {
+    id: 'echolon-api',
+    name: 'Echolon Proxy',
+    url: 'https://proxy.echolon.app',
+    isDefault: true,
+  },
+];
 
 class LocalStorageManager {
   private static instance: LocalStorageManager;
@@ -155,8 +165,16 @@ class LocalStorageManager {
       validateSSL: true,
       proxyEnabled: false,
       debugMode: false,
+      // CORS Proxy defaults
+      proxyProfiles: DEFAULT_PROXY_PROFILES,
+      activeProxyProfileId: null, // No proxy by default
     };
-    return this.get<AppSettings>(STORAGE_KEYS.SETTINGS, defaultSettings);
+    const stored = this.get<AppSettings>(STORAGE_KEYS.SETTINGS, defaultSettings);
+    // Ensure proxy profiles exist even if stored settings don't have them
+    if (!stored.proxyProfiles) {
+      stored.proxyProfiles = DEFAULT_PROXY_PROFILES;
+    }
+    return stored;
   }
 
   setSettings(settings: AppSettings): void {

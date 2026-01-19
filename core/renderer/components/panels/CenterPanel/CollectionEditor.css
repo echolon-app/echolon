@@ -293,7 +293,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
-  max-width: 500px;
 }
 
 .collection-editor__auth-type {
@@ -1031,11 +1030,19 @@
   border-bottom: none;
 }
 
+.reference-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-xl);
+}
+
 .reference-section__title {
   font-size: 28px;
   font-weight: 700;
   color: var(--text-primary);
-  margin: 0 0 var(--spacing-xl) 0;
+  margin: 0;
 }
 
 /* Operations Card */

@@ -217,20 +217,19 @@ class GitManager {
         return { success: false, error: statusResult.error };
       }
       
-      // Add all untracked and unstaged files
-      const filesToAdd = [
-        ...statusResult.status.untracked,
-        ...statusResult.status.unstaged.map(f => f.path),
-      ];
-      
-      for (const filepath of filesToAdd) {
+      // Add all untracked files
+      for (const filepath of statusResult.status.untracked) {
         await git.add({ fs, dir, filepath });
       }
       
-      // Handle deleted files
+      // Add all unstaged files (except deleted ones which need git.remove)
       for (const file of statusResult.status.unstaged) {
         if (file.status === 'deleted') {
+          // For deleted files, use git.remove to stage the deletion
           await git.remove({ fs, dir, filepath: file.path });
+        } else {
+          // For added/modified files, use git.add
+          await git.add({ fs, dir, filepath: file.path });
         }
       }
       
@@ -495,6 +494,9 @@ class GitManager {
     remote: string = 'origin', 
     branch?: string
   ): Promise<{ success: boolean; error?: string }> {
+    // Collect server messages for detailed error reporting
+    const serverMessages: string[] = [];
+    
     try {
       if (!this.credentials) {
         return { success: false, error: 'No credentials set. Please connect to GitHub first.' };
@@ -524,11 +526,18 @@ class GitManager {
         ref: currentBranch,
         remoteRef: currentBranch,
         onAuth: this.onAuth,
+        onMessage: (message: string) => {
+          // Capture server-side messages (includes GitHub errors)
+          serverMessages.push(message);
+        },
       });
-      
       return { success: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to push';
+      
+      // If we have server messages, include them for detailed error info
+      const fullServerMessage = serverMessages.join('\n').trim();
+      
       // Provide more helpful error messages
       if (message.includes('401')) {
         return { success: false, error: 'Authentication failed. Please check your GitHub token.' };
@@ -539,6 +548,12 @@ class GitManager {
       if (message.includes('404')) {
         return { success: false, error: 'Repository not found. This can happen if the repo is private and your token lacks access, or if the URL is incorrect.' };
       }
+      
+      // If we have detailed server messages, return those instead of the generic error
+      if (fullServerMessage) {
+        return { success: false, error: fullServerMessage };
+      }
+      
       return { success: false, error: message };
     }
   }

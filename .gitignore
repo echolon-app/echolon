@@ -6,6 +6,9 @@ dist/
 release/
 out/
 
+# Turn off -> too expensive
+.github/workflows/release.yml
+
 # IDE
 .idea/
 *.swp

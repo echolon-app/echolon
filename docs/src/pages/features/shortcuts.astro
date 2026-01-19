@@ -3,8 +3,8 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
 
 const headings = [
   { depth: 2, slug: 'general', text: 'General' },
-  { depth: 2, slug: 'requests', text: 'Requests' },
-  { depth: 2, slug: 'navigation', text: 'Navigation' },
+  { depth: 2, slug: 'request', text: 'Request' },
+  { depth: 2, slug: 'response', text: 'Response' },
 ];
 ---
 
@@ -17,23 +17,24 @@ const headings = [
     
     <h2 id="general">General</h2>
     <table class="shortcuts-table">
-      <tr><td><kbd>Cmd/Ctrl</kbd> + <kbd>K</kbd></td><td>Open command palette</td></tr>
-      <tr><td><kbd>Cmd/Ctrl</kbd> + <kbd>,</kbd></td><td>Open settings</td></tr>
-      <tr><td><kbd>Cmd/Ctrl</kbd> + <kbd>N</kbd></td><td>New request</td></tr>
+      <tr><td><kbd>Cmd/Ctrl</kbd> + <kbd>K</kbd></td><td>Search & command menu</td></tr>
+      <tr><td><kbd>Cmd/Ctrl</kbd> + <kbd>O</kbd></td><td>Keyboard shortcuts</td></tr>
+      <tr><td><kbd>Cmd/Ctrl</kbd> + <kbd>E</kbd></td><td>New Tab</td></tr>
+      <tr><td><kbd>Cmd/Ctrl</kbd> + <kbd>D</kbd></td><td>Close Tab</td></tr>
+      <tr><td><kbd>Cmd/Ctrl</kbd> + <kbd>B</kbd></td><td>Toggle sidebar</td></tr>
+      <tr><td><kbd>ESC</kbd></td><td>Close current menu</td></tr>
     </table>
     
-    <h2 id="requests">Requests</h2>
+    <h2 id="request">Request</h2>
     <table class="shortcuts-table">
-      <tr><td><kbd>Cmd/Ctrl</kbd> + <kbd>Enter</kbd></td><td>Send request</td></tr>
-      <tr><td><kbd>Cmd/Ctrl</kbd> + <kbd>S</kbd></td><td>Save request</td></tr>
-      <tr><td><kbd>Cmd/Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd></td><td>Save as</td></tr>
+      <tr><td><kbd>Cmd/Ctrl</kbd> + <kbd>Enter</kbd></td><td>Send Request</td></tr>
+      <tr><td><kbd>Cmd/Ctrl</kbd> + <kbd>Z</kbd></td><td>Save Request</td></tr>
     </table>
     
-    <h2 id="navigation">Navigation</h2>
+    <h2 id="response">Response</h2>
     <table class="shortcuts-table">
-      <tr><td><kbd>Cmd/Ctrl</kbd> + <kbd>1-9</kbd></td><td>Switch tabs</td></tr>
-      <tr><td><kbd>Cmd/Ctrl</kbd> + <kbd>W</kbd></td><td>Close tab</td></tr>
-      <tr><td><kbd>Cmd/Ctrl</kbd> + <kbd>Tab</kbd></td><td>Next tab</td></tr>
+      <tr><td><kbd>Cmd/Ctrl</kbd> + <kbd>J</kbd></td><td>Download response as file</td></tr>
+      <tr><td><kbd>Cmd/Ctrl</kbd> + <kbd>.</kbd></td><td>Copy response to clipboard</td></tr>
     </table>
   </div>
 </DocsLayout>

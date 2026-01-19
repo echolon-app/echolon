@@ -354,6 +354,7 @@ function requestToOperation(
 
   const operation: OpenAPIOperation = {
     summary: request.name,
+    description: request.description,
     responses: {
       '200': {
         description: 'Successful response',

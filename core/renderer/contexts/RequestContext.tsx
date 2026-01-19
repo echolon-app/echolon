@@ -36,6 +36,7 @@ interface RequestContextValue {
   clearResponse: () => void;
   getRequestHistory: (requestId: string) => HistoryEntry[];
   clearHistory: () => void;
+  clearAllTabs: () => void;
   goBack: () => void;
   goForward: () => void;
 }
@@ -438,7 +439,7 @@ export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const newWebSocket: WebSocketConnection = websocket || {
       id: uuidv4(),
       name: 'New WebSocket',
-      url: 'wss://echo.websocket.org',
+      url: 'wss://api.echolon.app/ws',
       status: 'disconnected',
       headers: [],
       queryParams: [],
@@ -684,13 +685,27 @@ export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ child
         ? { ...settings, sendUserAgent: false }
         : settings;
 
+      // Get CORS proxy URL from settings
+      // In web mode: proxy helps bypass CORS restrictions
+      // In Electron mode: proxy can be used for routing/debugging purposes
+      let corsProxyUrl: string | undefined;
+      if (effectiveSettings.activeProxyProfileId) {
+        const activeProfile = effectiveSettings.proxyProfiles?.find(
+          p => p.id === effectiveSettings.activeProxyProfileId
+        );
+        if (activeProfile) {
+          corsProxyUrl = activeProfile.url;
+        }
+      }
+
       const execution = await requestService.execute(
         activeTab.request,
         activeEnvironment,  // Global environment
         effectiveSettings.requestTimeout,
         collection,
         effectiveSettings,
-        selectedCollectionEnv  // Collection environment (overrides global)
+        selectedCollectionEnv,  // Collection environment (overrides global)
+        corsProxyUrl  // CORS proxy URL (web mode only)
       );
 
       // Store execution result on this specific tab
@@ -766,6 +781,14 @@ export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [activeWorkspace?.name, getStorageManager]);
 
+  // Clear all tabs (useful for web mode to reset state)
+  const clearAllTabs = useCallback(() => {
+    setTabs([]);
+    setActiveTabIdState(null);
+    setNavHistory([]);
+    setNavIndex(-1);
+  }, []);
+
   return (
     <RequestContext.Provider
       value={{
@@ -796,6 +819,7 @@ export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ child
         clearResponse,
         getRequestHistory,
         clearHistory,
+        clearAllTabs,
         goBack,
         goForward,
       }}

@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { 
   Button, SearchInput, CollapsibleList, CollapsibleListItem, ContextMenu, useContextMenu, Tooltip, Switch,
-  type DropPosition
+  DropPosition, Modal
 } from '@/components/ui';
 import { 
   RadarIcon, PlusIcon, FolderIcon, ImportIcon, PlayIcon, StopIcon, ServerIcon, SocketIcon, GraphQLIcon, 
   MailIcon, CollapseAllIcon, ExpandAllIcon, EditIcon, CopyIcon, ExportIcon, TrashIcon, OpenIcon, NewTabIcon, MoveIcon,
-  WorkspacesIcon
+  WorkspacesIcon, SortAscIcon, SortDescIcon, AlertIcon, WarningIcon
 } from '@/components/ui/icons';
 import { useApp, useCollections, useRequest, useEnvironments, useMocking, useWebMode, useToast, useWorkspace } from '@/contexts';
 import { GitPanel } from '@/components/panels/GitPanel';
@@ -33,8 +34,8 @@ const countCollectionRequests = (collection: Collection): number => {
 
 export const LeftPanel: React.FC = () => {
   const { sidebarView, openImportModal, openNewCollectionModal, openNewEnvironmentModal, openMoveCollectionModal } = useApp();
-  const { collections, deleteCollection, addRequest, updateRequest, updateCollection, updateFolder, collapseAllFolders, expandAllFolders, moveRequestToCollection, deleteRequest } = useCollections();
-  const { environments, toggleEnvironmentActive } = useEnvironments();
+  const { collections, deleteCollection, addRequest, updateRequest, updateCollection, updateFolder, collapseAllFolders, expandAllFolders, moveRequestToCollection, deleteRequest, addFolder, deleteFolder, reorderCollections, sortCollections, reorderFolders, importCollection } = useCollections();
+  const { environments, toggleEnvironmentActive, deleteEnvironment } = useEnvironments();
   const { addTab, addSampleTab, addCollectionTab, addEnvironmentTab, addWorkspaceTab, history, closeTab, tabs: allTabs, workspaceTabs: tabs, setActiveTab, renameTab, activeTabId, activeTab } = useRequest();
   const { 
     mockApis, 
@@ -47,7 +48,7 @@ export const LeftPanel: React.FC = () => {
     localHostname 
   } = useMocking();
   const { readonly, isWebMode } = useWebMode();
-  const { workspaces, addWorkspace, activeWorkspaceId } = useWorkspace();
+  const { workspaces, addWorkspace, activeWorkspaceId, reorderWorkspaces } = useWorkspace();
   const { error: showError } = useToast();
   
   // Scroll sync state - listen for events from CollectionEditor
@@ -67,6 +68,13 @@ export const LeftPanel: React.FC = () => {
   // Listen for scroll sync events from CollectionEditor
   useEffect(() => {
     const handleScrollSync = (event: CustomEvent<{ folderId: string | null; requestId: string | null; collectionId: string | null }>) => {
+      // When click originated from LeftPanel, skip all updates
+      // State was already set directly in handleOpenRequest to prevent folder flash
+      if (suppressAutoScrollRef.current) {
+        suppressAutoScrollRef.current = false;
+        return;
+      }
+      
       const prevFolderId = activeFolderId;
       const prevRequestId = activeRequestIdFromScroll;
       
@@ -75,11 +83,9 @@ export const LeftPanel: React.FC = () => {
       setActiveReferenceCollectionId(event.detail.collectionId);
       
       // Only auto-scroll if:
-      // 1. Not suppressed (i.e., not triggered by a LeftPanel click)
-      // 2. The active item actually changed
-      // 3. Not currently dragging
-      if (!suppressAutoScrollRef.current && 
-          !isDraggingRef.current &&
+      // 1. The active item actually changed
+      // 2. Not currently dragging
+      if (!isDraggingRef.current &&
           (event.detail.folderId !== prevFolderId || event.detail.requestId !== prevRequestId)) {
         // Scroll to the active item
         const targetId = event.detail.requestId || event.detail.folderId;
@@ -118,9 +124,6 @@ export const LeftPanel: React.FC = () => {
           }
         }
       }
-      
-      // Reset suppress flag after handling
-      suppressAutoScrollRef.current = false;
     };
     
     window.addEventListener('referenceScrollSync', handleScrollSync as EventListener);
@@ -129,14 +132,60 @@ export const LeftPanel: React.FC = () => {
     };
   }, [activeFolderId, activeRequestIdFromScroll]);
   
+  // Clear reference active state when the reference tab is closed
+  useEffect(() => {
+    if (activeTab?.type !== 'collection') {
+      setActiveFolderId(null);
+      setActiveRequestIdFromScroll(null);
+      setActiveReferenceCollectionId(null);
+    }
+  }, [activeTab?.type]);
+  
   const [searchQuery, setSearchQuery] = useState('');
   const { contextMenu, showContextMenu, hideContextMenu } = useContextMenu();
   const [contextTarget, setContextTarget] = useState<{ type: string; item: unknown; collectionId?: string; folderId?: string } | null>(null);
+  
+  // Unified drag and drop state
+  interface DragState {
+    type: 'collection' | 'request' | 'folder' | 'workspace';
+    id: string;
+    collectionId?: string;
+    folderId?: string;
+    fromIndex?: number;
+  }
+  
+  interface DropTarget {
+    type: 'collection' | 'request' | 'folder' | 'workspace';
+    id: string;
+    position: DropPosition;
+    collectionId?: string;
+    folderId?: string;
+    index?: number;
+  }
+  
+  const [dragState, setDragState] = useState<DragState | null>(null);
+  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  
+  // Use a ref for synchronous access to drag state (state updates are async)
+  const dragStateRef = useRef<DragState | null>(null);
+  
   const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [editingCollectionId, setEditingCollectionId] = useState<string | null>(null);
   const [editingCollectionName, setEditingCollectionName] = useState('');
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
+  const [editingFolderName, setEditingFolderName] = useState('');
   const [gitHubConnectModalOpen, setGitHubConnectModalOpen] = useState(false);
+  
+  // Delete confirmation modal state
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    type: 'collection' | 'request' | 'folder' | 'environment';
+    id: string;
+    name: string;
+    collectionId?: string;
+    folderId?: string;
+  } | null>(null);
 
   // Refs for scrolling to active request and folder
   const requestItemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -254,8 +303,14 @@ export const LeftPanel: React.FC = () => {
     // Check if active tab is a collection tab for this collection
     // If so, dispatch event to scroll to request in Reference tab instead of opening new tab
     if (activeTab?.type === 'collection' && activeTab.collectionId === collectionId) {
-      // Suppress auto-scroll in LeftPanel since this click originated here
+      // Suppress scroll sync updates since we'll set state directly
       suppressAutoScrollRef.current = true;
+      
+      // Immediately set active state to highlight the clicked request
+      // This prevents folder flash by ensuring requestId is set before any scroll events
+      setActiveFolderId(folderId || null);
+      setActiveRequestIdFromScroll(request.id);
+      setActiveReferenceCollectionId(collectionId || null);
       
       const event = new CustomEvent('scrollToRequestInReference', {
         detail: { requestId: request.id, collectionId, folderId },
@@ -294,6 +349,274 @@ export const LeftPanel: React.FC = () => {
     showContextMenu(e);
   };
 
+  // Handle context menu on list area (outside collections)
+  const handleListAreaContextMenu = (e: React.MouseEvent) => {
+    // Only show if clicking directly on the list, not on a collection
+    if ((e.target as HTMLElement).closest('.collapsible-list')) return;
+    setContextTarget({ type: 'listArea', item: null });
+    showContextMenu(e);
+  };
+
+  // Unified drag handlers
+  const handleDragStart = useCallback((
+    e: React.DragEvent, 
+    type: 'collection' | 'request' | 'folder' | 'workspace',
+    id: string,
+    collectionId?: string,
+    folderId?: string,
+    index?: number,
+    additionalData?: Record<string, unknown>
+  ) => {
+    // CRITICAL: Stop propagation to prevent parent draggable elements from overwriting
+    e.stopPropagation();
+    
+    isDraggingRef.current = true;
+    const state: DragState = { type, id, collectionId, folderId, fromIndex: index };
+    dragStateRef.current = state; // Set ref immediately for synchronous access
+    setDragState(state);
+    
+    e.dataTransfer.setData('application/json', JSON.stringify({ 
+      type, 
+      data: { id, collectionId, folderId, index, ...additionalData }
+    }));
+    e.dataTransfer.effectAllowed = 'move';
+    
+    // Add visual feedback
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.classList.add('dragging');
+    }
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    isDraggingRef.current = false;
+    dragStateRef.current = null; // Clear ref immediately
+    setDragState(null);
+    setDropTarget(null);
+  }, []);
+
+  const calculateDropPosition = useCallback((e: React.DragEvent, element: HTMLElement, canDropInside: boolean): DropPosition => {
+    const rect = element.getBoundingClientRect();
+    const relativeY = e.clientY - rect.top;
+    const height = rect.height;
+    
+    if (canDropInside) {
+      // Three zones: top 25% = before, middle 50% = inside, bottom 25% = after
+      if (relativeY < height * 0.25) return 'before';
+      if (relativeY > height * 0.75) return 'after';
+      return 'inside';
+    } else {
+      // Two zones: top 50% = before, bottom 50% = after
+      return relativeY < height * 0.5 ? 'before' : 'after';
+    }
+  }, []);
+
+  const handleDragOver = useCallback((
+    e: React.DragEvent,
+    targetType: 'collection' | 'request' | 'folder' | 'workspace',
+    targetId: string,
+    collectionId?: string,
+    folderId?: string,
+    index?: number
+  ) => {
+    const currentDragState = dragStateRef.current;
+    if (!currentDragState) return;
+    
+    // Don't allow dropping on self
+    if (currentDragState.id === targetId) {
+      setDropTarget(null);
+      return;
+    }
+    
+    // Determine if we can drop inside this target
+    const canDropInside = currentDragState.type === 'request' && (targetType === 'collection' || targetType === 'folder');
+    
+    // Collections can only reorder, not drop inside each other
+    if (currentDragState.type === 'collection' && targetType === 'collection') {
+      const position = calculateDropPosition(e, e.currentTarget as HTMLElement, false);
+      setDropTarget({ type: targetType, id: targetId, position, index });
+      e.dataTransfer.dropEffect = 'move';
+      return;
+    }
+    
+    // Requests can drop between requests or inside folders/collections
+    if (currentDragState.type === 'request') {
+      const position = calculateDropPosition(e, e.currentTarget as HTMLElement, canDropInside);
+      setDropTarget({ type: targetType, id: targetId, position, collectionId, folderId, index });
+      e.dataTransfer.dropEffect = 'move';
+      return;
+    }
+    
+    // Folders can reorder or drop inside collections/other folders (future)
+    if (currentDragState.type === 'folder') {
+      const position = calculateDropPosition(e, e.currentTarget as HTMLElement, false);
+      setDropTarget({ type: targetType, id: targetId, position, collectionId, folderId, index });
+      e.dataTransfer.dropEffect = 'move';
+      return;
+    }
+
+    // Workspaces can only reorder among themselves
+    if (currentDragState.type === 'workspace' && targetType === 'workspace') {
+      const position = calculateDropPosition(e, e.currentTarget as HTMLElement, false);
+      setDropTarget({ type: targetType, id: targetId, position, index });
+      e.dataTransfer.dropEffect = 'move';
+    }
+  }, [calculateDropPosition]);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    // Only clear if we're actually leaving this element (not entering a child)
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDropTarget(null);
+    }
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const currentDragState = dragStateRef.current;
+    if (!currentDragState || !dropTarget) {
+      dragStateRef.current = null;
+      setDragState(null);
+      setDropTarget(null);
+      return;
+    }
+    
+    try {
+      // Handle collection reordering
+      if (currentDragState.type === 'collection' && dropTarget.type === 'collection') {
+        const fromIndex = currentDragState.fromIndex!;
+        let toIndex = dropTarget.index!;
+        
+        if (dropTarget.position === 'after') {
+          toIndex += 1;
+        }
+        if (fromIndex < toIndex) {
+          toIndex -= 1;
+        }
+        if (fromIndex !== toIndex) {
+          reorderCollections(fromIndex, toIndex);
+        }
+      }
+      
+      // Handle request movement
+      if (currentDragState.type === 'request') {
+        // Helper to recursively get all requests from folders
+        const getAllRequestsFromFolders = (folders: Folder[]): Request[] => {
+          return folders.flatMap(f => [...f.requests, ...getAllRequestsFromFolders(f.folders)]);
+        };
+        
+        // Search in collections first
+        let request = collections
+          .flatMap(c => [...c.requests, ...getAllRequestsFromFolders(c.folders)])
+          .find(r => r.id === currentDragState.id);
+        
+        // If not found in collections, search in standalone items (tabs)
+        let standaloneTabId: string | undefined;
+        if (!request) {
+          const standaloneTab = tabs.find(tab => 
+            tab.type === 'request' && tab.request?.id === currentDragState.id
+          );
+          if (standaloneTab?.request) {
+            request = standaloneTab.request;
+            standaloneTabId = standaloneTab.id;
+          }
+        }
+        
+        if (request) {
+          const targetCollectionId = dropTarget.collectionId || dropTarget.id;
+          const targetFolderId = dropTarget.type === 'folder' ? dropTarget.id : dropTarget.folderId;
+          
+          if (dropTarget.position === 'inside') {
+            // Drop inside a folder or collection - insert at the first position
+            moveRequestToCollection(request, currentDragState.collectionId || null, targetCollectionId, targetFolderId, 0);
+            // Close the standalone tab if this was a standalone request
+            if (standaloneTabId) {
+              closeTab(standaloneTabId);
+            }
+          } else {
+            // Drop at a position (before/after another request)
+            let insertIndex = dropTarget.index ?? 0;
+            if (dropTarget.position === 'after') {
+              insertIndex += 1;
+            }
+            
+            // Adjust index when moving within the same collection/folder
+            // because the source item will be removed first
+            const sameCollection = currentDragState.collectionId === targetCollectionId;
+            const sameFolder = currentDragState.folderId === targetFolderId;
+            if (sameCollection && sameFolder && currentDragState.fromIndex !== undefined) {
+              if (currentDragState.fromIndex < insertIndex) {
+                insertIndex -= 1;
+              }
+              // Skip if dropping at the same position
+              if (currentDragState.fromIndex === insertIndex) {
+                dragStateRef.current = null;
+                setDragState(null);
+                setDropTarget(null);
+                return;
+              }
+            }
+            
+            moveRequestToCollection(request, currentDragState.collectionId || null, targetCollectionId, targetFolderId, insertIndex);
+            // Close the standalone tab if this was a standalone request
+            if (standaloneTabId) {
+              closeTab(standaloneTabId);
+            }
+          }
+        }
+      }
+      
+      // Handle folder reordering
+      if (currentDragState.type === 'folder' && dropTarget.type === 'folder') {
+        const fromIndex = currentDragState.fromIndex!;
+        let toIndex = dropTarget.index!;
+        
+        if (dropTarget.position === 'after') {
+          toIndex += 1;
+        }
+        if (fromIndex < toIndex) {
+          toIndex -= 1;
+        }
+        if (fromIndex !== toIndex && currentDragState.collectionId) {
+          reorderFolders(currentDragState.collectionId, fromIndex, toIndex);
+        }
+      }
+
+      // Handle workspace reordering
+      if (currentDragState.type === 'workspace' && dropTarget.type === 'workspace') {
+        const fromIndex = currentDragState.fromIndex!;
+        let toIndex = dropTarget.index!;
+        
+        if (dropTarget.position === 'after') {
+          toIndex += 1;
+        }
+        if (fromIndex < toIndex) {
+          toIndex -= 1;
+        }
+        if (fromIndex !== toIndex) {
+          reorderWorkspaces(fromIndex, toIndex);
+        }
+      }
+    } catch (err) {
+      console.error('Drop error:', err);
+    }
+    
+    dragStateRef.current = null;
+    setDragState(null);
+    setDropTarget(null);
+  }, [dropTarget, collections, moveRequestToCollection, reorderCollections]);
+
+  // Helper to get drop indicator for an item
+  const getDropIndicator = useCallback((
+    targetType: 'collection' | 'request' | 'folder' | 'workspace',
+    targetId: string
+  ): DropPosition | null => {
+    if (!dropTarget || dropTarget.id !== targetId || dropTarget.type !== targetType) {
+      return null;
+    }
+    return dropTarget.position;
+  }, [dropTarget]);
+
   const handleAddRequestToCollection = (collection: Collection) => {
     const req = requestService.createEmptyRequest();
     req.collectionId = collection.id;
@@ -302,6 +625,22 @@ export const LeftPanel: React.FC = () => {
     addRequest(collection.id, req);
     // Open it in a tab
     addTab(req);
+  };
+
+  const handleAddRequestToFolder = (collectionId: string, folderId: string) => {
+    const req = requestService.createEmptyRequest();
+    req.collectionId = collectionId;
+    req.folderId = folderId;
+    req.name = 'New Request';
+    // Add request to the folder
+    addRequest(collectionId, req, folderId);
+    // Open it in a tab
+    addTab(req);
+  };
+
+  const handleFolderContextMenu = (e: React.MouseEvent, folder: Folder, collectionId: string) => {
+    setContextTarget({ type: 'folder', item: folder, collectionId });
+    showContextMenu(e);
   };
 
   const getContextMenuItems = () => {
@@ -329,13 +668,38 @@ export const LeftPanel: React.FC = () => {
         { id: 'new-request', label: 'Add Request', icon: <PlusIcon />, shortcut: '⌘N', onClick: () => {
           handleAddRequestToCollection(collection);
         }},
-        { id: 'new-folder', label: 'Add Folder', icon: <FolderIcon />, onClick: () => {} },
+        { id: 'new-folder', label: 'Add Folder', icon: <FolderIcon />, onClick: () => {
+          addFolder(collection.id, 'New Folder');
+        }},
         { id: 'divider1', label: '', divider: true },
         { id: 'rename', label: 'Rename', icon: <EditIcon />, onClick: () => {
           // Open the collection tab to rename
           addCollectionTab(collection);
         }},
-        { id: 'duplicate', label: 'Duplicate', icon: <CopyIcon />, onClick: () => {} },
+        { id: 'duplicate', label: 'Duplicate', icon: <CopyIcon />, onClick: async () => {
+          // Helper to generate new IDs for folders recursively
+          const cloneFolders = (folders: Folder[]): Folder[] => {
+            return folders.map(folder => ({
+              ...folder,
+              id: uuidv4(),
+              requests: folder.requests.map(r => ({ ...r, id: uuidv4() })),
+              folders: cloneFolders(folder.folders),
+            }));
+          };
+          
+          // Create a deep copy with new IDs
+          const duplicatedCollection: Collection = {
+            ...collection,
+            id: uuidv4(),
+            name: `${collection.name} (Copy)`,
+            requests: collection.requests.map(r => ({ ...r, id: uuidv4() })),
+            folders: cloneFolders(collection.folders),
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          };
+          
+          await importCollection(duplicatedCollection);
+        }},
         { id: 'move', label: 'Move to Workspace', icon: <MoveIcon />, onClick: () => {
           openMoveCollectionModal(collection);
         }},
@@ -351,14 +715,12 @@ export const LeftPanel: React.FC = () => {
         ] : []),
         { id: 'divider2', label: '', divider: true },
         { id: 'delete', label: 'Delete', icon: <TrashIcon />, danger: true, onClick: () => {
-          // Close any tabs related to this collection (check all tabs, not just workspace tabs)
-          allTabs.forEach(tab => {
-            if (tab.collectionId === collection.id || tab.request?.collectionId === collection.id) {
-              closeTab(tab.id);
-            }
+          setDeleteTarget({
+            type: 'collection',
+            id: collection.id,
+            name: collection.name,
           });
-          // Delete the collection
-          deleteCollection(collection.id);
+          setDeleteModalOpen(true);
         }},
       ];
     }
@@ -370,9 +732,9 @@ export const LeftPanel: React.FC = () => {
           { id: 'open', label: 'Open', icon: <OpenIcon />, onClick: () => {
             handleOpenRequest(contextTarget.item as Request);
           }},
-          { id: 'open-new-tab', label: 'Open in New Tab', icon: <NewTabIcon />, onClick: () => {
+          /*{ id: 'open-new-tab', label: 'Open in New Tab', icon: <NewTabIcon />, onClick: () => {
             handleOpenRequest(contextTarget.item as Request);
-          }},
+          }},*/
         ];
       }
       
@@ -399,21 +761,61 @@ export const LeftPanel: React.FC = () => {
           
           addTab(duplicated);
         }},
+        { id: 'deprecate', label: (contextTarget.item as Request).isDeprecated ? 'Remove Deprecation' : 'Deprecate', icon: <WarningIcon />, onClick: () => {
+          const request = contextTarget.item as Request;
+          const collectionId = contextTarget.collectionId || request.collectionId;
+          if (collectionId) {
+            updateRequest(collectionId, request.id, { isDeprecated: !request.isDeprecated });
+          }
+        }},
         { id: 'divider2', label: '', divider: true },
         { id: 'delete', label: 'Delete', icon: <TrashIcon />, danger: true, onClick: () => {
           const request = contextTarget.item as Request;
           const collectionId = contextTarget.collectionId || request.collectionId;
           const folderId = contextTarget.folderId || request.folderId;
           if (collectionId) {
-            // Close any tabs with this request
-            allTabs.forEach(tab => {
-              if (tab.request?.id === request.id) {
-                closeTab(tab.id);
-              }
+            setDeleteTarget({
+              type: 'request',
+              id: request.id,
+              name: request.name,
+              collectionId,
+              folderId,
             });
-            // Delete the request from the collection
-            deleteRequest(collectionId, request.id, folderId);
+            setDeleteModalOpen(true);
           }
+        }},
+      ];
+    }
+
+    if (contextTarget.type === 'folder') {
+      const folder = contextTarget.item as Folder;
+      const collectionId = contextTarget.collectionId!;
+      
+      if (readonly) return [];
+      
+      return [
+        { id: 'add-request', label: 'Add Request', icon: <PlusIcon />, onClick: () => {
+          handleAddRequestToFolder(collectionId, folder.id);
+        }},
+        { id: 'add-subfolder', label: 'Add Subfolder', icon: <FolderIcon />, onClick: () => {
+          addFolder(collectionId, 'New Folder', folder.id);
+        }},
+        { id: 'divider1', label: '', divider: true },
+        { id: 'rename', label: 'Rename', icon: <EditIcon />, onClick: () => {
+          handleStartEditingFolder(folder);
+        }},
+        { id: 'deprecate', label: folder.isDeprecated ? 'Remove Deprecation' : 'Deprecate', icon: <WarningIcon />, onClick: () => {
+          updateFolder(collectionId, folder.id, { isDeprecated: !folder.isDeprecated });
+        }},
+        { id: 'divider2', label: '', divider: true },
+        { id: 'delete', label: 'Delete', icon: <TrashIcon />, danger: true, onClick: () => {
+          setDeleteTarget({
+            type: 'folder',
+            id: folder.id,
+            name: folder.name,
+            collectionId,
+          });
+          setDeleteModalOpen(true);
         }},
       ];
     }
@@ -473,6 +875,39 @@ export const LeftPanel: React.FC = () => {
       ];
     }
 
+    // List area context menu (for sorting collections)
+    if (contextTarget.type === 'listArea') {
+      if (readonly) return [];
+      
+      return [
+        { id: 'sort-asc', label: 'Sort by Name (A-Z)', icon: <SortAscIcon />, onClick: () => {
+          sortCollections('asc');
+        }},
+        { id: 'sort-desc', label: 'Sort by Name (Z-A)', icon: <SortDescIcon />, onClick: () => {
+          sortCollections('desc');
+        }},
+      ];
+    }
+
+    // Environment context menu
+    if (contextTarget.type === 'environment') {
+      const env = contextTarget.item as typeof environments[0];
+      return [
+        { id: 'open', label: 'Open', icon: <OpenIcon />, onClick: () => {
+          handleOpenEnvironment(env);
+        }},
+        { id: 'divider1', label: '', divider: true },
+        { id: 'delete', label: 'Delete', icon: <TrashIcon />, danger: true, onClick: () => {
+          setDeleteTarget({
+            type: 'environment',
+            id: env.id,
+            name: env.name,
+          });
+          setDeleteModalOpen(true);
+        }},
+      ];
+    }
+
     return [];
   };
 
@@ -527,133 +962,130 @@ export const LeftPanel: React.FC = () => {
     setEditingCollectionName('');
   };
 
-  // Handle dropping a request into a collection (at end)
-  const handleDropRequestOnCollection = useCallback((data: unknown, targetCollectionId: string) => {
-    console.log('[DnD] handleDropRequestOnCollection called', { data, targetCollectionId });
-    const { request, fromCollectionId, fromFolderId, standaloneTabId } = data as { 
-      request: Request; 
-      fromCollectionId: string | null; 
-      fromFolderId?: string;
-      standaloneTabId?: string;
-    };
-    
-    console.log('[DnD] Parsed data:', { request: request?.name, fromCollectionId, standaloneTabId });
-    
-    // Don't do anything if dropping on the same collection at root level
-    if (fromCollectionId === targetCollectionId && !fromFolderId) {
-      console.log('[DnD] Skipping - same collection at root level');
-      return;
-    }
-    
-    console.log('[DnD] Calling moveRequestToCollection');
-    moveRequestToCollection(request, fromCollectionId, targetCollectionId);
-    
-    // Close the standalone tab if this was a standalone request
-    if (standaloneTabId) {
-      console.log('[DnD] Closing standalone tab:', standaloneTabId);
-      closeTab(standaloneTabId);
-    }
-  }, [moveRequestToCollection, closeTab]);
+  // Folder name editing handlers
+  const handleStartEditingFolder = (folder: Folder) => {
+    setEditingFolderId(folder.id);
+    setEditingFolderName(folder.name);
+  };
 
-  // Handle dropping a request at a specific position relative to another request
-  const handleDropRequestAtPosition = useCallback((
-    data: unknown, 
-    targetCollectionId: string,
-    targetRequestIndex: number,
-    position: DropPosition,
-    folderId?: string
-  ) => {
-    console.log('[DnD] handleDropRequestAtPosition called', { targetCollectionId, targetRequestIndex, position, folderId });
-    const { request, fromCollectionId, fromFolderId, standaloneTabId } = data as { 
-      request: Request; 
-      fromCollectionId: string | null; 
-      fromFolderId?: string;
-      standaloneTabId?: string;
-    };
-    
-    console.log('[DnD] Parsed data:', { requestName: request?.name, fromCollectionId, standaloneTabId });
-    
-    // Calculate insert index based on position
-    let insertIndex = position === 'before' ? targetRequestIndex : targetRequestIndex + 1;
-    console.log('[DnD] Calculated insertIndex:', insertIndex);
-    
-    console.log('[DnD] Calling moveRequestToCollection');
-    moveRequestToCollection(request, fromCollectionId, targetCollectionId, folderId, insertIndex);
-    
-    // Close the standalone tab if this was a standalone request
-    if (standaloneTabId) {
-      console.log('[DnD] Closing standalone tab:', standaloneTabId);
-      closeTab(standaloneTabId);
+  const handleFinishEditingFolder = (folder: Folder, collectionId: string) => {
+    if (editingFolderName.trim() && editingFolderName !== folder.name) {
+      const newName = editingFolderName.trim();
+      updateFolder(collectionId, folder.id, { name: newName });
     }
-  }, [moveRequestToCollection, closeTab]);
+    setEditingFolderId(null);
+    setEditingFolderName('');
+  };
+
+  const handleCancelEditingFolder = () => {
+    setEditingFolderId(null);
+    setEditingFolderName('');
+  };
+
+  // Handle delete confirmation
+  const handleConfirmDelete = useCallback(() => {
+    if (!deleteTarget) return;
+    
+    if (deleteTarget.type === 'collection') {
+      // Close any tabs related to this collection
+      allTabs.forEach(tab => {
+        if (tab.collectionId === deleteTarget.id || tab.request?.collectionId === deleteTarget.id) {
+          closeTab(tab.id);
+        }
+      });
+      deleteCollection(deleteTarget.id);
+    } else if (deleteTarget.type === 'request' && deleteTarget.collectionId) {
+      // Close any tabs with this request
+      allTabs.forEach(tab => {
+        if (tab.request?.id === deleteTarget.id) {
+          closeTab(tab.id);
+        }
+      });
+      deleteRequest(deleteTarget.collectionId, deleteTarget.id, deleteTarget.folderId);
+    } else if (deleteTarget.type === 'folder' && deleteTarget.collectionId) {
+      deleteFolder(deleteTarget.collectionId, deleteTarget.id);
+    } else if (deleteTarget.type === 'environment') {
+      // Close any tabs with this environment
+      allTabs.forEach(tab => {
+        if (tab.type === 'environment' && tab.environmentId === deleteTarget.id) {
+          closeTab(tab.id);
+        }
+      });
+      deleteEnvironment(deleteTarget.id);
+    }
+    
+    setDeleteModalOpen(false);
+    setDeleteTarget(null);
+  }, [deleteTarget, allTabs, closeTab, deleteCollection, deleteRequest, deleteFolder]);
 
   // Handle dropping a request to make it standalone
-  const handleDropRequestToStandalone = useCallback((data: unknown) => {
-    const { request, fromCollectionId, fromFolderId } = data as { 
-      request: Request; 
-      fromCollectionId: string | null; 
-      fromFolderId?: string;
-    };
+  const [isStandaloneDragOver, setIsStandaloneDragOver] = useState(false);
+  
+  const handleStandaloneDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (dragStateRef.current?.type === 'request') {
+      setIsStandaloneDragOver(true);
+      e.dataTransfer.dropEffect = 'move';
+    }
+  }, []);
+
+  const handleStandaloneDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsStandaloneDragOver(false);
+  }, []);
+
+  const handleStandaloneDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsStandaloneDragOver(false);
     
-    // Only process if the request is from a collection
-    if (!fromCollectionId) {
+    const currentDragState = dragStateRef.current;
+    if (currentDragState?.type !== 'request' || !currentDragState.collectionId) {
       return;
     }
     
-    // Remove from collection
-    deleteRequest(fromCollectionId, request.id, fromFolderId);
-    
-    // Create a new standalone tab with the request
-    const standaloneRequest: Request = {
-      ...request,
-      collectionId: undefined,
-      folderId: undefined,
+    // Helper to recursively get all requests from folders
+    const getAllRequestsFromFolders = (folders: Folder[]): Request[] => {
+      return folders.flatMap(f => [...f.requests, ...getAllRequestsFromFolders(f.folders)]);
     };
-    addTab(standaloneRequest);
-  }, [deleteRequest, addTab]);
-
-  // Drag over handler for standalone section
-  const [isStandaloneDragOver, setIsStandaloneDragOver] = useState(false);
-  
-  const handleStandaloneDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsStandaloneDragOver(true);
-    e.dataTransfer.dropEffect = 'move';
-  };
-
-  const handleStandaloneDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsStandaloneDragOver(false);
-  };
-
-  const handleStandaloneDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsStandaloneDragOver(false);
     
-    try {
-      const rawData = e.dataTransfer.getData('application/json');
-      if (rawData) {
-        const { type, data } = JSON.parse(rawData);
-        if (type === 'request') {
-          handleDropRequestToStandalone(data);
-        }
-      }
-    } catch (err) {
-      console.error('Drop error:', err);
+    // Find the request
+    const request = collections
+      .flatMap(c => [...c.requests, ...getAllRequestsFromFolders(c.folders)])
+      .find(r => r.id === currentDragState.id);
+    
+    if (request) {
+      // Remove from collection
+      deleteRequest(currentDragState.collectionId, request.id, currentDragState.folderId);
+      
+      // Create a new standalone tab with the request
+      const standaloneRequest: Request = {
+        ...request,
+        collectionId: undefined,
+        folderId: undefined,
+      };
+      addTab(standaloneRequest);
     }
-  };
+    
+    dragStateRef.current = null;
+    setDragState(null);
+    setDropTarget(null);
+  }, [collections, deleteRequest, addTab]);
 
   const renderRequestItem = (request: Request, collectionId: string, folderId?: string, index?: number) => {
     const isEditing = editingRequestId === request.id;
     const isActive = activeRequestId === request.id;
-    // Check if this request is highlighted from reference scroll sync
     const isReferenceActive = activeReferenceCollectionId === collectionId && activeRequestIdFromScroll === request.id;
+    const isDragging = dragState?.type === 'request' && dragState.id === request.id;
     
     return (
-      <div key={request.id} ref={(el) => setRequestRef(request.id, el)} className={isReferenceActive ? 'reference-active-request' : undefined}>
+      <div 
+        key={request.id} 
+        ref={(el) => setRequestRef(request.id, el)} 
+        className={isReferenceActive ? 'reference-active-request' : undefined}
+      >
         <CollapsibleListItem
           icon={<span className="method-badge" style={{ color: getMethodColor(request.method) }}>{request.method}</span>}
           active={isActive || isReferenceActive}
@@ -661,21 +1093,27 @@ export const LeftPanel: React.FC = () => {
           onContextMenu={(e) => handleRequestContextMenu(e, request, collectionId, folderId)}
           onDoubleClick={() => handleStartEditing(request)}
           draggable={!readonly && !isEditing}
-          dragType="request"
-          dragData={{ request, fromCollectionId: collectionId, fromFolderId: folderId }}
-          onDragStart={() => { isDraggingRef.current = true; }}
-          onDragEnd={() => { isDraggingRef.current = false; }}
-          droppable={!readonly}
-          dropAcceptTypes={['request']}
-          itemId={request.id}
-          onDrop={(data, type, position) => {
-            console.log('[renderRequestItem] onDrop called', { index, collectionId, position, folderId });
-            if (index !== undefined) {
-              handleDropRequestAtPosition(data, collectionId, index, position, folderId);
-            } else {
-              console.log('[renderRequestItem] index is undefined, skipping');
+          onDragStart={(e) => handleDragStart(e, 'request', request.id, collectionId, folderId, index, { request })}
+          onDragEnd={handleDragEnd}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const currentDrag = dragStateRef.current;
+            if (currentDrag?.type === 'request' && currentDrag.id !== request.id) {
+              handleDragOver(e, 'request', request.id, collectionId, folderId, index);
             }
           }}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => {
+            e.preventDefault();
+            const currentDrag = dragStateRef.current;
+            if (!readonly && currentDrag?.type === 'request') {
+              handleDrop(e);
+            }
+          }}
+          itemId={request.id}
+          dropIndicator={getDropIndicator('request', request.id)}
+          className={`${isDragging ? 'collapsible-list-item--dragging' : ''} ${request.isDeprecated ? 'collapsible-list-item--deprecated' : ''}`}
         >
           {isEditing ? (
             <input
@@ -695,7 +1133,7 @@ export const LeftPanel: React.FC = () => {
               autoFocus
             />
           ) : (
-            request.name
+            <span className={request.isDeprecated ? 'request-name--deprecated' : ''}>{request.name}</span>
           )}
         </CollapsibleListItem>
       </div>
@@ -747,14 +1185,40 @@ export const LeftPanel: React.FC = () => {
     };
   };
 
-  const renderFolder = (folder: Folder, collectionId: string) => {
-    // Check if this folder should be highlighted (Reference scroll sync)
-    // Only highlight folder if no specific request is active within it
+  const renderFolder = (folder: Folder, collectionId: string, index?: number) => {
     const isReferenceActive = activeReferenceCollectionId === collectionId;
     const isActiveSection = isReferenceActive && activeFolderId === folder.id && !activeRequestIdFromScroll;
+    const isEditing = editingFolderId === folder.id;
+    const isDragging = dragState?.type === 'folder' && dragState.id === folder.id;
     
     return (
-      <div key={folder.id} ref={(el) => setFolderRef(folder.id, el)}>
+      <div 
+        key={folder.id} 
+        ref={(el) => setFolderRef(folder.id, el)}
+        onDragOver={(e) => {
+          const dragType = dragStateRef.current?.type;
+          if (!readonly && (dragType === 'folder' || dragType === 'request')) {
+            e.preventDefault();
+            e.stopPropagation();
+            handleDragOver(e, 'folder', folder.id, collectionId, undefined, index);
+          }
+        }}
+        onDragLeave={(e) => {
+          const dragType = dragStateRef.current?.type;
+          if (dragType === 'folder' || dragType === 'request') {
+            e.stopPropagation();
+            handleDragLeave(e);
+          }
+        }}
+        onDrop={(e) => {
+          const dragType = dragStateRef.current?.type;
+          if (!readonly && (dragType === 'folder' || dragType === 'request')) {
+            e.preventDefault();
+            e.stopPropagation();
+            handleDrop(e);
+          }
+        }}
+      >
         <CollapsibleList
           title={folder.name}
           icon={<FolderIcon />}
@@ -762,16 +1226,21 @@ export const LeftPanel: React.FC = () => {
           onCollapsedChange={(collapsed) => {
             updateFolder(collectionId, folder.id, { collapsed });
           }}
-          className={isActiveSection ? 'reference-active-section' : undefined}
-          droppable={!readonly}
-          dropAcceptTypes={['request']}
-          onDrop={(data) => handleDropRequestOnCollection(data, collectionId)}
-          onDropOnHeader={(data) => {
-            // Drop on folder header adds at first position
-            handleDropRequestAtPosition(data, collectionId, 0, 'before', folder.id);
-          }}
+          onContextMenu={(e) => handleFolderContextMenu(e, folder, collectionId)}
+          onTitleDoubleClick={() => !readonly && handleStartEditingFolder(folder)}
+          isEditingTitle={isEditing}
+          editingTitleValue={editingFolderName}
+          onEditingTitleChange={setEditingFolderName}
+          onEditingTitleComplete={() => handleFinishEditingFolder(folder, collectionId)}
+          onEditingTitleCancel={handleCancelEditingFolder}
+          className={`${isActiveSection ? 'reference-active-section' : ''} ${isDragging ? 'collapsible-list--dragging' : ''} ${folder.isDeprecated ? 'collapsible-list--deprecated' : ''}`}
+          draggable={!readonly && !isEditing}
+          onDragStart={(e) => handleDragStart(e, 'folder', folder.id, collectionId, undefined, index)}
+          onDragEnd={handleDragEnd}
+          listId={folder.id}
+          dropIndicator={getDropIndicator('folder', folder.id)}
         >
-          {folder.folders.map(f => renderFolder(f, collectionId))}
+          {folder.folders.map((f, idx) => renderFolder(f, collectionId, idx))}
           {folder.requests.map((r, idx) => renderRequestItem(r, collectionId, folder.id, idx))}
         </CollapsibleList>
       </div>
@@ -814,7 +1283,7 @@ export const LeftPanel: React.FC = () => {
           folders: filteredFolders,
           // Auto-expand collection when searching
           collapsed: false,
-        };
+        } as Collection;
       })
       .filter((c): c is Collection => c !== null);
   };
@@ -922,6 +1391,20 @@ export const LeftPanel: React.FC = () => {
           size="sm"
           suffix={sidebarView === 'collections' && searchQuery ? `${filteredRequestCount}/${totalRequestCount}` : undefined}
         />
+        {sidebarView === 'workspaces' && (
+          <Tooltip content="New Workspace">
+            <Button variant="ghost" size="sm" onClick={handleNewWorkspace} className="left-panel__header-action">
+              <PlusIcon />
+            </Button>
+          </Tooltip>
+        )}
+        {sidebarView === 'environments' && (
+          <Tooltip content="New Environment">
+            <Button variant="ghost" size="sm" onClick={openNewEnvironmentModal} className="left-panel__header-action">
+              <PlusIcon />
+            </Button>
+          </Tooltip>
+        )}
       </div>}
 
       <div className="left-panel__content" ref={leftPanelContentRef}>
@@ -940,7 +1423,16 @@ export const LeftPanel: React.FC = () => {
               </div>
             )}
 
-            <div className="left-panel__list">
+            <div 
+              className="left-panel__list" 
+              onContextMenu={handleListAreaContextMenu}
+              onDragLeave={(e) => {
+                // Clear drop target if leaving the list area entirely
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                  setDropTarget(null);
+                }
+              }}
+            >
               {/* Drop zone for making requests standalone */}
               {!readonly && (
                 <div 
@@ -960,6 +1452,7 @@ export const LeftPanel: React.FC = () => {
                     const { type, tab, item } = standaloneItem;
                     if (type === 'request') {
                       const request = item as Request;
+                      const isDragging = dragState?.type === 'request' && dragState.id === request.id;
                       return (
                         <CollapsibleListItem
                           key={tab.id}
@@ -975,10 +1468,10 @@ export const LeftPanel: React.FC = () => {
                             showContextMenu(e);
                           }}
                           draggable={!readonly}
-                          dragType="request"
-                          dragData={{ request, fromCollectionId: null, standaloneTabId: tab.id }}
-                          onDragStart={() => { isDraggingRef.current = true; }}
-                          onDragEnd={() => { isDraggingRef.current = false; }}
+                          onDragStart={(e) => handleDragStart(e, 'request', request.id, undefined, undefined, undefined, { request, standaloneTabId: tab.id })}
+                          onDragEnd={handleDragEnd}
+                          itemId={request.id}
+                          className={isDragging ? 'collapsible-list-item--dragging' : ''}
                         >
                           <div className="standalone-item">
                             <span className="standalone-item__name">{request.name}</span>
@@ -1038,55 +1531,83 @@ export const LeftPanel: React.FC = () => {
                   )}
                 </div>
               ) : (
-                filteredCollections.map(collection => (
-                  <CollapsibleList
-                    key={collection.id}
-                    title={collection.name}
-                    subtitle={collection.type || 'REST'}
-                    badge={collection.specSource?.type === 'url' ? <RadarIcon /> : undefined}
-                    badgeTooltip={collection.specSource?.type === 'url' ? 'Synced from URL' : undefined}
-                    collapsed={collection.collapsed}
-                    onCollapsedChange={(collapsed) => {
-                      updateCollection(collection.id, { collapsed });
-                    }}
-                    onContextMenu={(e) => handleCollectionContextMenu(e, collection)}
-                    onTitleClick={() => !editingCollectionId && addCollectionTab(collection)}
-                    onTitleDoubleClick={() => handleStartEditingCollection(collection)}
-                    isEditingTitle={editingCollectionId === collection.id}
-                    editingTitleValue={editingCollectionName}
-                    onEditingTitleChange={setEditingCollectionName}
-                    onEditingTitleComplete={() => handleFinishEditingCollection(collection)}
-                    onEditingTitleCancel={handleCancelEditingCollection}
-                    droppable={!readonly}
-                    dropAcceptTypes={['request']}
-                    onDrop={(data) => handleDropRequestOnCollection(data, collection.id)}
-                    onDropOnHeader={(data) => {
-                      // Drop on collection header adds at first position
-                      handleDropRequestAtPosition(data, collection.id, 0, 'before', undefined);
-                    }}
-                    dropTargetId={collection.id}
-                    actions={
-                      !readonly && (
-                        <Tooltip content="Add Request">
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleAddRequestToCollection(collection);
-                            }}
-                            className="collection-add-btn"
-                          >
-                            <PlusIcon />
-                          </Button>
-                        </Tooltip>
-                      )
-                    }
-                  >
-                    {collection.folders.map(f => renderFolder(f, collection.id))}
-                    {collection.requests.map((r, idx) => renderRequestItem(r, collection.id, undefined, idx))}
-                  </CollapsibleList>
-                ))
+                filteredCollections.map((collection, collectionIndex) => {
+                  const isDragging = dragState?.type === 'collection' && dragState.id === collection.id;
+                  
+                  return (
+                    <div 
+                      key={collection.id}
+                      className="collection-drag-wrapper"
+                      onDragOver={(e) => {
+                        // Only handle collection-to-collection dragging
+                        // Don't interfere with request/folder dragging inside the collection
+                        if (!readonly && dragStateRef.current?.type === 'collection') {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleDragOver(e, 'collection', collection.id, undefined, undefined, collectionIndex);
+                        }
+                      }}
+                      onDragLeave={(e) => {
+                        if (dragStateRef.current?.type === 'collection') {
+                          e.stopPropagation();
+                          handleDragLeave(e);
+                        }
+                      }}
+                      onDrop={(e) => {
+                        if (!readonly && dragStateRef.current?.type === 'collection') {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleDrop(e);
+                        }
+                      }}
+                    >
+                      <CollapsibleList
+                        title={collection.name}
+                        subtitle={collection.type || 'REST'}
+                        badge={collection.specSource?.type === 'url' ? <RadarIcon /> : undefined}
+                        badgeTooltip={collection.specSource?.type === 'url' ? 'Synced from URL' : undefined}
+                        collapsed={collection.collapsed}
+                        onCollapsedChange={(collapsed) => {
+                          updateCollection(collection.id, { collapsed });
+                        }}
+                        onContextMenu={(e) => handleCollectionContextMenu(e, collection)}
+                        onTitleClick={() => !editingCollectionId && addCollectionTab(collection)}
+                        onTitleDoubleClick={() => handleStartEditingCollection(collection)}
+                        isEditingTitle={editingCollectionId === collection.id}
+                        editingTitleValue={editingCollectionName}
+                        onEditingTitleChange={setEditingCollectionName}
+                        onEditingTitleComplete={() => handleFinishEditingCollection(collection)}
+                        onEditingTitleCancel={handleCancelEditingCollection}
+                        draggable={!readonly && !searchQuery && editingCollectionId !== collection.id}
+                        onDragStart={(e) => handleDragStart(e, 'collection', collection.id, undefined, undefined, collectionIndex)}
+                        onDragEnd={handleDragEnd}
+                        listId={collection.id}
+                        dropIndicator={getDropIndicator('collection', collection.id)}
+                        className={isDragging ? 'collapsible-list--dragging' : ''}
+                        actions={
+                          !readonly && (
+                            <Tooltip content="Add Request">
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAddRequestToCollection(collection);
+                                }}
+                                className="collection-add-btn"
+                              >
+                                <PlusIcon />
+                              </Button>
+                            </Tooltip>
+                          )
+                        }
+                      >
+                        {collection.folders.map((f, idx) => renderFolder(f, collection.id, idx))}
+                        {collection.requests.map((r, idx) => renderRequestItem(r, collection.id, undefined, idx))}
+                      </CollapsibleList>
+                    </div>
+                  );
+                })
               )}
             </div>
           </>
@@ -1094,13 +1615,6 @@ export const LeftPanel: React.FC = () => {
 
         {sidebarView === 'environments' && (
           <>
-            <div className="left-panel__actions">
-              <Button variant="ghost" size="sm" onClick={openNewEnvironmentModal}>
-                <PlusIcon />
-                New Environment
-              </Button>
-            </div>
-
             <div className="left-panel__list">
               {filteredEnvironments.length === 0 ? (
                 <div className="left-panel__empty">
@@ -1121,6 +1635,22 @@ export const LeftPanel: React.FC = () => {
                     }}
                   >
                     <span className="environment-item">
+                      <Tooltip content="Delete environment" position="right">
+                        <button 
+                          className="environment-item__delete"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteTarget({
+                              type: 'environment',
+                              id: env.id,
+                              name: env.name,
+                            });
+                            setDeleteModalOpen(true);
+                          }}
+                        >
+                          <TrashIcon />
+                        </button>
+                      </Tooltip>
                       <Tooltip content={env.isActive ? 'Hide from dropdown' : 'Show in dropdown'} position="right">
                         <span 
                           className="environment-item__toggle"
@@ -1304,13 +1834,6 @@ export const LeftPanel: React.FC = () => {
 
         {sidebarView === 'workspaces' && (
           <>
-            <div className="left-panel__actions">
-              <Button variant="ghost" size="sm" onClick={handleNewWorkspace}>
-                <PlusIcon />
-                New Workspace
-              </Button>
-            </div>
-
             <div className="left-panel__list">
               {filteredWorkspaces.length === 0 ? (
                 <div className="left-panel__empty">
@@ -1335,20 +1858,54 @@ export const LeftPanel: React.FC = () => {
                   )}
                 </div>
               ) : (
-                filteredWorkspaces.map(workspace => (
-                  <CollapsibleListItem
-                    key={workspace.id}
-                    onClick={() => addWorkspaceTab(workspace)}
-                  >
-                    <div className="workspace-item">
-                      <span 
-                        className="workspace-item__color" 
-                        style={{ backgroundColor: workspace.color || '#6366f1' }} 
-                      />
-                      <span className="workspace-item__name">{workspace.name}</span>
+                filteredWorkspaces.map((workspace, workspaceIndex) => {
+                  const isDragging = dragState?.type === 'workspace' && dragState.id === workspace.id;
+                  
+                  return (
+                    <div
+                      key={workspace.id}
+                      className="workspace-drag-wrapper"
+                      onDragOver={(e) => {
+                        if (!searchQuery && dragStateRef.current?.type === 'workspace') {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleDragOver(e, 'workspace', workspace.id, undefined, undefined, workspaceIndex);
+                        }
+                      }}
+                      onDragLeave={(e) => {
+                        if (dragStateRef.current?.type === 'workspace') {
+                          e.stopPropagation();
+                          handleDragLeave(e);
+                        }
+                      }}
+                      onDrop={(e) => {
+                        if (!searchQuery && dragStateRef.current?.type === 'workspace') {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleDrop(e);
+                        }
+                      }}
+                    >
+                      <CollapsibleListItem
+                        onClick={() => addWorkspaceTab(workspace)}
+                        draggable={!searchQuery}
+                        onDragStart={(e) => handleDragStart(e, 'workspace', workspace.id, undefined, undefined, workspaceIndex)}
+                        onDragEnd={handleDragEnd}
+                        itemId={workspace.id}
+                        dropIndicator={getDropIndicator('workspace', workspace.id)}
+                        className={isDragging ? 'collapsible-list-item--dragging' : ''}
+                      >
+                        <div className="workspace-item">
+                          <span 
+                            className="workspace-item__color" 
+                            style={{ backgroundColor: workspace.color || '#6366f1' }} 
+                          />
+                          <span className="workspace-item__name">{workspace.name}</span>
+                        </div>
+                      </CollapsibleListItem>
                     </div>
-                  </CollapsibleListItem>
-                ))
+                  );
+                })
               )}
             </div>
           </>
@@ -1365,6 +1922,58 @@ export const LeftPanel: React.FC = () => {
         isOpen={gitHubConnectModalOpen} 
         onClose={() => setGitHubConnectModalOpen(false)} 
       />
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={deleteModalOpen}
+        onClose={() => {
+          setDeleteModalOpen(false);
+          setDeleteTarget(null);
+        }}
+        title={`Delete ${deleteTarget?.type === 'collection' ? 'Collection' : deleteTarget?.type === 'folder' ? 'Folder' : deleteTarget?.type === 'environment' ? 'Environment' : 'Request'}`}
+        size="sm"
+      >
+        <div className="left-panel__delete-modal">
+          <div className="left-panel__delete-icon">
+            <AlertIcon />
+          </div>
+          <p className="left-panel__delete-message">
+            Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?
+          </p>
+          {deleteTarget?.type === 'collection' && (
+            <p className="left-panel__delete-warning">
+              This will delete all requests and folders in this collection.
+            </p>
+          )}
+          {deleteTarget?.type === 'folder' && (
+            <p className="left-panel__delete-warning">
+              This will delete all requests and subfolders in this folder.
+            </p>
+          )}
+          {deleteTarget?.type === 'environment' && (
+            <p className="left-panel__delete-warning">
+              This will delete all variables in this environment.
+            </p>
+          )}
+          <p className="left-panel__delete-warning">
+            This action cannot be undone.
+          </p>
+          <div className="left-panel__delete-actions">
+            <Button 
+              variant="secondary" 
+              onClick={() => {
+                setDeleteModalOpen(false);
+                setDeleteTarget(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={handleConfirmDelete}>
+              Delete
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

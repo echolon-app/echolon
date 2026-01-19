@@ -43,6 +43,7 @@ export function collectionToEchoFile(collection: Collection, workspaceName: stri
       modifiedAt: new Date(collection.updatedAt).toISOString(),
       workspaceId: collection.workspaceId || workspaceName,
       collapsed: collection.collapsed,
+      order: collection.order,
     },
     settings: {
       defaultEnvironmentId: collection.defaultEnvironmentId,
@@ -101,6 +102,7 @@ export function echoFileToCollection(echoFile: EchoFile, workspaceId: string): C
     updatedAt: new Date(echoFile.metadata.modifiedAt).getTime(),
     workspaceId,
     collapsed: echoFile.metadata.collapsed,
+    order: echoFile.metadata.order,
     requests: (echoFile.requests || []).map(echoRequestToRequest),
     folders: (echoFile.folders || []).map(echoFolderToFolder),
     environments: echoFile.environments as CollectionEnvironment[],
@@ -125,6 +127,7 @@ function requestToEchoRequest(request: Request): EchoRequest {
   return {
     id: request.id,
     name: request.name,
+    description: request.description,
     method: request.method,
     url: request.url,
     headers: request.headers,
@@ -134,6 +137,7 @@ function requestToEchoRequest(request: Request): EchoRequest {
     auth: request.auth,
     scripts: request.scripts,
     tags: request.tags,
+    isDeprecated: request.isDeprecated,
   } as EchoRequest;
 }
 
@@ -144,6 +148,7 @@ function echoRequestToRequest(echoRequest: EchoRequest): Request {
   return {
     id: echoRequest.id,
     name: echoRequest.name,
+    description: echoRequest.description,
     method: echoRequest.method,
     url: echoRequest.url,
     headers: echoRequest.headers as KeyValuePair[],
@@ -153,6 +158,7 @@ function echoRequestToRequest(echoRequest: EchoRequest): Request {
     auth: echoRequest.auth as AuthConfig,
     scripts: echoRequest.scripts || { pre: '', post: '' },
     tags: echoRequest.tags,
+    isDeprecated: echoRequest.isDeprecated,
   };
 }
 
@@ -166,6 +172,7 @@ function folderToEchoFolder(folder: Folder): EchoFolder {
     requests: folder.requests.map(requestToEchoRequest),
     folders: folder.folders.map(folderToEchoFolder),
     collapsed: folder.collapsed,
+    isDeprecated: folder.isDeprecated,
   };
 }
 
@@ -179,6 +186,7 @@ function echoFolderToFolder(echoFolder: EchoFolder): Folder {
     requests: echoFolder.requests.map(echoRequestToRequest),
     folders: echoFolder.folders.map(f => echoFolderToFolder(f as EchoFolder)),
     collapsed: echoFolder.collapsed,
+    isDeprecated: echoFolder.isDeprecated,
   };
 }
 

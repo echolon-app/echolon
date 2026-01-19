@@ -442,11 +442,15 @@ export class RequestService {
 
       let result: HttpResponseResult;
 
+      // Apply proxy URL transformation if a proxy is configured
+      const effectiveCorsProxy = corsProxy ?? getCorsProxy();
+      const requestUrl = effectiveCorsProxy ? this.applyProxyToUrl(url, effectiveCorsProxy) : url;
+
       if (isElectron()) {
         // Use IPC to make the request via Node.js (bypasses CORS)
         const options: HttpRequestOptions = {
           method: request.method,
-          url,
+          url: requestUrl,
           headers,
           body,
           timeout,
@@ -460,7 +464,7 @@ export class RequestService {
             result,
             effectiveAuth.digest,
             request.method,
-            url,
+            requestUrl,
             headers,
             body,
             timeout,
@@ -474,8 +478,6 @@ export class RequestService {
         }
       } else {
         // Fallback to browser fetch (may have CORS issues)
-        // Get CORS proxy from settings or localStorage
-        const effectiveCorsProxy = corsProxy ?? getCorsProxy();
         result = await this.browserFetch(request.method, url, headers, body, timeout, sendUserAgent, effectiveCorsProxy);
       }
 
@@ -600,15 +602,7 @@ export class RequestService {
       // Apply CORS proxy if configured
       let fetchUrl = url;
       if (corsProxy) {
-        // Handle different proxy URL formats:
-        // - "https://proxy.com/" -> append URL directly
-        // - "https://proxy.com/?url=" -> URL encode the target
-        if (corsProxy.includes('?') || corsProxy.includes('=')) {
-          fetchUrl = corsProxy + encodeURIComponent(url);
-        } else {
-          // Simple prefix proxy (e.g., cors-anywhere style)
-          fetchUrl = corsProxy.replace(/\/$/, '') + '/' + url;
-        }
+        fetchUrl = this.applyProxyToUrl(url, corsProxy);
       }
 
       const fetchResponse = await fetch(fetchUrl, {
@@ -687,6 +681,45 @@ export class RequestService {
   private getContentType(headers: Array<{ key: string; value: string }>): string {
     const contentTypeHeader = headers.find(h => h.key.toLowerCase() === 'content-type');
     return contentTypeHeader?.value || 'text/plain';
+  }
+
+  /**
+   * Apply proxy URL transformation
+   * 
+   * Supports multiple proxy URL formats:
+   * 1. Echolon proxy: "https://proxy.echolon.app" 
+   *    - Transforms: https://api.github.com/path → https://proxy.echolon.app/https/api.github.com/path
+   * 2. Query param proxy: "https://proxy.com/?url="
+   *    - Transforms: https://api.github.com/path → https://proxy.com/?url=https%3A%2F%2Fapi.github.com%2Fpath
+   * 3. Simple prefix proxy: "https://proxy.com/"
+   *    - Transforms: https://api.github.com/path → https://proxy.com/https://api.github.com/path
+   */
+  private applyProxyToUrl(targetUrl: string, proxyBaseUrl: string): string {
+    // Check if this is the echolon proxy format
+    if (proxyBaseUrl.includes('proxy.echolon.app') || proxyBaseUrl.includes('/proxy')) {
+      // Echolon proxy format: {proxyBaseUrl}/{scheme}/{host}/{path}
+      try {
+        const parsed = new URL(targetUrl);
+        const scheme = parsed.protocol.replace(':', ''); // 'https' or 'http'
+        const host = parsed.host; // includes port if non-standard
+        const pathAndQuery = parsed.pathname + parsed.search;
+        
+        // Build the proxy URL: proxyBaseUrl/scheme/host/path
+        const cleanProxyBase = proxyBaseUrl.replace(/\/+$/, ''); // Remove trailing slashes
+        return `${cleanProxyBase}/${scheme}/${host}${pathAndQuery}`;
+      } catch {
+        // If URL parsing fails, fall back to simple prefix
+        return proxyBaseUrl.replace(/\/$/, '') + '/' + targetUrl;
+      }
+    }
+    
+    // Query param proxy format (e.g., "https://proxy.com/?url=")
+    if (proxyBaseUrl.includes('?') || proxyBaseUrl.includes('=')) {
+      return proxyBaseUrl + encodeURIComponent(targetUrl);
+    }
+    
+    // Simple prefix proxy (e.g., cors-anywhere style)
+    return proxyBaseUrl.replace(/\/$/, '') + '/' + targetUrl;
   }
 
   /**

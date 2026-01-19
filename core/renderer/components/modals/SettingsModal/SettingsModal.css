@@ -781,3 +781,94 @@
 .settings-modal__warning-box .settings-modal__field-description {
   max-width: none;
 }
+
+/* Proxy Settings Styles */
+.settings-modal__proxy-selector {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.settings-modal__proxy-selector .dropdown {
+  flex: 1;
+}
+
+.settings-modal__proxy-detail {
+  margin-top: var(--spacing-md);
+  padding: var(--spacing-md);
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+}
+
+.settings-modal__proxy-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-sm);
+}
+
+.settings-modal__proxy-detail-name {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--font-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.settings-modal__proxy-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background-color: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.settings-modal__proxy-detail-url {
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+}
+
+.settings-modal__proxy-detail-url code {
+  display: block;
+  padding: var(--spacing-sm);
+  background-color: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  word-break: break-all;
+}
+
+.settings-modal__proxy-detail-url .input {
+  max-width: none;
+}
+
+.settings-modal__proxy-add-form {
+  margin-top: var(--spacing-md);
+  padding: var(--spacing-md);
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+}
+
+.settings-modal__proxy-add-form .settings-modal__field {
+  margin-bottom: var(--spacing-md);
+}
+
+.settings-modal__proxy-add-form .settings-modal__field:last-of-type {
+  margin-bottom: var(--spacing-sm);
+}
+
+.settings-modal__proxy-add-form .input {
+  max-width: none;
+}
+
+.settings-modal__proxy-add-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+}

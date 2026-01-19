@@ -36,11 +36,11 @@ const headings = [
     
     <h2 id="creating-a-new-collection">Creating a new collection</h2>
     <p>
-      To create a new collection, click on the "<strong>Add new</strong>" button on 
-      the collections section and enter the name of the collection. You can also 
-      create a sub-collection by clicking on the "<strong>Add new</strong>" button 
-      on the desired collection and entering the name of the sub-collection.
+      To create a new collection, click on the "<strong>New</strong>" button on 
+      the collections section and enter the name of the collection.
     </p>
+
+    <img src="/images/new-collection.png" alt="New collection" />
     
     <h2 id="save-requests-to-collections">Save requests to collections</h2>
     <p>
@@ -58,8 +58,7 @@ const headings = [
     <h2 id="organizing-collections">Organizing collections</h2>
     <p>
       You can organize your collections by dragging and dropping them to the desired 
-      location. You can also create sub-collections by dragging and dropping a collection 
-      into another collection.
+      location.
     </p>
     
     <h3 id="editing-collections">Editing collections</h3>
@@ -115,32 +114,15 @@ const headings = [
     </p>
     
     <ul class="list">
-      <li><strong>Authorization</strong> - Set authentication for all requests</li>
-      <li><strong>Headers</strong> - Define common headers</li>
-      <li><strong>Variables</strong> - Create collection-scoped variables</li>
+      <li><strong>Reference</strong> - An overview over all requests in the collection in one page</li>
+      <li><strong>Overview</strong> - An overview over the collection and its main properties</li>
+      <li><strong>Environments</strong> - Define environments and variables for the collection</li>
+      <li><strong>Auth</strong> - Set authentication for all requests in this collection</li>
+      <li><strong>Headers</strong> - Define common headers that will be applied to all requests in this collection</li>
+      <li><strong>Sync</strong> - Sync the collection with a remote API spec (only if imported via a remote url)</li>
     </ul>
     
-    <p>
-      Subfolders and individual requests within the collection inherit these properties 
-      by default and can override them when needed.
-    </p>
-    
-    <h3>Setting collection properties</h3>
-    
-    <Steps client:load>
-      <Step number={1} title="Open collection properties" client:load>
-        Right-click on a collection or a subfolder within a collection to open its properties.
-      </Step>
-      <Step number={2} title="Configure settings" client:load>
-        Specify the authorization, headers, and variables that all nested requests or 
-        folders should adhere to.
-      </Step>
-      <Step number={3} title="Inheritance" client:load>
-        If a subfolder should inherit the properties of a parent collection, specify 
-        the authorization as "inherit" and leave headers unchanged. Variables inherit 
-        automatically—override by redefining the same variable in the child.
-      </Step>
-    </Steps>
+  
   </div>
 </DocsLayout>
 

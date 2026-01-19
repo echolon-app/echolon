@@ -1,11 +1,40 @@
 ---
 import DocsLayout from '../../layouts/DocsLayout.astro';
+import Code from '../../components/Code.astro';
 
 const headings = [
   { depth: 2, slug: 'overview', text: 'Overview' },
   { depth: 2, slug: 'features', text: 'Features' },
   { depth: 2, slug: 'limitations', text: 'Limitations' },
+  { depth: 2, slug: 'embedding', text: 'Embedding Echolon' },
+  { depth: 3, slug: 'basic-example', text: 'Basic Example' },
+  { depth: 3, slug: 'configuration-options', text: 'Configuration Options' },
 ];
+
+const basicExample = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My API Reference</title>
+</head>
+<body>
+  <!-- Container where Echolon will be mounted -->
+  <div id="echolon"></div>
+  
+  <!-- Configuration via data attributes -->
+  <script
+    id="api-reference"
+    data-url="https://sample-api.echolon.app/openapi.json"
+    data-theme="dark"
+    data-view="reference"
+    data-readonly="true"
+    data-title="My API Reference"
+  ></script>
+  
+  <script src="https://cdn.jsdelivr.net/npm/@echolon/web/dist/echolon-web.umd.js"></script>
+</body>
+</html>`;
 ---
 
 <DocsLayout title="Web App" headings={headings}>
@@ -24,7 +53,6 @@ const headings = [
     <ul class="list">
       <li>No installation required</li>
       <li>Works on any modern browser (Blink (Chrome) recommended)</li>
-      <li>Local storage for your data</li>
       <li>Same UI as the desktop app</li>
       <li>No Mocking (on the roadmap)</li>
       <li>File system access via the web <a href="https://developer.mozilla.org/en-US/docs/Web/API/File_System_Access_API">File System Access API</a></li>
@@ -38,7 +66,66 @@ const headings = [
       <li>CORS restrictions may require a proxy for some APIs</li>
       <li>Limited offline support</li>
     </ul>
-  </div>
+
+    <h2 id="embedding">Embedding Echolon</h2>
+    <p>
+      Embed Echolon as an interactive API reference directly into your website or documentation. Load your OpenAPI specification and provide users with a beautiful, interactive API explorer.
+    </p>
+
+    <h3 id="basic-example">Basic Example</h3>
+    <p>
+      Here's a minimal example that loads an OpenAPI spec and displays it in reference mode:
+    </p>
+    <Code code={basicExample} lang="html" />
+
+    <h3 id="configuration-options">Configuration Options</h3>
+    <p>
+      Configure Echolon using <code>data-*</code> attributes on the script tag:
+    </p>
+    
+    <table class="config-table">
+      <thead>
+        <tr>
+          <th>Attribute</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>data-url</code></td>
+          <td>URL to your OpenAPI/Swagger specification (JSON or YAML). The spec is fetched and parsed automatically to generate the API reference.</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td><code>data-theme</code></td>
+          <td>Color theme. Options: <code>light</code>, <code>dark</code>, or <code>system</code> (follows OS preference).</td>
+          <td><code>system</code></td>
+        </tr>
+        <tr>
+          <td><code>data-view</code></td>
+          <td>Default view mode. <code>reference</code> shows all endpoints in a scrollable list. <code>tabs</code> shows the standard tabbed interface.</td>
+          <td><code>reference</code></td>
+        </tr>
+        <tr>
+          <td><code>data-readonly</code></td>
+          <td>When set to <code>true</code> or empty, hides editing controls. Users can still test requests but cannot modify the collection structure.</td>
+          <td><code>false</code></td>
+        </tr>
+        <tr>
+          <td><code>data-title</code></td>
+          <td>Custom title displayed in the header. Overrides the title from the OpenAPI spec.</td>
+          <td>Spec title</td>
+        </tr>
+
+        <tr>
+          <td><code>data-versions-url</code></td>
+          <td>URL to a JSON endpoint returning available API versions. Enables a version switcher in the UI.</td>
+          <td>—</td>
+        </tr>
+      </tbody>
+    </table>
+
 </DocsLayout>
 
 <style>
@@ -46,10 +133,57 @@ const headings = [
   .prose h1 { font-size: var(--font-size-4xl); color: var(--color-text); margin-bottom: var(--spacing-4); }
   .prose h2 { font-size: var(--font-size-2xl); color: var(--color-text); margin-top: var(--spacing-10); margin-bottom: var(--spacing-4); padding-top: var(--spacing-4); border-top: 1px solid var(--color-border-subtle); }
   .prose h2:first-of-type { border-top: none; padding-top: 0; }
+  .prose h3 { font-size: var(--font-size-xl); color: var(--color-text); margin-top: var(--spacing-6); margin-bottom: var(--spacing-3); }
   .prose p { margin-bottom: var(--spacing-4); }
   .prose .lead { font-size: var(--font-size-lg); margin-bottom: var(--spacing-6); }
   .prose .list { margin: var(--spacing-4) 0; padding-left: var(--spacing-6); }
   .prose .list li { margin-bottom: var(--spacing-2); list-style: disc; }
   .prose a { color: var(--color-primary); text-decoration: underline; text-underline-offset: 2px; }
+  .prose code { 
+    background: var(--color-bg-tertiary); 
+    padding: 0.125rem 0.375rem; 
+    border-radius: var(--radius-sm); 
+    font-size: 0.875em;
+    font-family: var(--font-mono);
+  }
+  .prose pre { 
+    background: var(--color-bg-tertiary); 
+    padding: var(--spacing-4); 
+    border-radius: var(--radius-md); 
+    overflow-x: auto;
+    margin: var(--spacing-4) 0;
+  }
+  .prose pre code { 
+    background: none; 
+    padding: 0; 
+    font-size: 0.875rem;
+    line-height: 1.6;
+  }
+  .config-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: var(--spacing-4) 0;
+    font-size: var(--font-size-sm);
+  }
+  .config-table th,
+  .config-table td {
+    padding: var(--spacing-3) var(--spacing-4);
+    text-align: left;
+    border-bottom: 1px solid var(--color-border-subtle);
+  }
+  .config-table th {
+    color: var(--color-text);
+    font-weight: 600;
+    background: var(--color-bg-secondary);
+  }
+  .config-table td:first-child {
+    white-space: nowrap;
+  }
+  .config-table code {
+    background: var(--color-bg-tertiary);
+    padding: 0.125rem 0.375rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.8125rem;
+  }
 </style>
 

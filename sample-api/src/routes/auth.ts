@@ -109,7 +109,7 @@ const digestNonces = new Map<string, { created: number; nc: number }>();
  * /auth/basic:
  *   get:
  *     tags:
- *       - Authentication
+ *       - 5. Authentication
  *     summary: Test Basic Authentication
  *     description: |
  *       Tests HTTP Basic Authentication.
@@ -197,7 +197,7 @@ router.get('/basic', (req: Request, res: Response) => {
  * /auth/bearer:
  *   get:
  *     tags:
- *       - Authentication
+ *       - 5. Authentication
  *     summary: Test Bearer Token Authentication
  *     description: |
  *       Tests Bearer Token authentication.
@@ -265,7 +265,7 @@ router.get('/bearer', (req: Request, res: Response) => {
  * /auth/api-key:
  *   get:
  *     tags:
- *       - Authentication
+ *       - 5. Authentication
  *     summary: Test API Key Authentication
  *     description: |
  *       Tests API Key authentication via header or query parameter.
@@ -344,7 +344,7 @@ router.get('/api-key', (req: Request, res: Response) => {
  * /auth/jwt:
  *   get:
  *     tags:
- *       - Authentication
+ *       - 5. Authentication
  *     summary: Test JWT Bearer Authentication
  *     description: |
  *       Tests JWT Bearer token authentication. This endpoint validates JWT structure and signature.
@@ -454,7 +454,7 @@ router.get('/jwt', (req: Request, res: Response) => {
  * /auth/jwt/token:
  *   post:
  *     tags:
- *       - Authentication
+ *       - 5. Authentication
  *     summary: Generate a test JWT token
  *     description: |
  *       Generates a valid JWT token for testing the `/auth/jwt` endpoint.
@@ -541,7 +541,7 @@ router.post('/jwt/token', (req: Request, res: Response) => {
  * /auth/digest:
  *   get:
  *     tags:
- *       - Authentication
+ *       - 5. Authentication
  *     summary: Test Digest Authentication
  *     description: |
  *       Tests HTTP Digest Authentication (RFC 7616).
@@ -695,7 +695,7 @@ router.use('/oauth2', oauth2Router);
  * /auth/credentials:
  *   get:
  *     tags:
- *       - Authentication
+ *       - 5. Authentication
  *     summary: Get test credentials
  *     description: Returns all test credentials for the authentication endpoints
  *     responses:

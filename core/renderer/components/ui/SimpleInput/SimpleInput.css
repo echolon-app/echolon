@@ -116,13 +116,13 @@
 }
 
 /* Hide number input spinners for cleaner look */
-.simple-input[type="number"]::-webkit-outer-spin-button,
-.simple-input[type="number"]::-webkit-inner-spin-button {
+.simple-input[inputMode="numeric"]::-webkit-outer-spin-button,
+.simple-input[inputMode="numeric"]::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
 
-.simple-input[type="number"] {
+.simple-input[inputMode="numeric"] {
   -moz-appearance: textfield;
 }
 

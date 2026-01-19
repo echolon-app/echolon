@@ -1,6 +1,7 @@
 export * from './Button';
 export * from './Input';
 export * from './SimpleInput';
+export * from './NumericInput';
 export * from './SearchInput';
 export * from './Modal';
 export * from './Dropdown';
