@@ -1,3 +1,8 @@
+<p align="center">
+     <img width="200px" src="core/assets/app-icon/logo.svg">
+</p>
+
+
 # Echolon
 
 [![version](https://img.shields.io/github/package-json/v/echolon-app/echolon?filename=core%2Fpackage.json&label=version&color=4ade80)](https://github.com/echolon-app/echolon/releases)
@@ -6,6 +11,12 @@
 [![Download](https://img.shields.io/badge/Download-Latest-3b82f6)](https://echolon.app/download)
 
 A powerful, git-native and local-first API client built with Electron and React.
+
+<p align="center">
+     <img width="600px" src="core/assets/app-icon/echolon-app-request-editor-1.webp">
+</p>
+
+
 
 ## Features
 
