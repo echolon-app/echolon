@@ -467,6 +467,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleDevTools: (): Promise<void> =>
     ipcRenderer.invoke(APP_CHANNELS.TOGGLE_DEV_TOOLS),
 
+  // Capture page screenshot (no user prompt, Electron-only)
+  capturePage: (): Promise<{ success: boolean; data?: string; error?: string }> =>
+    ipcRenderer.invoke(APP_CHANNELS.CAPTURE_PAGE),
+
   // Mock Server functions
   startMockServer: (config: MockServerConfig): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke(MOCK_SERVER_CHANNELS.START_MOCK_SERVER, config),
@@ -580,6 +584,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(FILE_STORAGE_CHANNELS.DELETE_COLLECTION, { workspaceName, collectionName }),
   renameCollection: (workspaceName: string, oldName: string, newName: string): Promise<boolean> =>
     ipcRenderer.invoke(FILE_STORAGE_CHANNELS.RENAME_COLLECTION, { workspaceName, oldName, newName }),
+  showCollectionInFinder: (workspaceName: string, collectionName: string): Promise<void> =>
+    ipcRenderer.invoke(FILE_STORAGE_CHANNELS.SHOW_COLLECTION_IN_FINDER, { workspaceName, collectionName }),
 
   // File watching
   watchDirectory: (dirPath: string): Promise<boolean> =>
@@ -923,6 +929,8 @@ declare global {
       restartApp: () => Promise<void>;
       wipeAllData: () => Promise<{ success: boolean; error?: string }>;
       toggleDevTools: () => Promise<void>;
+      // Capture page screenshot
+      capturePage: () => Promise<{ success: boolean; data?: string; error?: string }>;
       // Mock Server
       startMockServer: (config: MockServerConfig) => Promise<{ success: boolean; error?: string }>;
       stopMockServer: (id: string) => Promise<boolean>;
@@ -969,6 +977,7 @@ declare global {
       writeCollection: (workspaceName: string, collectionName: string, collection: EchoFile) => Promise<boolean>;
       deleteCollection: (workspaceName: string, collectionName: string) => Promise<boolean>;
       renameCollection: (workspaceName: string, oldName: string, newName: string) => Promise<boolean>;
+      showCollectionInFinder: (workspaceName: string, collectionName: string) => Promise<void>;
       watchDirectory: (dirPath: string) => Promise<boolean>;
       unwatchDirectory: (dirPath: string) => Promise<boolean>;
       onFileChanged: (callback: (event: FileChangedEvent) => void) => () => void;

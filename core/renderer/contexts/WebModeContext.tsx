@@ -12,6 +12,7 @@ export type DemoMode =
   | 'git'              // Git integration demo
   | 'publishing'       // API public sharing workflow
   | 'mocking'          // Mock server demo
+  | 'landing-hero'     // Landing page hero section demo (Sample CRUD API)
   | null;
 
 export interface PublicSpecVersion {
@@ -77,6 +78,7 @@ interface WebModeContextValue {
   
   // Demo mode for landing page interactive demos
   demoMode: DemoMode;
+  setDemoMode: (mode: DemoMode) => void;
   
   // Hide banner (for iframe embeds)
   hideBanner: boolean;
@@ -160,8 +162,15 @@ export const WebModeProvider: React.FC<WebModeProviderProps> = ({ children, conf
   // Page title
   const title = initialConfig.title || null;
   
-  // Demo mode for landing page interactive demos
-  const demoMode: DemoMode = initialConfig.demoMode || null;
+  // Demo mode for landing page interactive demos (mutable for debug panel)
+  const [demoMode, setDemoModeState] = useState<DemoMode>(initialConfig.demoMode || null);
+  
+  // Setter that also triggers a page reload to reinitialize demo state
+  const setDemoMode = useCallback((mode: DemoMode) => {
+    setDemoModeState(mode);
+    // Force a page reload to reinitialize the demo state
+    window.location.href = window.location.pathname + (mode ? `?demo=${mode}&hideBanner=true` : '');
+  }, []);
   
   // Hide banner for iframe embeds
   const hideBanner = initialConfig.hideBanner ?? false;
@@ -320,6 +329,7 @@ export const WebModeProvider: React.FC<WebModeProviderProps> = ({ children, conf
     selectedEnvironmentId,
     setSelectedEnvironmentId,
     demoMode,
+    setDemoMode,
     hideBanner,
     initialRequest,
   }), [
@@ -344,6 +354,7 @@ export const WebModeProvider: React.FC<WebModeProviderProps> = ({ children, conf
     selectedEnvironmentId,
     setSelectedEnvironmentId,
     demoMode,
+    setDemoMode,
     hideBanner,
     initialRequest,
   ]);

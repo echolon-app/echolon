@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui';
 import { RocketIcon, ChevronRightIcon, CheckIcon, CollectionsIcon, SendIcon, ResponseIcon } from '@/components/ui/icons';
+import { isElectron } from '@/utils';
 import './OnboardingTour.css';
 
 interface TourStep {
@@ -65,19 +66,25 @@ export const OnboardingTour: React.FC<OnboardingTourProps> = ({ forceOpen, onClo
   const [isVisible, setIsVisible] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  
+  // Only show onboarding in Electron app, not web
+  const isElectronApp = isElectron();
 
   // Handle external trigger to open onboarding
   useEffect(() => {
+    if (!isElectronApp) return; // Skip in web mode
+    
     if (forceOpen) {
       setShowWelcome(true);
       setCurrentStep(0);
       setIsOpen(true);
       requestAnimationFrame(() => setIsVisible(true));
     }
-  }, [forceOpen]);
+  }, [forceOpen, isElectronApp]);
 
   // Check if onboarding has been completed (only on initial mount)
   useEffect(() => {
+    if (!isElectronApp) return; // Skip in web mode
     if (forceOpen) return; // Don't auto-open if externally controlled
     
     const hasCompletedOnboarding = localStorage.getItem('echolon_onboarding_completed');
@@ -89,7 +96,10 @@ export const OnboardingTour: React.FC<OnboardingTourProps> = ({ forceOpen, onClo
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [forceOpen]);
+  }, [forceOpen, isElectronApp]);
+  
+  // Don't render anything in web mode
+  if (!isElectronApp) return null;
 
   // Calculate spotlight and tooltip positions
   const updatePositions = useCallback(() => {

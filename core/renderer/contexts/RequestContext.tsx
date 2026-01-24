@@ -118,11 +118,7 @@ export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const { collections, allCollections } = useCollections();
   const { activeWorkspaceId, activeWorkspace } = useWorkspace();
 
-  const activeTab = tabs.find(t => t.id === activeTabId) || null;
-  
-  // Per-tab loading state and execution (derived from active tab)
-  const isLoading = activeTab?.isLoading ?? false;
-  const currentExecution = activeTab?.execution ?? null;
+  // Note: activeTab, isLoading, and currentExecution are computed after workspaceTabs is defined below
 
   // Migrate legacy tabs without workspaceId to the active workspace
   React.useEffect(() => {
@@ -192,6 +188,13 @@ export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return true;
     });
   }, [tabs, activeWorkspaceId, allCollections]);
+
+  // Compute activeTab from workspaceTabs to ensure we show empty state when no tabs in current workspace
+  const activeTab = workspaceTabs.find(t => t.id === activeTabId) || null;
+  
+  // Per-tab loading state and execution (derived from active tab)
+  const isLoading = activeTab?.isLoading ?? false;
+  const currentExecution = activeTab?.execution ?? null;
 
   // Persist tabs on change
   React.useEffect(() => {

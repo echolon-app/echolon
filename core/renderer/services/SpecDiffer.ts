@@ -520,6 +520,13 @@ export class SpecDiffer {
   private addEndpoint(collection: Collection, change: SpecChange): Collection {
     const endpoint = change.newValue as EndpointSignature;
     
+    // First check if a request with the same path and method already exists
+    const existingRequest = this.findRequestByPathAndMethod(collection, change.path, change.method);
+    if (existingRequest) {
+      // Request already exists - update it instead of adding a duplicate
+      return this.updateEndpoint(collection, change);
+    }
+    
     // Create a new request
     const newRequest: Request = {
       id: uuidv4(),
@@ -540,27 +547,203 @@ export class SpecDiffer {
       scripts: { pre: '', post: '' },
     };
 
-    // Find appropriate folder or add to root
-    const groupName = this.getGroupName(endpoint.path);
-    const existingFolder = collection.folders.find(f => 
-      f.name.toLowerCase() === groupName.toLowerCase()
-    );
+    // Get group name from tags (like the importer does) or fallback to path
+    const groupName = this.getGroupNameFromTags(endpoint.path, endpoint.tags);
+    
+    // Try to find the folder - check both exact match and nested path
+    let targetFolder = this.findFolderByName(collection.folders, groupName);
 
-    if (existingFolder) {
+    if (targetFolder) {
+      // Add request to existing folder
       return {
         ...collection,
-        folders: collection.folders.map(f =>
-          f.id === existingFolder.id
-            ? { ...f, requests: [...f.requests, newRequest] }
-            : f
-        ),
+        folders: this.addRequestToFolder(collection.folders, targetFolder.id, newRequest),
       };
     } else {
-      return {
-        ...collection,
-        requests: [...collection.requests, newRequest],
-      };
+      // Create the folder structure if it doesn't exist
+      // Tags like "Features/Screens/Teams/Base" should create nested folders
+      const updatedCollection = this.ensureFolderPath(collection, groupName);
+      targetFolder = this.findFolderByName(updatedCollection.folders, groupName);
+      
+      if (targetFolder) {
+        return {
+          ...updatedCollection,
+          folders: this.addRequestToFolder(updatedCollection.folders, targetFolder.id, newRequest),
+        };
+      } else {
+        // Fallback: add to root if folder creation failed
+        return {
+          ...updatedCollection,
+          requests: [...updatedCollection.requests, newRequest],
+        };
+      }
     }
+  }
+
+  private getGroupNameFromTags(path: string, tags?: string[]): string {
+    // Prefer tags like the importer does
+    if (tags && tags.length > 0) {
+      // Capitalize first letter of tag
+      return tags[0].charAt(0).toUpperCase() + tags[0].slice(1);
+    }
+    
+    // Fallback to first path segment
+    return this.getGroupName(path);
+  }
+
+  private findFolderByName(folders: Folder[], name: string): Folder | null {
+    // Check if the name contains "/" for nested folder path
+    if (name.includes('/')) {
+      const parts = name.split('/');
+      let currentFolders = folders;
+      let currentFolder: Folder | null = null;
+      
+      for (const part of parts) {
+        currentFolder = currentFolders.find(f => 
+          f.name.toLowerCase() === part.toLowerCase()
+        ) || null;
+        
+        if (!currentFolder) {
+          // Try to find the full path name as a single folder (legacy format)
+          return folders.find(f => f.name.toLowerCase() === name.toLowerCase()) || null;
+        }
+        
+        currentFolders = currentFolder.folders;
+      }
+      
+      return currentFolder;
+    }
+    
+    // Simple folder name - search recursively
+    for (const folder of folders) {
+      if (folder.name.toLowerCase() === name.toLowerCase()) {
+        return folder;
+      }
+      const found = this.findFolderByName(folder.folders, name);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  private addRequestToFolder(folders: Folder[], folderId: string, request: Request): Folder[] {
+    return folders.map(f => {
+      if (f.id === folderId) {
+        return { ...f, requests: [...f.requests, request] };
+      }
+      return {
+        ...f,
+        folders: this.addRequestToFolder(f.folders, folderId, request),
+      };
+    });
+  }
+
+  private ensureFolderPath(collection: Collection, folderPath: string): Collection {
+    // Handle nested folder paths like "Features/Screens/Teams/Base"
+    if (folderPath.includes('/')) {
+      const parts = folderPath.split('/');
+      let updatedCollection = { ...collection };
+      let currentFolders = updatedCollection.folders;
+      let parentPath: string[] = [];
+      
+      for (const part of parts) {
+        const existingFolder = currentFolders.find(f => 
+          f.name.toLowerCase() === part.toLowerCase()
+        );
+        
+        if (!existingFolder) {
+          // Create this folder level
+          const newFolder: Folder = {
+            id: uuidv4(),
+            name: part,
+            requests: [],
+            folders: [],
+            collapsed: true,
+          };
+          
+          if (parentPath.length === 0) {
+            // Add to root
+            updatedCollection = {
+              ...updatedCollection,
+              folders: [...updatedCollection.folders, newFolder],
+            };
+            currentFolders = updatedCollection.folders;
+          } else {
+            // Add to parent folder
+            updatedCollection = {
+              ...updatedCollection,
+              folders: this.addFolderToPath(updatedCollection.folders, parentPath, newFolder),
+            };
+            // Update currentFolders reference
+            currentFolders = this.getFoldersAtPath(updatedCollection.folders, parentPath);
+          }
+        }
+        
+        parentPath.push(part);
+        const folder = currentFolders.find(f => f.name.toLowerCase() === part.toLowerCase());
+        currentFolders = folder?.folders || [];
+      }
+      
+      return updatedCollection;
+    }
+    
+    // Simple folder name - check if it exists, create if not
+    const existingFolder = collection.folders.find(f => 
+      f.name.toLowerCase() === folderPath.toLowerCase()
+    );
+    
+    if (existingFolder) {
+      return collection;
+    }
+    
+    // Create new folder at root level
+    const newFolder: Folder = {
+      id: uuidv4(),
+      name: folderPath,
+      requests: [],
+      folders: [],
+      collapsed: true,
+    };
+    
+    return {
+      ...collection,
+      folders: [...collection.folders, newFolder],
+    };
+  }
+
+  private addFolderToPath(folders: Folder[], path: string[], newFolder: Folder): Folder[] {
+    if (path.length === 0) {
+      return [...folders, newFolder];
+    }
+    
+    const [current, ...rest] = path;
+    return folders.map(f => {
+      if (f.name.toLowerCase() === current.toLowerCase()) {
+        if (rest.length === 0) {
+          return { ...f, folders: [...f.folders, newFolder] };
+        }
+        return { ...f, folders: this.addFolderToPath(f.folders, rest, newFolder) };
+      }
+      return f;
+    });
+  }
+
+  private getFoldersAtPath(folders: Folder[], path: string[]): Folder[] {
+    if (path.length === 0) {
+      return folders;
+    }
+    
+    const [current, ...rest] = path;
+    const folder = folders.find(f => f.name.toLowerCase() === current.toLowerCase());
+    
+    if (!folder) {
+      return [];
+    }
+    
+    if (rest.length === 0) {
+      return folder.folders;
+    }
+    
+    return this.getFoldersAtPath(folder.folders, rest);
   }
 
   private removeEndpoint(collection: Collection, change: SpecChange): Collection {
@@ -620,6 +803,30 @@ export class SpecDiffer {
       requests: collection.requests.map(updateRequest),
       folders: updateFolders(collection.folders),
     };
+  }
+
+  private findRequestByPathAndMethod(collection: Collection, path: string, method: string): Request | null {
+    // Check root-level requests
+    const rootMatch = collection.requests.find(r => 
+      r.url.endsWith(path) && r.method.toUpperCase() === method.toUpperCase()
+    );
+    if (rootMatch) return rootMatch;
+    
+    // Check requests in folders recursively
+    const findInFolders = (folders: Folder[]): Request | null => {
+      for (const folder of folders) {
+        const match = folder.requests.find(r => 
+          r.url.endsWith(path) && r.method.toUpperCase() === method.toUpperCase()
+        );
+        if (match) return match;
+        
+        const nestedMatch = findInFolders(folder.folders);
+        if (nestedMatch) return nestedMatch;
+      }
+      return null;
+    };
+    
+    return findInFolders(collection.folders);
   }
 
   private getGroupName(path: string): string {

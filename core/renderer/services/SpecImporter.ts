@@ -104,9 +104,9 @@ export class OpenAPIAdapter implements SpecImporterAdapter {
     
     // Generate collection environments from servers array (if enabled)
     const createEnvironments = options?.createEnvironments !== false;
+    const baseUrlVarName = options?.baseUrlVariableName || 'baseUrl';
     
     if (createEnvironments && doc.servers && doc.servers.length > 0) {
-      const baseUrlVarName = options?.baseUrlVariableName || 'baseUrl';
       const collectionEnvironments: CollectionEnvironment[] = [];
       
       for (let i = 0; i < doc.servers.length; i++) {
@@ -137,6 +137,24 @@ export class OpenAPIAdapter implements SpecImporterAdapter {
       if (collectionEnvironments.length > 0) {
         collection.defaultEnvironmentId = collectionEnvironments[0].id;
       }
+    } else if (createEnvironments && options?.baseUrlValue) {
+      // No servers in spec, but user explicitly provided a baseUrl value - create a "Default" environment
+      const defaultEnvId = uuidv4();
+      collection.environments = [{
+        id: defaultEnvId,
+        name: 'Default',
+        variables: [
+          {
+            id: uuidv4(),
+            key: baseUrlVarName,
+            value: options.baseUrlValue,
+            description: 'Base URL for API requests',
+            enabled: true,
+          },
+        ],
+        isActive: true,
+      }];
+      collection.defaultEnvironmentId = defaultEnvId;
     }
     
     return { collection };
@@ -245,19 +263,6 @@ export class OpenAPIAdapter implements SpecImporterAdapter {
   private convertToCollection(doc: SwaggerDocument, options?: SpecImportOptions): Collection {
     const baseUrl = this.extractBaseUrl(doc);
     const baseUrlVarName = options?.baseUrlVariableName || 'baseUrl';
-    const baseUrlValue = options?.baseUrlValue || baseUrl;
-    
-    // Create collection variables including baseUrl
-    const variables: KeyValuePair[] = [];
-    if (baseUrlVarName && baseUrlValue) {
-      variables.push({
-        id: uuidv4(),
-        key: baseUrlVarName,
-        value: baseUrlValue,
-        description: 'Base URL for API requests',
-        enabled: true,
-      });
-    }
 
     const collection: Collection = {
       id: uuidv4(),
@@ -265,7 +270,6 @@ export class OpenAPIAdapter implements SpecImporterAdapter {
       description: doc.info?.description,
       requests: [],
       folders: [],
-      variables,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -1131,6 +1135,7 @@ export class PostmanAdapter implements SpecImporterAdapter {
   private convertToCollection(doc: PostmanCollection, options?: SpecImportOptions): Collection {
     // Extract variables from Postman collection
     const variables: KeyValuePair[] = [];
+    const baseUrlVarName = options?.baseUrlVariableName || 'baseUrl';
     
     if (doc.variable) {
       for (const v of doc.variable) {
@@ -1143,22 +1148,6 @@ export class PostmanAdapter implements SpecImporterAdapter {
             enabled: !v.disabled,
           });
         }
-      }
-    }
-
-    // If baseUrl option is provided and no baseUrl variable exists, add it
-    if (options?.baseUrlVariableName && options?.baseUrlValue) {
-      const existingBaseUrl = variables.find(v => 
-        v.key.toLowerCase() === options.baseUrlVariableName?.toLowerCase()
-      );
-      if (!existingBaseUrl) {
-        variables.push({
-          id: uuidv4(),
-          key: options.baseUrlVariableName,
-          value: options.baseUrlValue,
-          description: 'Base URL for API requests',
-          enabled: true,
-        });
       }
     }
 
@@ -1179,6 +1168,26 @@ export class PostmanAdapter implements SpecImporterAdapter {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
+
+    // Create a "Default" collection environment when user explicitly provides a baseUrl value
+    if (options?.baseUrlValue) {
+      const defaultEnvId = uuidv4();
+      collection.environments = [{
+        id: defaultEnvId,
+        name: 'Default',
+        variables: [
+          {
+            id: uuidv4(),
+            key: baseUrlVarName,
+            value: options.baseUrlValue,
+            description: 'Base URL for API requests',
+            enabled: true,
+          },
+        ],
+        isActive: true,
+      }];
+      collection.defaultEnvironmentId = defaultEnvId;
+    }
 
     // If shared auth was detected, remove auth from individual requests
     if (sharedAuth) {

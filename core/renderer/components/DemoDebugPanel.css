@@ -1,0 +1,242 @@
+/* Demo Debug Panel - Hidden developer tool for demo mode switching */
+.demo-debug-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10000;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  padding: var(--spacing-lg);
+  min-width: 320px;
+  max-width: 400px;
+}
+
+.demo-debug-panel__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.demo-debug-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.demo-debug-panel__title {
+  font-size: var(--font-base);
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.demo-debug-panel__title-icon {
+  color: var(--accent-primary);
+}
+
+.demo-debug-panel__close {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.demo-debug-panel__close:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.demo-debug-panel__section {
+  margin-bottom: var(--spacing-md);
+}
+
+.demo-debug-panel__section:last-child {
+  margin-bottom: 0;
+}
+
+.demo-debug-panel__label {
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--spacing-xs);
+}
+
+.demo-debug-panel__current {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+}
+
+.demo-debug-panel__modes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.demo-debug-panel__mode-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: left;
+}
+
+.demo-debug-panel__mode-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-primary);
+  color: var(--text-primary);
+}
+
+.demo-debug-panel__mode-btn--active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: var(--text-on-accent);
+}
+
+.demo-debug-panel__mode-btn--active:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: var(--text-on-accent);
+}
+
+.demo-debug-panel__mode-name {
+  font-weight: 500;
+  font-size: var(--font-sm);
+}
+
+.demo-debug-panel__mode-desc {
+  font-size: var(--font-xs);
+  opacity: 0.7;
+}
+
+.demo-debug-panel__actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.demo-debug-panel__action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-size: var(--font-sm);
+}
+
+.demo-debug-panel__action-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.demo-debug-panel__action-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.demo-debug-panel__action-btn--record {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: var(--text-on-accent);
+}
+
+.demo-debug-panel__action-btn--record:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.demo-debug-panel__action-btn--stop {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: white;
+}
+
+.demo-debug-panel__action-btn--stop:hover {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+.demo-debug-panel__size-selector {
+  display: flex;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+}
+
+.demo-debug-panel__size-btn {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-size: var(--font-xs);
+  font-family: var(--font-mono);
+  min-width: 40px;
+}
+
+.demo-debug-panel__size-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-primary);
+  color: var(--text-primary);
+}
+
+.demo-debug-panel__size-btn--active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: var(--text-on-accent);
+}
+
+.demo-debug-panel__size-btn--active:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.demo-debug-panel__shortcut {
+  font-size: var(--font-xs);
+  color: var(--text-quaternary);
+  text-align: center;
+  margin-top: var(--spacing-md);
+}
+
+.demo-debug-panel__shortcut kbd {
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}

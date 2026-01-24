@@ -59,6 +59,7 @@ export function collectionToEchoFile(collection: Collection, workspaceName: stri
       url: collection.specSource.url,
       syncFrequencyMins: collection.specSource.syncFrequencyMins,
       lastSyncedAt: collection.specSource.lastSyncedAt,
+      lastCheckedAt: collection.specSource.lastCheckedAt,
     } : undefined,
     // Save public sharing configuration
     publicSharing: collection.publicSharing ? {
@@ -90,6 +91,7 @@ export function echoFileToCollection(echoFile: EchoFile, workspaceId: string): C
       url: echoFile.specSource?.url,
       syncFrequencyMins: echoFile.specSource?.syncFrequencyMins ?? 0,
       lastSyncedAt: echoFile.specSource?.lastSyncedAt,
+      lastCheckedAt: echoFile.specSource?.lastCheckedAt,
       rawSpec: echoFile.openapi ? JSON.stringify(echoFile.openapi) : undefined,
     };
   }

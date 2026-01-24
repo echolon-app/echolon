@@ -512,6 +512,27 @@ function setupIpcHandlers(): void {
     }
   });
 
+  // Capture page screenshot - returns base64 PNG without any user prompts
+  ipcMain.handle(APP_CHANNELS.CAPTURE_PAGE, async (event): Promise<{ success: boolean; data?: string; error?: string }> => {
+    try {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (!win) {
+        return { success: false, error: 'No window found' };
+      }
+      
+      const image = await win.webContents.capturePage();
+      const base64 = image.toPNG().toString('base64');
+      
+      return { success: true, data: base64 };
+    } catch (error) {
+      console.error('[Main] Failed to capture page:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  });
+
   // Wipe all data - deletes all files in echolon directory
   ipcMain.handle(APP_CHANNELS.WIPE_ALL_DATA, async () => {
     try {
@@ -697,6 +718,10 @@ function setupIpcHandlers(): void {
 
   ipcMain.handle(FILE_STORAGE_CHANNELS.RENAME_COLLECTION, async (_event, { workspaceName, oldName, newName }: { workspaceName: string; oldName: string; newName: string }) => {
     return fileStorageManager.renameCollection(workspaceName, oldName, newName);
+  });
+
+  ipcMain.handle(FILE_STORAGE_CHANNELS.SHOW_COLLECTION_IN_FINDER, (_event, { workspaceName, collectionName }: { workspaceName: string; collectionName: string }) => {
+    fileStorageManager.showCollectionInFinder(workspaceName, collectionName);
   });
 
   // File watching - set up watcher and send events to renderer

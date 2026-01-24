@@ -380,6 +380,12 @@
   gap: 4px !important;
 }
 
+/* Hide "Whole word" and "Search in selection" buttons - they don't work reliably */
+.response-viewer__body .ace_button[action="toggleWholeWords"],
+.response-viewer__body .ace_button[action="searchInSelection"] {
+  display: none !important;
+}
+
 /* Search result highlights */
 .response-viewer__body .ace_marker-layer .ace_selection {
   background-color: var(--color-primary-alpha, rgba(99, 102, 241, 0.3)) !important;

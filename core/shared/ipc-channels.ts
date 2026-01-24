@@ -31,6 +31,7 @@ export const APP_CHANNELS = {
   WIPE_ALL_DATA: 'wipe-all-data',
   TOGGLE_DEV_TOOLS: 'toggle-dev-tools',
   COMPUTE_DIGEST_AUTH: 'compute-digest-auth',
+  CAPTURE_PAGE: 'capture-page',
 } as const;
 
 // ==================== Mock Server Channels ====================
@@ -89,6 +90,7 @@ export const FILE_STORAGE_CHANNELS = {
   WRITE_COLLECTION: 'file-storage-write-collection',
   DELETE_COLLECTION: 'file-storage-delete-collection',
   RENAME_COLLECTION: 'file-storage-rename-collection',
+  SHOW_COLLECTION_IN_FINDER: 'file-storage-show-collection-in-finder',
   // File watching
   WATCH_DIRECTORY: 'file-storage-watch-directory',
   UNWATCH_DIRECTORY: 'file-storage-unwatch-directory',

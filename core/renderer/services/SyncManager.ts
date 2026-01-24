@@ -106,6 +106,12 @@ export class SyncManager {
       console.warn('SyncManager not initialized');
       return null;
     }
+    
+    // Prevent duplicate checks - skip if already checking
+    const currentState = this.syncStates.get(collectionId);
+    if (currentState?.status === 'checking') {
+      return null;
+    }
 
     const collections = this.callbacks.getCollections();
     const collection = collections.find(c => c.id === collectionId);
@@ -118,6 +124,8 @@ export class SyncManager {
 
     // Update state to checking
     this.updateSyncState(collectionId, { status: 'checking' });
+    
+    const checkTime = Date.now();
 
     try {
       // Fetch the remote spec
@@ -129,17 +137,18 @@ export class SyncManager {
 
       // Compare specs
       if (specDiffer.areSpecsEqual(collection.specSource.rawSpec, result.content)) {
-        // No changes - update last synced
+        // No changes - update last synced and last checked
         this.callbacks.updateCollection(collectionId, {
           specSource: {
             ...collection.specSource,
-            lastSyncedAt: Date.now(),
+            lastSyncedAt: checkTime,
+            lastCheckedAt: checkTime,
           },
         });
         
         this.updateSyncState(collectionId, {
           status: 'idle',
-          lastChecked: Date.now(),
+          lastChecked: checkTime,
           pendingChanges: undefined,
         });
         
@@ -148,13 +157,20 @@ export class SyncManager {
         return null;
       }
 
-      // Changes detected
+      // Changes detected - update lastCheckedAt (but not lastSyncedAt since we're not in sync)
+      this.callbacks.updateCollection(collectionId, {
+        specSource: {
+          ...collection.specSource,
+          lastCheckedAt: checkTime,
+        },
+      });
+      
       const diffResult = specDiffer.compareSpecs(collection.specSource.rawSpec, result.content);
       const pendingChanges = specDiffer.createPendingChanges(collectionId, diffResult, result.content);
       
       this.updateSyncState(collectionId, {
         status: 'has-changes',
-        lastChecked: Date.now(),
+        lastChecked: checkTime,
         pendingChanges,
       });
       
@@ -168,9 +184,17 @@ export class SyncManager {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       
+      // Even on error, update lastCheckedAt so we don't keep retrying immediately
+      this.callbacks.updateCollection(collectionId, {
+        specSource: {
+          ...collection.specSource,
+          lastCheckedAt: checkTime,
+        },
+      });
+      
       this.updateSyncState(collectionId, {
         status: 'error',
-        lastChecked: Date.now(),
+        lastChecked: checkTime,
         error: errorMessage,
       });
       
@@ -211,21 +235,32 @@ export class SyncManager {
 
     // Clear existing timer
     this.clearTimer(id);
+    
+    // Skip scheduling if a check is currently in progress
+    const currentState = this.syncStates.get(id);
+    if (currentState?.status === 'checking') {
+      return;
+    }
 
     // Calculate delay
     const frequencyMs = specSource.syncFrequencyMins * 60 * 1000;
     
-    // Use lastChecked from sync state (always updated after a check) for scheduling,
-    // falling back to lastSyncedAt for initial scheduling
-    const syncState = this.syncStates.get(id);
-    const lastChecked = syncState?.lastChecked || specSource.lastSyncedAt || 0;
+    // Use in-memory lastChecked first (for in-session scheduling after a check completes),
+    // then fall back to persisted lastCheckedAt (for app startup)
+    // This avoids race conditions where React state hasn't updated yet
+    const lastChecked = currentState?.lastChecked || specSource.lastCheckedAt || 0;
     const timeSinceLastCheck = Date.now() - lastChecked;
     
-    // If enough time has passed, check immediately
+    // If enough time has passed since last check, check now
     // Otherwise, schedule for when the interval expires
     let delay = frequencyMs - timeSinceLastCheck;
-    if (delay < 0 || lastChecked === 0) {
+    if (delay < 0) {
       delay = 1000; // Small delay to avoid blocking initialization
+    }
+    
+    // If we've never checked before, also use the small delay
+    if (lastChecked === 0) {
+      delay = 1000;
     }
 
     const timer = setTimeout(async () => {
@@ -393,6 +428,12 @@ export class SyncManager {
         );
         if (pending) {
           for (const [collectionId, changes] of Object.entries(pending)) {
+            // Skip loading pending changes for collections set to "Manual only"
+            const collection = collections.find(c => c.id === collectionId);
+            if (collection?.specSource?.syncFrequencyMins === 0) {
+              continue;
+            }
+            
             this.updateSyncState(collectionId, {
               status: 'has-changes',
               pendingChanges: changes,

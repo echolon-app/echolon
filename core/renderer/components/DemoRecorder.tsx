@@ -94,9 +94,44 @@ export const DemoRecorderControls: React.FC<DemoRecorderControlsProps> = ({ clas
     }
   }, []);
 
-  // Capture screenshot using native getDisplayMedia
+  // Capture screenshot - uses Electron API if available, falls back to getDisplayMedia
   const captureScreenshot = useCallback(async () => {
     try {
+      // Check if Electron API is available (desktop app)
+      if (window.electronAPI?.capturePage) {
+        setStatus('Capturing...');
+        
+        const result = await window.electronAPI.capturePage();
+        
+        if (!result.success || !result.data) {
+          console.error('[DemoRecorder] Electron capture failed:', result.error);
+          setStatus('Failed');
+          return;
+        }
+        
+        // Convert base64 to blob and download
+        const byteCharacters = atob(result.data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'image/png' });
+        
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `echolon-screenshot-${Date.now()}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        setStatus('Saved!');
+        return;
+      }
+      
+      // Fallback: Use getDisplayMedia for web (requires user permission)
       setStatus('Select tab...');
       
       // Request screen capture with preferCurrentTab hint

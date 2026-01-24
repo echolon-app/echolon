@@ -23,6 +23,7 @@
   <script>
     // Configure view mode based on URL params
     const urlParams = new URLSearchParams(window.location.search);
+    const demoMode = urlParams.get('demo');
     const isDemo = urlParams.has('demo');
     
     // In demo mode, use tabs view; otherwise use reference view
@@ -30,6 +31,10 @@
       document.getElementById('api-reference').setAttribute('data-view', 'reference');
       document.getElementById('api-reference').setAttribute('data-title', 'Sample API Reference');
       document.getElementById('api-reference').setAttribute('data-initial-request', 'Get All Tasks');
+    } else if (demoMode === 'landing-hero') {
+      // For landing-hero demo, open the "Get All Tasks" request
+      document.getElementById('api-reference').setAttribute('data-initial-request', 'Get All Tasks');
+      document.getElementById('api-reference').setAttribute('data-readonly', 'false');
     }
   </script>
   <script type="module" src="/assets/index-latest.js"></script>

@@ -1376,7 +1376,7 @@ export const SettingsModal: React.FC = () => {
                       placeholder="https://cors-proxy.example.com/"
                     />
                     <p className="settings-modal__field-hint">
-                      Examples: <code>https://cors-anywhere.herokuapp.com/</code> or <code>https://proxy.example.com/?url=</code>
+                      Examples: <code>https://proxy.echolon.app/</code> or <code>https://proxy.example.com/?url=</code>
                     </p>
                   </div>
                 </div>
@@ -1790,30 +1790,32 @@ export const SettingsModal: React.FC = () => {
                 </div>
               </div>
 
-              <div className="settings-modal__section">
-                <h3>Help</h3>
-                
-                <div className="settings-modal__field">
-                  <label>Onboarding Tour</label>
-                  <p className="settings-modal__field-description">
-                    Take a quick tour to learn about Echolon's main features
-                  </p>
-                  <Button 
-                    variant="secondary" 
-                    size="sm"
-                    onClick={() => {
-                      closeSettingsModal();
-                      // Small delay to let the modal close animation complete
-                      setTimeout(() => {
-                        openOnboarding();
-                      }, 200);
-                    }}
-                    icon={<RocketIcon />}
-                  >
-                    Start Tour
-                  </Button>
+              {!isWebMode && (
+                <div className="settings-modal__section">
+                  <h3>Help</h3>
+                  
+                  <div className="settings-modal__field">
+                    <label>Onboarding Tour</label>
+                    <p className="settings-modal__field-description">
+                      Take a quick tour to learn about Echolon's main features
+                    </p>
+                    <Button 
+                      variant="secondary" 
+                      size="sm"
+                      onClick={() => {
+                        closeSettingsModal();
+                        // Small delay to let the modal close animation complete
+                        setTimeout(() => {
+                          openOnboarding();
+                        }, 200);
+                      }}
+                      icon={<RocketIcon />}
+                    >
+                      Start Tour
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="settings-modal__section">
                 <h3>Developer</h3>

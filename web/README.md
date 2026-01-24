@@ -35,7 +35,7 @@ npm install @echolon/web
   <script
     id="api-reference"
     data-url="/openapi.json"
-    data-cors-proxy="https://cors-anywhere.herokuapp.com/"
+    data-cors-proxy="https://proxy.echolon.app"
   ></script>
   
   <script src="https://cdn.jsdelivr.net/npm/@echolon/web/dist/echolon-web.umd.js"></script>
@@ -60,7 +60,7 @@ import { mount } from '@echolon/web';
 mount({
   container: '#echolon',
   specUrl: '/openapi.json',
-  corsProxy: 'https://cors-anywhere.herokuapp.com/',
+  corsProxy: 'https://proxy.echolon.app/',
   theme: 'dark',
   viewMode: 'reference',
 });
@@ -80,7 +80,7 @@ mount({
 Browsers restrict cross-origin requests for security. When testing APIs from different domains, you'll need a CORS proxy. Options include:
 
 1. **Self-hosted proxy**: Deploy your own CORS proxy server
-2. **CORS Anywhere**: Use `https://cors-anywhere.herokuapp.com/` (requires activation)
+2. **CORS Anywhere**: Use `https://proxy.echolon.app` (requires activation)
 3. **Server-side configuration**: Add CORS headers to your API
 
 Configure the proxy using the `data-cors-proxy` attribute.

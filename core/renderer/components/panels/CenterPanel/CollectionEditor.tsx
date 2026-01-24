@@ -192,7 +192,7 @@ const RequestItem: React.FC<RequestItemProps> = ({ request, collection, onUpdate
     <div className="reference-request-item" ref={itemRef}>
       {/* Sticky Header with Name and URL */}
       <div className="reference-request-item__sticky-header">
-        <div className="reference-request-item__name-row">
+        {/*<div className="reference-request-item__name-row">
           {!hideExpandButton && (
             <button 
               className="reference-request-item__expand-btn"
@@ -211,7 +211,7 @@ const RequestItem: React.FC<RequestItemProps> = ({ request, collection, onUpdate
           {folderPath && (
             <span className="reference-request-item__folder-path">{folderPath}</span>
           )}
-        </div>
+        </div>*/}
         <div className="reference-request-item__url-bar">
           <Dropdown
             options={methodOptions}
@@ -766,13 +766,21 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
 
   const handleSyncFrequencyChange = useCallback((value: string) => {
     if (!collection?.specSource) return;
+    const newFrequency = parseInt(value, 10);
+    
     updateCollection(collectionId, {
       specSource: {
         ...collection.specSource,
-        syncFrequencyMins: parseInt(value, 10),
+        syncFrequencyMins: newFrequency,
       },
     });
-  }, [collectionId, collection, updateCollection]);
+    
+    // If changing to "Manual only", clear any pending changes
+    if (newFrequency === 0) {
+      clearPendingChanges(collectionId);
+      setPendingChanges(null);
+    }
+  }, [collectionId, collection, updateCollection, clearPendingChanges]);
 
   // Collection environment handlers
   const handleCreateEnvironment = useCallback(() => {
@@ -836,7 +844,7 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
 
       // Check if the spec is different
       if (specDiffer.areSpecsEqual(collection.specSource.rawSpec, result.content)) {
-        logToConsole('info', 'No changes detected - collection is up to date');
+        logToConsole('info', `No changes detected - "${collection.name}" is up to date`);
         success('Collection is up to date', 'No changes detected from remote spec');
         // Update last synced timestamp
         updateCollection(collectionId, {
@@ -1344,6 +1352,23 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
 
   const formatLastSync = (timestamp?: number) => {
     return formatDateOr(timestamp, 'Never', formatDateTime);
+  };
+
+  const formatNextCheck = () => {
+    const specSource = collection?.specSource;
+    if (!specSource || specSource.syncFrequencyMins === 0) {
+      return 'Manual';
+    }
+    
+    const lastChecked = specSource.lastCheckedAt || 0;
+    if (lastChecked === 0) {
+      return 'Pending';
+    }
+    
+    const frequencyMs = specSource.syncFrequencyMins * 60 * 1000;
+    const nextCheckTime = lastChecked + frequencyMs;
+    
+    return formatDateTime(nextCheckTime);
   };
 
   // Reference: Get folder structure with requests for operations summary view (excludes root-level requests)
@@ -2343,6 +2368,12 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
                 <span className="collection-editor__info-label">Last Synced</span>
                 <span className="collection-editor__info-value">
                   {formatLastSync(collection.specSource?.lastSyncedAt)}
+                </span>
+              </div>
+              <div className="collection-editor__info-item">
+                <span className="collection-editor__info-label">Next Check</span>
+                <span className="collection-editor__info-value">
+                  {formatNextCheck()}
                 </span>
               </div>
               <div className="collection-editor__info-item">

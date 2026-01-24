@@ -1,10 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Button, Tooltip } from '@/components/ui';
 import { SidebarIcon, PanelLeftIcon, ConsoleIcon, ClearIcon, ThunderboltIcon, MailIcon, BookIcon } from '@/components/ui/icons';
 import { useApp, useMocking, useUpdateOptional, useWebModeOptional } from '@/contexts';
 import { APP_VERSION } from '@/utils/environment';
-import { DemoRecorderControls } from '@/components/DemoRecorder';
-import '@/components/DemoRecorder.css';
 import './BottomBar.css';
 
 export const BottomBar: React.FC = () => {
@@ -27,15 +25,6 @@ export const BottomBar: React.FC = () => {
   const webMode = useWebModeOptional();
   const isWebMode = webMode?.isWebMode ?? false;
   const viewMode = webMode?.viewMode ?? 'tabs';
-  
-  // Check if record controls should be shown (only when ?record-controls=true)
-  const [showRecordControls, setShowRecordControls] = useState(false);
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      setShowRecordControls(params.get('record-controls') === 'true');
-    }
-  }, []);
   
   // In reference view mode (web), hide sidebar toggle buttons
   const hideToggleButtons = isWebMode && viewMode === 'reference';
@@ -195,14 +184,6 @@ Please describe the issue you're experiencing:
       </div>
 
       <div className="bottom-bar__right">
-        {/* Screenshot and recording controls - only shown when ?record-controls=true */}
-        {showRecordControls && (
-          <>
-            <DemoRecorderControls />
-            <div className="bottom-bar__separator" />
-          </>
-        )}
-        
         {/* Version indicator */}
         <Tooltip 
           content={isWebMode ? 'About' : (hasUpdateAvailable ? `Update v${update.updateInfo?.version} available` : 'Update settings')} 

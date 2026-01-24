@@ -7,7 +7,8 @@ import {
 import { 
   RadarIcon, PlusIcon, FolderIcon, ImportIcon, PlayIcon, StopIcon, ServerIcon, SocketIcon, GraphQLIcon, 
   MailIcon, CollapseAllIcon, ExpandAllIcon, EditIcon, CopyIcon, ExportIcon, TrashIcon, OpenIcon, NewTabIcon, MoveIcon,
-  WorkspacesIcon, SortAscIcon, SortDescIcon, AlertIcon, WarningIcon, CollectionsIcon, EnvironmentsIcon, HistoryIcon
+  WorkspacesIcon, SortAscIcon, SortDescIcon, AlertIcon, WarningIcon, CollectionsIcon, EnvironmentsIcon, HistoryIcon,
+  ExternalLinkIcon
 } from '@/components/ui/icons';
 import { useApp, useCollections, useRequest, useEnvironments, useMocking, useWebMode, useToast, useWorkspace } from '@/contexts';
 import { GitPanel } from '@/components/panels/GitPanel';
@@ -48,7 +49,7 @@ export const LeftPanel: React.FC = () => {
     localHostname 
   } = useMocking();
   const { readonly, isWebMode } = useWebMode();
-  const { workspaces, addWorkspace, activeWorkspaceId, reorderWorkspaces } = useWorkspace();
+  const { workspaces, addWorkspace, activeWorkspaceId, reorderWorkspaces, getWorkspaceNameById } = useWorkspace();
   const { error: showError } = useToast();
   
   // Scroll sync state - listen for events from CollectionEditor
@@ -704,6 +705,15 @@ export const LeftPanel: React.FC = () => {
           openMoveCollectionModal(collection);
         }},
         { id: 'export', label: 'Export', icon: <ExportIcon />, onClick: () => {} },
+        // Show in Finder - only available in Electron (not web)
+        ...(window.electronAPI ? [
+          { id: 'show-in-finder', label: 'Show in Finder', icon: <ExternalLinkIcon />, onClick: () => {
+            const workspaceName = getWorkspaceNameById(collection.workspaceId || '');
+            if (workspaceName) {
+              window.electronAPI.showCollectionInFinder(workspaceName, collection.name);
+            }
+          }},
+        ] : []),
         ...(hasFolders ? [
           { id: 'divider-folders', label: '', divider: true },
           { id: 'collapse-all', label: 'Collapse All Folders', icon: <CollapseAllIcon />, onClick: () => {

@@ -274,6 +274,14 @@ class FileStorageManager extends EventEmitter {
     await shell.openPath(this.echolonPath ?? '');
   }
 
+  /**
+   * Show a collection file in the system file manager (Finder on macOS)
+   */
+  showCollectionInFinder(workspaceName: string, collectionName: string): void {
+    const filePath = this.getCollectionFilePath(workspaceName, collectionName);
+    shell.showItemInFolder(filePath);
+  }
+
   // ==================== Config Operations ====================
 
   /**

@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import ace from 'ace-builds';
+import 'ace-builds/src-noconflict/ext-searchbox';
 import { Button, Input, Dropdown, TabBar, EditableTable, Tooltip, CodeEditor, TagInput } from '@/components/ui';
 import { SendIcon, CodeIcon, HistoryIcon, CopyIcon, CheckIcon, SocketIcon, ShieldIcon } from '@/components/ui/icons';
 import { useRequest, useEnvironments, useTheme, useCollections, useApp, useWebModeOptional } from '@/contexts';

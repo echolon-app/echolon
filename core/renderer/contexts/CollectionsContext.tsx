@@ -352,7 +352,27 @@ export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const collection = allCollections.find(c => c.id === id);
     if (!collection) return;
     
-    const updatedCollection = { ...collection, ...updates, updatedAt: Date.now() };
+    // Check if this is only a sync timestamp update (lastCheckedAt, lastSyncedAt)
+    // If so, don't update the modifiedAt timestamp since the collection content hasn't changed
+    const isSyncTimestampOnlyUpdate = (() => {
+      if (Object.keys(updates).length !== 1 || !updates.specSource) return false;
+      if (!collection.specSource) return false;
+      
+      // Compare specSource fields - only allow lastCheckedAt and lastSyncedAt to differ
+      const syncTimestampFields = ['lastCheckedAt', 'lastSyncedAt'];
+      for (const key of Object.keys(updates.specSource) as (keyof typeof updates.specSource)[]) {
+        const oldValue = collection.specSource[key as keyof typeof collection.specSource];
+        const newValue = updates.specSource[key];
+        if (oldValue !== newValue && !syncTimestampFields.includes(key)) {
+          return false;
+        }
+      }
+      return true;
+    })();
+    
+    const updatedCollection = isSyncTimestampOnlyUpdate 
+      ? { ...collection, ...updates }
+      : { ...collection, ...updates, updatedAt: Date.now() };
     
     // Handle name change (rename file) if not in web mode without file system
     if (updates.name && updates.name !== collection.name && !shouldSkipFileOps) {
@@ -375,9 +395,10 @@ export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
       prev.map(c => c.id === id ? updatedCollection : c)
     );
     
-    // Save immediately for UI state changes (collapsed), debounce for other changes
+    // Save immediately for UI state changes and important settings, debounce for other changes
     const isUIStateChange = Object.keys(updates).every(key => key === 'collapsed');
-    if (isUIStateChange) {
+    const isSyncSettingChange = updates.specSource?.syncFrequencyMins !== undefined;
+    if (isUIStateChange || isSyncSettingChange || isSyncTimestampOnlyUpdate) {
       await saveCollectionToFileImmediate(updatedCollection);
     } else {
       await saveCollectionToFile(updatedCollection);

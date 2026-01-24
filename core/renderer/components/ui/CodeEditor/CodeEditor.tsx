@@ -24,6 +24,7 @@ import 'ace-builds/src-noconflict/mode-python';
 import 'ace-builds/src-noconflict/theme-one_dark';
 import 'ace-builds/src-noconflict/theme-chrome';
 import 'ace-builds/src-noconflict/ext-language_tools';
+import 'ace-builds/src-noconflict/ext-searchbox';
 import './CodeEditor.css';
 
 // Define custom JSON mode with variable highlighting
@@ -330,7 +331,6 @@ export const CodeEditor = forwardRef<AceEditor, CodeEditorProps>(({
 
   const handleLoad = useCallback((editor: any) => {
     editorRef.current = editor;
-    editor.commands.removeCommand('find');
     
     // Trigger autocomplete based on context
     if (supportVariables || scriptContext) {

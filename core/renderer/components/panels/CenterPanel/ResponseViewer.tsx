@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import AceEditor from 'react-ace';
+import ace from 'ace-builds';
+import 'ace-builds/src-noconflict/ext-searchbox';
 import { useTheme, useApp } from '@/contexts';
 import { CodeEditor, Switch } from '@/components/ui';
 import { 
@@ -397,6 +399,7 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
   const [copied, setCopied] = useState(false);
   const [jsonPathFilter, setJsonPathFilter] = useState('');
   const [showFilter, setShowFilter] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const [filterError, setFilterError] = useState<string | null>(null);
   const filterInputRef = useRef<HTMLInputElement>(null);
   const [bodyViewMode, setBodyViewMode] = useState<BodyViewMode>('response');
@@ -472,13 +475,72 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
 
   // Setup editor with search functionality (CMD+F / Ctrl+F)
   const handleEditorLoad = useCallback((editor: any) => {
-    // Load the searchbox extension for this editor
-    ace.require('ace/ext/searchbox');
+    // Override find command to track search state and work with read-only editors
+    editor.commands.addCommand({
+      name: 'find',
+      bindKey: { win: 'Ctrl-F', mac: 'Command-F' },
+      exec: (ed: any) => {
+        ed.focus();
+        const Search = ace.require('ace/ext/searchbox').Search;
+        const sb = ed.searchBox || new Search(ed);
+        sb.show('', false);
+        setShowSearch(true);
+      },
+      readOnly: true, // Allow this command in read-only mode
+    });
     
-    // The searchbox extension adds its own find command
-    // We just need to ensure CMD+F is properly bound
-    editor.commands.bindKey('Command-F', 'find');
-    editor.commands.bindKey('Ctrl-F', 'find');
+    // Wrap the searchbox hide method to track when it's closed
+    const initSearchBox = () => {
+      if (editor.searchBox) {
+        const originalHide = editor.searchBox.hide.bind(editor.searchBox);
+        editor.searchBox.hide = () => {
+          originalHide();
+          setShowSearch(false);
+        };
+      }
+    };
+    
+    // Initialize searchbox wrapper if it exists, or wait for it
+    if (editor.searchBox) {
+      initSearchBox();
+    } else {
+      // Watch for searchbox creation
+      const checkInterval = setInterval(() => {
+        if (editor.searchBox) {
+          initSearchBox();
+          clearInterval(checkInterval);
+        }
+      }, 100);
+      // Clean up after 5 seconds if searchbox never created
+      setTimeout(() => clearInterval(checkInterval), 5000);
+    }
+  }, []);
+  
+  // Handle CMD+F at the container level to trigger search even when editor doesn't have focus
+  const handleContainerKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+      e.preventDefault();
+      e.stopPropagation();
+      const editor = editorRef.current?.editor;
+      if (editor) {
+        editor.focus();
+        const Search = ace.require('ace/ext/searchbox').Search;
+        const sb = editor.searchBox || new Search(editor);
+        
+        // Wrap hide method if not already wrapped
+        if (!sb._hideWrapped) {
+          const originalHide = sb.hide.bind(sb);
+          sb.hide = () => {
+            originalHide();
+            setShowSearch(false);
+          };
+          sb._hideWrapped = true;
+        }
+        
+        sb.show('', false);
+        setShowSearch(true);
+      }
+    }
   }, []);
 
   const response = execution?.response;
@@ -615,6 +677,39 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
       setTimeout(() => setCopied(false), 2000);
     }
   }, [response, bodyViewMode, specResponseInfo]);
+
+  const handleToggleSearch = useCallback(() => {
+    const editor = editorRef.current?.editor;
+    if (editor) {
+      if (showSearch) {
+        // Close the search box
+        const searchBox = editor.searchBox;
+        if (searchBox) {
+          searchBox.hide();
+        }
+        // State is updated by the wrapped hide method
+      } else {
+        // Focus the editor first to ensure search works
+        editor.focus();
+        // Open the search box using the Search class directly (works better for read-only editors)
+        const Search = ace.require('ace/ext/searchbox').Search;
+        const sb = editor.searchBox || new Search(editor);
+        
+        // Wrap hide method if not already wrapped
+        if (!sb._hideWrapped) {
+          const originalHide = sb.hide.bind(sb);
+          sb.hide = () => {
+            originalHide();
+            setShowSearch(false);
+          };
+          sb._hideWrapped = true;
+        }
+        
+        sb.show('', false);
+        setShowSearch(true);
+      }
+    }
+  }, [showSearch]);
 
   const handleSaveToFile = useCallback(() => {
     let content: string | undefined;
@@ -1010,6 +1105,8 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
             ref={bodyContainerRef}
             className="response-viewer__body" 
             onContextMenu={handleEditorContextMenu}
+            onKeyDown={handleContainerKeyDown}
+            tabIndex={-1}
           >
             <div className="response-viewer__body-header">
               <div className="response-viewer__body-tabs">
@@ -1057,6 +1154,14 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
                   onChange={(value) => setContentDisplayMode(value as ContentDisplayMode)}
                   className="response-viewer__display-mode-dropdown"
                 />
+                <Tooltip content="Search (⌘F)" position="bottom">
+                  <button
+                    className={`response-viewer__action-btn ${showSearch ? 'response-viewer__action-btn--active' : ''}`}
+                    onClick={handleToggleSearch}
+                  >
+                    <SearchIcon />
+                  </button>
+                </Tooltip>
                 <Tooltip content="Toggle JSONPath filter" position="bottom">
                   <button
                     className={`response-viewer__action-btn ${showFilter ? 'response-viewer__action-btn--active' : ''}`}

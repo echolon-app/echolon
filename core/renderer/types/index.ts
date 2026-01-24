@@ -47,6 +47,7 @@ export interface SpecSource {
   format: SpecFormat;
   url?: string;
   lastSyncedAt?: number;
+  lastCheckedAt?: number; // When we last checked for updates (regardless of result)
   syncFrequencyMins: number; // 0 = manual only
   rawSpec?: string; // Original spec JSON/YAML for diffing
   // Track changes that were intentionally skipped/dismissed (signature = "METHOD:path")

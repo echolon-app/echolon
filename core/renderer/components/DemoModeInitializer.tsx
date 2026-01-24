@@ -23,6 +23,7 @@ export type DemoMode =
   | 'git'
   | 'publishing'
   | 'mocking'
+  | 'landing-hero'
   | null;
 
 // Request names to look for in the Sample CRUD API
@@ -238,6 +239,46 @@ export const DemoModeInitializer: React.FC<DemoModeInitializerProps> = ({ childr
         if (firstRequest) {
           console.log('[DemoMode] Opening mocking demo request');
           addTab({ ...firstRequest, collectionId: collection.id });
+        }
+        break;
+      }
+
+      case 'landing-hero': {
+        // Find "Get all tasks" request (case-insensitive)
+        const getTasksRequest = findRequestByName(collection, 'Get all tasks');
+        
+        if (getTasksRequest) {
+          console.log('[DemoMode] Opening landing-hero demo request:', getTasksRequest.name);
+          addTab({ ...getTasksRequest, collectionId: collection.id });
+          
+          // Execute the request after a short delay
+          setTimeout(async () => {
+            const currentTabs = tabsRef.current;
+            const taskTab = currentTabs.find(t => t.request?.name === getTasksRequest.name);
+            
+            if (taskTab && getTasksRequest) {
+              try {
+                console.log('[DemoMode] Executing request:', getTasksRequest.name);
+                const result = await requestService.execute(
+                  getTasksRequest,
+                  activeEnv as Environment | null,
+                  30000,
+                  collection
+                );
+                console.log('[DemoMode] Request executed:', getTasksRequest.name, result?.response?.status);
+                
+                // Update the tab with the execution result
+                updateTab(taskTab.id, { execution: result, isLoading: false });
+                
+                // Set this tab as active to show the response
+                setActiveTab(taskTab.id);
+              } catch (err) {
+                console.log('[DemoMode] Request execution failed:', getTasksRequest.name, err);
+              }
+            }
+          }, 800);
+        } else {
+          console.warn('[DemoMode] Could not find "Get all tasks" request in collection');
         }
         break;
       }

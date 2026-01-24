@@ -200,6 +200,7 @@ export type DemoMode =
   | 'git'
   | 'publishing'
   | 'mocking'
+  | 'landing-hero'
   | null;
 
 // Mount function for programmatic use
@@ -300,16 +301,6 @@ function autoInit() {
     scriptTag.parentNode?.insertBefore(container, scriptTag);
   }
 
-  // Get configuration from data attributes
-  const specUrl = scriptTag.getAttribute('data-url') || undefined;
-  const corsProxy = scriptTag.getAttribute('data-cors-proxy') || undefined;
-  const theme = scriptTag.getAttribute('data-theme') as 'light' | 'dark' | 'system' | undefined;
-  const viewMode = scriptTag.getAttribute('data-view') as 'tabs' | 'reference' | undefined;
-  const readonlyAttr = scriptTag.getAttribute('data-readonly');
-  const readonly = readonlyAttr === 'true' || readonlyAttr === '';
-  const title = scriptTag.getAttribute('data-title') || undefined;
-  const versionsUrl = scriptTag.getAttribute('data-versions-url') || undefined;
-  
   // Parse URL parameters for demo mode and hideBanner
   const urlParams = new URLSearchParams(window.location.search);
   const demoModeParam = urlParams.get('demo') as DemoMode;
@@ -317,6 +308,22 @@ function autoInit() {
   const hideBannerParam = urlParams.has('hideBanner');
   const hideBannerAttr = scriptTag.getAttribute('data-hide-banner');
   const hideBanner = hideBannerParam || hideBannerAttr === 'true' || hideBannerAttr === '';
+  
+  // Get configuration from data attributes
+  // For landing-hero demo mode, automatically load Sample CRUD API
+  let specUrl = scriptTag.getAttribute('data-url') || undefined;
+  if (demoMode === 'landing-hero' && !specUrl) {
+    specUrl = 'https://sample-api.echolon.app/openapi.json';
+  }
+  
+  const corsProxy = scriptTag.getAttribute('data-cors-proxy') || undefined;
+  const theme = scriptTag.getAttribute('data-theme') as 'light' | 'dark' | 'system' | undefined;
+  const viewMode = scriptTag.getAttribute('data-view') as 'tabs' | 'reference' | undefined;
+  const readonlyAttr = scriptTag.getAttribute('data-readonly');
+  // landing-hero mode should allow creating tabs (not readonly)
+  const readonly = demoMode === 'landing-hero' ? false : (readonlyAttr === 'true' || readonlyAttr === '');
+  const title = scriptTag.getAttribute('data-title') || undefined;
+  const versionsUrl = scriptTag.getAttribute('data-versions-url') || undefined;
   const initialRequest = scriptTag.getAttribute('data-initial-request') || undefined;
 
   mount({
