@@ -1,0 +1,152 @@
+[
+  {
+    "version": "1.1.0",
+    "date": "January 24, 2026",
+    "type": "minor",
+    "highlights": [
+      "Echolon is now open source"
+    ],
+    "changes": [
+      {
+        "category": "improved",
+        "items": [
+          "General UI improvements and stability",
+          "Encrypted secrets storage",
+          "Custom proxy configuration"
+        ]
+      }
+    ]
+  },
+  {
+    "version": "1.0.0",
+    "date": "January 19, 2026",
+    "type": "minor",
+    "highlights": [
+      "Official stable release",
+      "Multi-protocol support",
+      "Git integration for version control"
+    ],
+    "changes": [
+      {
+        "category": "added",
+        "items": [
+          "REST, GraphQL, WebSocket, and gRPC protocol support",
+          "Git-based sync for collections and environments",
+          "Import from Postman, and OpenAPI",
+          "Encrypted secrets storage",
+          "Request chaining with variable extraction",
+          "Response validation and assertions",
+          "Custom proxy configuration",
+          "Dark and light theme support"
+        ]
+      }
+    ]
+  },
+  {
+    "version": "0.9.10",
+    "date": "January 11, 2026",
+    "type": "minor",
+    "changes": [
+      {
+        "category": "improved",
+        "items": [
+          "Auto-Update for Windows",
+          "Git Diffing UI"
+        ]
+      }
+    ]
+  },
+  {
+    "version": "0.9.0",
+    "date": "January 10, 2026",
+    "type": "minor",
+    "changes": [
+      {
+        "category": "added",
+        "items": [
+          "WebSocket support with real-time message streaming",
+          "Environment variable inheritance",
+          "Function in variables support",
+          "Updated documentation",
+          "Request history with search",
+          "Response preview for images and PDFs",
+          "Git Diffing UI",
+          "Pre and post request scripts",
+          "Public Spec API support",
+          "Watch Remote URL API specs",
+          "Push Notifications on remote API changes",
+          "Shortcut support for common requests",
+          "Support Tags in requests in compliance with OpenAPI 3.0"
+        ]
+      },
+      {
+        "category": "improved",
+        "items": [
+          "HTML Preview for images, videos, PDFs and HTML"
+        ]
+      }
+    ]
+  },
+  {
+    "version": "0.8.0",
+    "date": "December 30, 2025",
+    "type": "minor",
+    "changes": [
+      {
+        "category": "added",
+        "items": [
+          "Mocking support",
+          "Different Themes support",
+          "Export as Code (curl, python, node, go, java,...)",
+          "OAuth 2.0 and OAuth 1.0 authentication",
+          "AWS Signature v4 authentication"
+        ]
+      }
+    ]
+  },
+  {
+    "version": "0.7.0",
+    "date": "December 28, 2025",
+    "type": "minor",
+    "changes": [
+      {
+        "category": "added",
+        "items": [
+          "Export to cURL command",
+          "Auto-Update functionality"
+        ]
+      }
+    ]
+  },
+  {
+    "version": "0.6.0",
+    "date": "December 27, 2025",
+    "type": "minor",
+    "changes": [
+      {
+        "category": "added",
+        "items": [
+          "Collections and folders",
+          "Environment variables",
+          "Pre-request and post-request scripts",
+          "Basic authentication support"
+        ]
+      }
+    ]
+  },
+  {
+    "version": "0.5.0",
+    "date": "December 25, 2025",
+    "type": "minor",
+    "changes": [
+      {
+        "category": "added",
+        "items": [
+          "Initial REST API support",
+          "Request history",
+          "Basic response viewer"
+        ]
+      }
+    ]
+  }
+]

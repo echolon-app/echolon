@@ -1,0 +1,7 @@
+## Highlights
+- Echolon is now open source
+
+### 🚀 Improved
+- General UI improvements and stability
+- Encrypted secrets storage
+- Custom proxy configuration

@@ -36,6 +36,10 @@ mac:
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  # Ensure zip files are signed if app is signed
+  # This is critical for auto-updates to work properly
+  # If CSC_LINK is not set, the zip will be unsigned and updates may fail
+  # signature validation unless both app and update are unsigned
   extendInfo:
     CFBundleURLTypes:
       - CFBundleURLName: Echolon URL

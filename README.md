@@ -13,7 +13,7 @@
 A powerful, git-native and local-first API client built with Electron and React.
 
 <p align="center">
-     <img width="600px" src="core/assets/app-icon/echolon-app-request-editor-1.webp">
+     <img width="800px" src="core/assets/app-icon/echolon-app-request-editor-1.webp">
 </p>
 
 

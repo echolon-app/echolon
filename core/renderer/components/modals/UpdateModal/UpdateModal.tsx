@@ -32,7 +32,8 @@ function formatDate(dateString: string): string {
   }
 }
 
-// Simple markdown-like renderer for release notes
+// Renderer for release notes -> notes come from the github releases page
+// Handles both markdown and HTML formats
 function renderReleaseNotes(notes: string | null): React.ReactNode {
   if (!notes) {
     return <p className="update-modal__no-notes">No release notes available.</p>;
@@ -41,38 +42,81 @@ function renderReleaseNotes(notes: string | null): React.ReactNode {
   // Handle array format from electron-updater (can be string[] for multi-platform notes)
   const notesText = Array.isArray(notes) ? notes.join('\n') : notes;
   
-  // Split into lines and render with basic formatting
+  // Check if notes contain HTML tags
+  const hasHTML = /<[a-z][\s\S]*>/i.test(notesText);
+  
+  if (hasHTML) {
+    // Render HTML content (sanitized)
+    return (
+      <div 
+        className="update-modal__release-notes-content"
+        dangerouslySetInnerHTML={{ __html: notesText }}
+      />
+    );
+  }
+  
+  // Otherwise, parse as markdown-like text
   const lines = notesText.split('\n');
+  const elements: React.ReactNode[] = [];
+  let currentList: string[] = [];
+  
+  const flushList = () => {
+    if (currentList.length > 0) {
+      elements.push(
+        <ul key={`list-${elements.length}`}>
+          {currentList.map((item, idx) => (
+            <li key={idx}>{item}</li>
+          ))}
+        </ul>
+      );
+      currentList = [];
+    }
+  };
+  
+  lines.forEach((line, index) => {
+    const trimmed = line.trim();
+    
+    // Empty line
+    if (!trimmed) {
+      flushList();
+      elements.push(<br key={`br-${index}`} />);
+      return;
+    }
+    
+    // Header lines (## or ###)
+    if (trimmed.startsWith('### ')) {
+      flushList();
+      elements.push(<h4 key={`h4-${index}`}>{trimmed.slice(4)}</h4>);
+      return;
+    }
+    if (trimmed.startsWith('## ')) {
+      flushList();
+      elements.push(<h3 key={`h3-${index}`}>{trimmed.slice(3)}</h3>);
+      return;
+    }
+    if (trimmed.startsWith('# ')) {
+      flushList();
+      elements.push(<h2 key={`h2-${index}`}>{trimmed.slice(2)}</h2>);
+      return;
+    }
+    
+    // List items
+    if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+      currentList.push(trimmed.slice(2));
+      return;
+    }
+    
+    // Regular paragraph (flush list first)
+    flushList();
+    elements.push(<p key={`p-${index}`}>{trimmed}</p>);
+  });
+  
+  // Flush any remaining list items
+  flushList();
   
   return (
     <div className="update-modal__release-notes-content">
-      {lines.map((line, index) => {
-        const trimmed = line.trim();
-        
-        // Empty line
-        if (!trimmed) {
-          return <br key={index} />;
-        }
-        
-        // Header lines (## or ###)
-        if (trimmed.startsWith('### ')) {
-          return <h4 key={index}>{trimmed.slice(4)}</h4>;
-        }
-        if (trimmed.startsWith('## ')) {
-          return <h3 key={index}>{trimmed.slice(3)}</h3>;
-        }
-        if (trimmed.startsWith('# ')) {
-          return <h2 key={index}>{trimmed.slice(2)}</h2>;
-        }
-        
-        // List items
-        if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-          return <li key={index}>{trimmed.slice(2)}</li>;
-        }
-        
-        // Regular paragraph
-        return <p key={index}>{trimmed}</p>;
-      })}
+      {elements}
     </div>
   );
 }

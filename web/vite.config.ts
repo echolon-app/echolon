@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import corePkg from '../core/package.json';
@@ -6,13 +6,41 @@ import pkg from './package.json';
 
 const isLibBuild = process.env.BUILD_MODE === 'lib';
 
+// Plugin to inject process polyfill for browser builds
+const processPolyfillPlugin = (): Plugin => {
+  const processPolyfill = `var process = typeof process !== 'undefined' ? process : { env: { WEB_MODE: 'true', NODE_ENV: 'production' } };`;
+  
+  return {
+    name: 'process-polyfill',
+    renderChunk(code, chunk, options) {
+      // Only inject for library builds (UMD and ES formats)
+      if (options.format === 'umd' || options.format === 'es' || options.format === 'iife') {
+        // Inject at the very beginning of entry chunks
+        if (chunk.isEntry) {
+          return `${processPolyfill}\n${code}`;
+        }
+      }
+      return code;
+    },
+  };
+};
+
 export default defineConfig({
+  server: {
+    port: 5174,
+  },
   define: {
     __APP_VERSION__: JSON.stringify(corePkg.version),
-    __ENV__:JSON.stringify(process.env.ENV),
+    __ENV__: JSON.stringify(process.env.ENV),
+    // Replace process.env with a browser-safe object
     'process.env.WEB_MODE': JSON.stringify('true'),
+    'process.env.NODE_ENV': JSON.stringify('production'),
   },
-  plugins: [react()],
+  plugins: [
+    react(),
+    // Add process polyfill plugin for library builds
+    ...(isLibBuild ? [processPolyfillPlugin()] : []),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '../core/renderer'),
@@ -32,11 +60,15 @@ export default defineConfig({
         rollupOptions: {
           output: {
             globals: {},
+            // Disable code splitting for ES modules - create a single file
+            inlineDynamicImports: true,
             assetFileNames: (assetInfo) => {
               if (assetInfo.name === 'style.css') return 'echolon-web.css';
               return assetInfo.name || 'asset';
             },
           },
+          // Define process for browser compatibility
+          external: [],
         },
         cssCodeSplit: false,
         sourcemap: true,

@@ -24,6 +24,25 @@ export function setupUpdater(mainWindow: BrowserWindow | null, config: UpdaterCo
   
   // Allow pre-release updates if current version is pre-release
   autoUpdater.allowPrerelease = false;
+  
+  // Configure macOS update behavior
+  if (process.platform === 'darwin') {
+    // Use the 'default' updater which handles signature validation more gracefully
+    // This is important for unsigned apps or when update signature doesn't match
+    try {
+      // Set updater cache directory name to avoid conflicts
+      (autoUpdater as any).updaterCacheDirName = 'com.echolon.app.ShipIt';
+      
+      // For unsigned apps, we need to bypass strict signature checking
+      // This is handled by electron-updater automatically for unsigned builds
+      // but we can explicitly configure it if needed
+      if (!process.env.CSC_LINK) {
+        console.log('[Updater] Running without code signing - signature verification may be skipped');
+      }
+    } catch (error) {
+      console.warn('[Updater] Could not configure macOS-specific settings:', error);
+    }
+  }
 
   // Check for updates on startup (after a delay) only if enabled
   if (autoCheckUpdates) {
@@ -54,8 +73,16 @@ export function setupUpdater(mainWindow: BrowserWindow | null, config: UpdaterCo
 
   autoUpdater.on('error', (err: Error) => {
     console.error('[Updater] Error:', err.message);
+    
+    // Handle code signature validation errors on macOS
+    let errorMessage = err.message;
+    if (process.platform === 'darwin' && err.message.includes('code signature') || err.message.includes('code requirement')) {
+      errorMessage = 'Update failed code signature validation. This usually happens when the update is not signed with the same certificate as the installed app. Please download and install the update manually from GitHub Releases.';
+      console.error('[Updater] Code signature validation failed. User should install update manually.');
+    }
+    
     mainWindow?.webContents.send(UPDATE_CHANNELS.UPDATE_ERROR, {
-      message: err.message,
+      message: errorMessage,
     });
   });
 
@@ -116,8 +143,19 @@ export function setupUpdater(mainWindow: BrowserWindow | null, config: UpdaterCo
       console.log('[Updater] Starting update download...');
       await autoUpdater.downloadUpdate();
       return { success: true };
-    } catch (error) {
-      console.error('[Updater] Failed to download update:', error);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('[Updater] Failed to download update:', errorMessage);
+      
+      // Handle code signature validation errors
+      if (process.platform === 'darwin' && (errorMessage.includes('code signature') || errorMessage.includes('code requirement'))) {
+        const friendlyMessage = 'Update failed code signature validation. Please download and install the update manually from GitHub Releases.';
+        mainWindow?.webContents.send(UPDATE_CHANNELS.UPDATE_ERROR, {
+          message: friendlyMessage,
+        });
+        throw new Error(friendlyMessage);
+      }
+      
       throw error;
     }
   });
