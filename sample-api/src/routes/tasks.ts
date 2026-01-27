@@ -479,5 +479,324 @@ router.delete('/:id', (req: Request, res: Response) => {
   res.status(204).send();
 });
 
+// ============================================================================
+// Cookie Demonstration Endpoints
+// ============================================================================
+
+/**
+ * @openapi
+ * /tasks/cookies/demo:
+ *   get:
+ *     tags:
+ *       - 1. Tasks
+ *     summary: Cookie demonstration endpoint
+ *     description: Sets various cookies with different attributes to demonstrate cookie functionality
+ *     responses:
+ *       200:
+ *         description: Cookies set successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 cookiesSet:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       name:
+ *                         type: string
+ *                       attributes:
+ *                         type: object
+ */
+router.get('/cookies/demo', (req: Request, res: Response) => {
+  const now = new Date();
+  const expires = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours from now
+  
+  // Set various cookies with different attributes
+  // 1. Simple session cookie (no expiration)
+  res.cookie('session_id', uuidv4(), {
+    httpOnly: true,
+    secure: false, // Set to true in production with HTTPS
+    sameSite: 'lax',
+  });
+  
+  // 2. Cookie with expiration
+  res.cookie('user_pref', 'dark_mode', {
+    expires: expires,
+    httpOnly: false, // Can be accessed by JavaScript
+    secure: false,
+    sameSite: 'strict',
+  });
+  
+  // 3. Cookie with path restriction
+  res.cookie('api_token', 'abc123xyz', {
+    path: '/tasks',
+    httpOnly: true,
+    secure: false,
+    sameSite: 'lax',
+    expires: expires,
+  });
+  
+  // 4. Cookie with domain (if specified)
+  const domain = req.hostname === 'localhost' ? undefined : '.echolon.app';
+  if (domain) {
+    res.cookie('shared_cookie', 'shared_value', {
+      domain: domain,
+      httpOnly: false,
+      secure: true,
+      sameSite: 'none',
+      expires: expires,
+    });
+  }
+  
+  // 5. Secure cookie (should only be sent over HTTPS)
+  res.cookie('secure_data', 'sensitive_info', {
+    httpOnly: true,
+    secure: true, // Only sent over HTTPS
+    sameSite: 'strict',
+    expires: expires,
+  });
+  
+  res.json({
+    message: 'Cookies have been set! Check the Cookies tab in the response viewer.',
+    cookiesSet: [
+      {
+        name: 'session_id',
+        attributes: {
+          httpOnly: true,
+          secure: false,
+          sameSite: 'Lax',
+          expires: 'Session (no expiration)',
+        },
+      },
+      {
+        name: 'user_pref',
+        attributes: {
+          httpOnly: false,
+          secure: false,
+          sameSite: 'Strict',
+          expires: expires.toUTCString(),
+        },
+      },
+      {
+        name: 'api_token',
+        attributes: {
+          path: '/tasks',
+          httpOnly: true,
+          secure: false,
+          sameSite: 'Lax',
+          expires: expires.toUTCString(),
+        },
+      },
+      {
+        name: 'secure_data',
+        attributes: {
+          httpOnly: true,
+          secure: true,
+          sameSite: 'Strict',
+          expires: expires.toUTCString(),
+        },
+      },
+    ],
+    receivedCookies: req.cookies || {},
+    receivedHeaders: req.headers.cookie || 'None',
+  });
+});
+
+/**
+ * @openapi
+ * /tasks/cookies/check:
+ *   get:
+ *     tags:
+ *       - 1. Tasks
+ *     summary: Check cookies sent with request
+ *     description: Returns information about cookies that were sent with the request
+ *     responses:
+ *       200:
+ *         description: Cookie information
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 cookies:
+ *                   type: object
+ *                   description: Parsed cookies from request
+ *                 cookieHeader:
+ *                   type: string
+ *                   description: Raw Cookie header value
+ */
+router.get('/cookies/check', (req: Request, res: Response) => {
+  res.json({
+    message: 'These are the cookies that were sent with your request:',
+    cookies: req.cookies || {},
+    cookieHeader: req.headers.cookie || 'No Cookie header sent',
+    parsedCookies: req.headers.cookie 
+      ? req.headers.cookie.split(';').map(c => c.trim())
+      : [],
+  });
+});
+
+/**
+ * @openapi
+ * /tasks/cookies/login:
+ *   post:
+ *     tags:
+ *       - 1. Tasks
+ *     summary: Simulate login with session cookie
+ *     description: Simulates a login endpoint that sets a session cookie
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - username
+ *               - password
+ *             properties:
+ *               username:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Login successful, session cookie set
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 sessionId:
+ *                   type: string
+ *       401:
+ *         description: Invalid credentials
+ */
+router.post('/cookies/login', (req: Request, res: Response) => {
+  const { username, password } = req.body;
+  
+  // Simple demo authentication (in real app, check against database)
+  if (username === 'demo' && password === 'password') {
+    const sessionId = uuidv4();
+    const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    
+    // Set session cookie
+    res.cookie('auth_session', sessionId, {
+      httpOnly: true,
+      secure: false, // Set to true in production with HTTPS
+      sameSite: 'lax',
+      expires: expires,
+      path: '/',
+    });
+    
+    // Set user preference cookie
+    res.cookie('username', username, {
+      httpOnly: false,
+      secure: false,
+      sameSite: 'lax',
+      expires: expires,
+    });
+    
+    res.json({
+      success: true,
+      message: 'Login successful! Session cookie has been set.',
+      sessionId: sessionId,
+      expires: expires.toUTCString(),
+    });
+  } else {
+    res.status(401).json({
+      success: false,
+      message: 'Invalid credentials. Try username: "demo", password: "password"',
+    });
+  }
+});
+
+/**
+ * @openapi
+ * /tasks/cookies/logout:
+ *   post:
+ *     tags:
+ *       - 1. Tasks
+ *     summary: Simulate logout by clearing session cookie
+ *     description: Clears the authentication session cookie
+ *     responses:
+ *       200:
+ *         description: Logout successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ */
+router.post('/cookies/logout', (req: Request, res: Response) => {
+  // Clear session cookie by setting it to expire in the past
+  res.clearCookie('auth_session');
+  res.clearCookie('username');
+  
+  res.json({
+    success: true,
+    message: 'Logged out successfully. Session cookies have been cleared.',
+  });
+});
+
+/**
+ * @openapi
+ * /tasks/cookies/protected:
+ *   get:
+ *     tags:
+ *       - 1. Tasks
+ *     summary: Protected route that requires session cookie
+ *     description: Returns protected data if valid session cookie is present
+ *     responses:
+ *       200:
+ *         description: Protected data returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *       401:
+ *         description: Unauthorized - no valid session cookie
+ */
+router.get('/cookies/protected', (req: Request, res: Response) => {
+  const sessionId = req.cookies?.auth_session;
+  
+  if (!sessionId) {
+    return res.status(401).json({
+      success: false,
+      message: 'Unauthorized. Please login first at POST /tasks/cookies/login',
+      hint: 'Send a POST request to /tasks/cookies/login with {"username": "demo", "password": "password"}',
+    });
+  }
+  
+  res.json({
+    success: true,
+    message: 'Access granted! You have a valid session cookie.',
+    data: {
+      sessionId: sessionId,
+      username: req.cookies?.username || 'unknown',
+      protectedTasks: Array.from(tasks.values()).slice(0, 3),
+      timestamp: new Date().toISOString(),
+    },
+  });
+});
+
 export default router;
 
