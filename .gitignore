@@ -37,6 +37,8 @@ coverage/
 *.tmp
 *.temp
 
+sample-api/build/
+web/dist/
 
 secrets/
 landing/

@@ -11,7 +11,7 @@
     "start:pm2": "pm2 start ecosystem.config.js",
     "reload:pm2": "pm2 reload echolon-sample-api",
     "stop:pm2": "pm2 stop echolon-sample-api",
-    "deploy": "set -a && source .env.production && set +a && ./deploy/deploy.sh"
+    "deploy": "npm run build && set -a && source .env.production && set +a && ./deploy/deploy.sh"
   },
   "keywords": ["api", "openapi", "graphql", "crud", "sample"],
   "author": "",

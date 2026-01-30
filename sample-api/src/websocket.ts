@@ -32,33 +32,39 @@ export function startWebSocketServer(port: number) {
       const rawMessage = data.toString();
       console.log(`[WS] Received from ${clientId}: ${rawMessage.slice(0, 100)}${rawMessage.length > 100 ? '...' : ''}`);
 
-      // Try to parse as JSON and add metadata, otherwise echo raw
+      // Handle binary data
+      if (isBinary) {
+        // For binary data, echo back exactly as received
+        ws.send(data);
+        return;
+      }
+
+      // Try to parse as JSON
+      let parsed: any;
       try {
-        const parsed = JSON.parse(rawMessage);
+        parsed = JSON.parse(rawMessage);
+      } catch (parseError) {
+        // Invalid JSON - treat as plain string and echo back
         const response = {
           type: 'echo',
-          originalMessage: parsed,
+          originalMessage: rawMessage,
           clientId,
           timestamp: new Date().toISOString(),
           receivedAt: Date.now(),
         };
         ws.send(JSON.stringify(response));
-      } catch {
-        // Not JSON, echo back as-is with wrapper
-        if (isBinary) {
-          // For binary data, echo back exactly as received
-          ws.send(data);
-        } else {
-          const response = {
-            type: 'echo',
-            originalMessage: rawMessage,
-            clientId,
-            timestamp: new Date().toISOString(),
-            receivedAt: Date.now(),
-          };
-          ws.send(JSON.stringify(response));
-        }
+        return;
       }
+
+      // Echo back parsed JSON (whether it's an object, array, string, number, etc.)
+      const response = {
+        type: 'echo',
+        originalMessage: parsed,
+        clientId,
+        timestamp: new Date().toISOString(),
+        receivedAt: Date.now(),
+      };
+      ws.send(JSON.stringify(response));
     });
 
     ws.on('close', (code: number, reason: Buffer) => {

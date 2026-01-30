@@ -41,11 +41,15 @@ The WebSocket echo server runs on port 3502 and echoes back any message you send
 
 1. **On Connect**: Sends a welcome message with your client ID
 2. **On Message**: Echoes back your message with metadata (timestamp, client ID)
-3. **JSON Messages**: Parsed and included in `originalMessage` field
-4. **Text Messages**: Included as-is in `originalMessage` field
+3. **JSON Messages**: Parsed and included in `originalMessage` field (objects, arrays, strings, numbers, etc.)
+4. **Plain Text Messages**: Included as-is in `originalMessage` field
 5. **Binary Messages**: Echoed back as raw binary data
 
 ### Message Format
+
+**All messages are echoed back**, regardless of format:
+
+**Response Format:**
 
 Messages are echoed back as JSON:
 
@@ -58,6 +62,13 @@ Messages are echoed back as JSON:
   "receivedAt": 1767367200000
 }
 ```
+
+**Examples:**
+
+- Plain string `"hello"` → `{"type": "echo", "originalMessage": "hello", ...}`
+- JSON object `{"key": "value"}` → `{"type": "echo", "originalMessage": {"key": "value"}, ...}`
+- JSON array `[1, 2, 3]` → `{"type": "echo", "originalMessage": [1, 2, 3], ...}`
+- JSON string `"\"hello\""` → `{"type": "echo", "originalMessage": "hello", ...}`
 
 ## GraphQL API
 
