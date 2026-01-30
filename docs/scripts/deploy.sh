@@ -2,7 +2,7 @@
 set -euo pipefail
 
 BUCKET="${BUCKET:-}"
-AWS_PROFILE="${AWS_PROFILE:-modrena}"
+AWS_PROFILE="${AWS_PROFILE:-}"
 DISTRIBUTION_ID="${DISTRIBUTION_ID:-}"
 
 echo "--------------------------------"
