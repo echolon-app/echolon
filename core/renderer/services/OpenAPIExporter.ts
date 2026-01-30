@@ -17,6 +17,7 @@ interface OpenAPIInfo {
 interface OpenAPIServer {
   url: string;
   description?: string;
+  'x-color'?: string; // Custom extension for server color
 }
 
 interface OpenAPIParameter {
@@ -530,10 +531,17 @@ function generateServersFromEnvironments(environments?: CollectionEnvironment[])
         // Validate that the value looks like a URL
         const value = variable.value.trim();
         if (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('/')) {
-          servers.push({
+          const server: OpenAPIServer = {
             url: value,
             description: env.name,
-          });
+          };
+          
+          // Include x-color if environment has a color
+          if (env.color) {
+            server['x-color'] = env.color;
+          }
+          
+          servers.push(server);
           break; // Only use the first matching URL per environment
         }
       }

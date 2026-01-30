@@ -114,6 +114,9 @@ export class OpenAPIAdapter implements SpecImporterAdapter {
         // Use description as environment name, fallback to URL-based name
         const envName = server.description || this.generateEnvNameFromUrl(server.url);
         
+        // Extract x-color from server if present (OpenAPI custom extension)
+        const serverColor = (server as any)['x-color'];
+        
         collectionEnvironments.push({
           id: uuidv4(),
           name: envName,
@@ -126,7 +129,8 @@ export class OpenAPIAdapter implements SpecImporterAdapter {
               enabled: true,
             },
           ],
-          isActive: i === 0, // First environment is active by default
+          isActive: true, // All environments from OpenAPI are active
+          ...(serverColor && { color: serverColor }), // Include color if present
         });
       }
       

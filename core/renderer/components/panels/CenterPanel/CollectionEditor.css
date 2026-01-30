@@ -1078,6 +1078,12 @@
   padding: var(--spacing-sm) var(--spacing-lg);
   font-family: var(--font-mono);
   font-size: var(--font-xs);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.reference-operations-card__item:hover {
+  background-color: var(--bg-tertiary);
 }
 
 .reference-operations-card__method {

@@ -2,7 +2,6 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import swaggerJsdoc from 'swagger-jsdoc';
-import swaggerUi from 'swagger-ui-express';
 import { v4 as uuidv4 } from 'uuid';
 import { ApolloServer } from '@apollo/server';
 import { expressMiddleware } from '@apollo/server/express4';
@@ -15,6 +14,104 @@ import usersRoutes, { users, seedUsers, User } from './routes/users';
 import tasksRoutes, { tasks, seedTasks, Task } from './routes/tasks';
 import healthRoutes, { echoHandler } from './routes/health';
 import { startWebSocketServer } from './websocket';
+
+// Generate HTML for Echolon Web API Reference
+function generateEcholonWebHtml(options: {
+  title: string;
+  description: string;
+  specUrl: string;
+}): string {
+  const { title, description, specUrl } = options;
+  
+  // Use CDN for Echolon Web assets
+  const WEB_ECHOLON_BASE = 'https://echolon-web.s3.eu-central-1.amazonaws.com';
+  const SCRIPT_URL = `${WEB_ECHOLON_BASE}/assets/index-latest.js`;
+  const CSS_URL = `${WEB_ECHOLON_BASE}/assets/index-latest.css`;
+  
+  const escapeHtml = (text: string): string => {
+    const htmlEntities: Record<string, string> = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    };
+    return text.replace(/[&<>"']/g, char => htmlEntities[char] || char);
+  };
+  
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="${escapeHtml(description || `API documentation for ${title}`)}">
+  <title>${escapeHtml(title)} - API Reference</title>
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="${WEB_ECHOLON_BASE}/favicon.svg">
+  
+  <!-- Echolon Web Styles -->
+  <link rel="stylesheet" href="${CSS_URL}">
+  
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { 
+      height: 100%; 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+    #echolon { height: 100%; }
+    
+    /* Loading state */
+    .echolon-loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      background: #0a0a0a;
+      color: #e5e5e5;
+    }
+    .echolon-loading__spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid #262626;
+      border-top-color: #22c55e;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    .echolon-loading p {
+      margin-top: 16px;
+      font-size: 14px;
+      opacity: 0.7;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div id="echolon">
+    <div class="echolon-loading">
+      <div class="echolon-loading__spinner"></div>
+      <p>Loading API documentation...</p>
+    </div>
+  </div>
+  
+  <!-- Echolon Web Configuration -->
+  <script
+    id="api-reference"
+    data-url="${specUrl}"
+    data-theme="dark"
+    data-view="reference"
+    data-readonly="true"
+    data-title="${escapeHtml(title)}"
+  ></script>
+  
+  <!-- Echolon Web Script -->
+  <script type="module" src="${SCRIPT_URL}"></script>
+</body>
+</html>`;
+}
 
 const app = express();
 const PORT = process.env.PORT || 3501;
@@ -315,10 +412,12 @@ const swaggerOptions: swaggerJsdoc.Options = {
       {
         url: 'https://sample-api.echolon.app',
         description: 'Production server',
+        'x-color': '#22c55e', 
       },
       {
         url: `http://localhost:${PORT}`,
-        description: 'Local development server',
+        description: 'Dev server',
+        'x-color': '#ef4444',
       },
     ],
     tags: [
@@ -342,8 +441,17 @@ app.get('/openapi.json', (_req: Request, res: Response) => {
   res.send(swaggerSpec);
 });
 
-// Serve Swagger UI
-app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+// Serve Echolon Web API Reference
+app.get('/docs', (_req: Request, res: Response) => {
+  const spec = swaggerSpec as { info: { title: string; description?: string } };
+  const html = generateEcholonWebHtml({
+    title: spec.info.title,
+    description: spec.info.description || '',
+    specUrl: '/openapi.json',
+  });
+  res.setHeader('Content-Type', 'text/html');
+  res.send(html);
+});
 
 // ============================================================================
 // REST Routes

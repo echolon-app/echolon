@@ -736,16 +736,9 @@ export const LeftPanel: React.FC = () => {
     }
 
     if (contextTarget.type === 'request') {
-      // In readonly mode, only show view options
+      // In readonly mode, hide context menu options (including open)
       if (readonly) {
-        return [
-          { id: 'open', label: 'Open', icon: <OpenIcon />, onClick: () => {
-            handleOpenRequest(contextTarget.item as Request);
-          }},
-          /*{ id: 'open-new-tab', label: 'Open in New Tab', icon: <NewTabIcon />, onClick: () => {
-            handleOpenRequest(contextTarget.item as Request);
-          }},*/
-        ];
+        return [];
       }
       
       return [

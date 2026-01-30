@@ -1594,7 +1594,43 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({ collectionId
                           </div>
                           <div className="reference-operations-card__list">
                             {section.requests.map(request => (
-                              <div key={request.id} className="reference-operations-card__item">
+                              <div 
+                                key={request.id} 
+                                className="reference-operations-card__item"
+                                onClick={() => {
+                                  // Expand section if collapsed (skip for root sections)
+                                  const needsExpansion = section.id !== 'root' && section.id !== 'root-requests' && !isFolderExpanded(section.id);
+                                  if (needsExpansion) {
+                                    updateFolder(collectionId, section.id, { collapsed: false });
+                                  }
+                                  
+                                  // Scroll to the request
+                                  const container = reference2ContentRef.current;
+                                  if (!container) return;
+                                  
+                                  // First scroll to section to ensure it's visible
+                                  const sectionElement = container.querySelector(`[data-section-id="${section.id}"]`);
+                                  if (sectionElement) {
+                                    sectionElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                  }
+                                  
+                                  // Then scroll to the specific request
+                                  const scrollToRequest = (attempts = 0) => {
+                                    if (attempts > 10) return;
+                                    
+                                    const requestElement = container.querySelector(`[data-request-id="${request.id}"]`);
+                                    if (requestElement) {
+                                      requestElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                    } else {
+                                      setTimeout(() => scrollToRequest(attempts + 1), 100);
+                                    }
+                                  };
+                                  
+                                  // Wait a bit longer if we need to expand the section
+                                  const delay = needsExpansion ? 300 : 150;
+                                  setTimeout(() => scrollToRequest(0), delay);
+                                }}
+                              >
                                 <span 
                                   className="reference-operations-card__method"
                                   style={{ color: getMethodColor(request.method) }}
