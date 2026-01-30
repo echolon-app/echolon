@@ -1424,7 +1424,7 @@ export class PostmanAdapter implements SpecImporterAdapter {
     }
     
     // Also extract path variables from URL pattern (e.g., :id, :userId)
-    const pathVarMatches = url.match(/(?<!\{):([a-zA-Z_][a-zA-Z0-9_]*)/g);
+    const pathVarMatches = url.match(/(?<!\{):([a-zA-Z_][a-zA-Z0-9_-]*)/g);
     if (pathVarMatches) {
       for (const match of pathVarMatches) {
         const varName = match.slice(1); // Remove : prefix
@@ -1441,7 +1441,8 @@ export class PostmanAdapter implements SpecImporterAdapter {
     }
     
     // Also extract path variables from OpenAPI-style {id} format (single braces, not {{var}})
-    const openApiPathVarMatches = url.match(/(?<!\{)\{([a-zA-Z_][a-zA-Z0-9_]*)\}(?!\})/g);
+    // Supports hyphens in names like {match-guid}
+    const openApiPathVarMatches = url.match(/(?<!\{)\{([a-zA-Z_][a-zA-Z0-9_-]*)\}(?!\})/g);
     if (openApiPathVarMatches) {
       for (const match of openApiPathVarMatches) {
         const varName = match.slice(1, -1); // Remove { and }

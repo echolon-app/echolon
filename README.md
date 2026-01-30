@@ -88,16 +88,6 @@ npm run package:linux
 
 ### Release
 
-Usage
-To release a new version:
-1. Update version in core/package.json
-2. Commit and tag: git tag v1.0.X
-3. Push: git push origin v1.0.X
-
-GitHub Actions will build and create a release
-
-Or manually:
-
 ```bash
 cd core
 npm run release:all 

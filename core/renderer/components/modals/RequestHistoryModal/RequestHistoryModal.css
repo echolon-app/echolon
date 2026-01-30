@@ -269,6 +269,18 @@
   font-family: var(--font-mono);
 }
 
+.request-history-modal__status-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.request-history-modal__status-link:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
 .request-history-modal__status-badge--success {
   background-color: rgba(34, 197, 94, 0.15);
   color: #22c55e;
@@ -667,4 +679,120 @@
   margin: 0;
   font-size: var(--font-xs);
   line-height: 1.5;
+}
+
+/* Ace Search Box Theming */
+.request-history-modal .ace_search {
+  background-color: var(--bg-secondary) !important;
+  border: 1px solid var(--border-primary) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  padding: var(--spacing-sm) !important;
+  color: var(--text-primary) !important;
+}
+
+.request-history-modal .ace_search.right {
+  top: 0 !important;
+  right: 0 !important;
+  border-top-right-radius: 0 !important;
+  border-top-left-radius: 0 !important;
+}
+
+.request-history-modal .ace_search_form,
+.request-history-modal .ace_replace_form {
+  background-color: var(--bg-primary) !important;
+  border: 1px solid var(--border-primary) !important;
+  border-radius: var(--radius-sm) !important;
+  margin: 0 !important;
+  padding: 2px !important;
+}
+
+.request-history-modal .ace_search_field {
+  background-color: var(--bg-primary) !important;
+  border: none !important;
+  color: var(--text-primary) !important;
+  font-family: var(--font-mono) !important;
+  font-size: var(--font-sm) !important;
+  padding: var(--spacing-xs) var(--spacing-sm) !important;
+  outline: none !important;
+}
+
+.request-history-modal .ace_search_field::placeholder {
+  color: var(--text-muted) !important;
+}
+
+.request-history-modal .ace_search_field:focus {
+  outline: none !important;
+}
+
+.request-history-modal .ace_searchbtn,
+.request-history-modal .ace_replacebtn {
+  background-color: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-primary) !important;
+  border-radius: var(--radius-sm) !important;
+  color: var(--text-secondary) !important;
+  padding: 4px 8px !important;
+  margin-left: 4px !important;
+  cursor: pointer !important;
+  transition: all var(--transition-fast) !important;
+}
+
+.request-history-modal .ace_searchbtn:hover,
+.request-history-modal .ace_replacebtn:hover {
+  background-color: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+.request-history-modal .ace_searchbtn.prev,
+.request-history-modal .ace_searchbtn.next {
+  padding: 4px 6px !important;
+}
+
+.request-history-modal .ace_searchbtn_close {
+  background: transparent !important;
+  border: none !important;
+  color: var(--text-tertiary) !important;
+  font-size: 16px !important;
+  cursor: pointer !important;
+  padding: 4px !important;
+  margin-left: var(--spacing-sm) !important;
+}
+
+.request-history-modal .ace_searchbtn_close:hover {
+  color: var(--text-primary) !important;
+}
+
+.request-history-modal .ace_button {
+  background-color: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-primary) !important;
+  border-radius: var(--radius-sm) !important;
+  color: var(--text-secondary) !important;
+  padding: 2px 6px !important;
+  margin: 0 2px !important;
+  cursor: pointer !important;
+  font-size: var(--font-xs) !important;
+}
+
+.request-history-modal .ace_button:hover {
+  background-color: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+.request-history-modal .ace_button.checked {
+  background-color: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+  color: white !important;
+}
+
+.request-history-modal .ace_search_counter {
+  color: var(--text-tertiary) !important;
+  font-size: var(--font-xs) !important;
+  padding: 0 var(--spacing-sm) !important;
+}
+
+.request-history-modal .ace_search_options {
+  margin-top: var(--spacing-xs) !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
 }

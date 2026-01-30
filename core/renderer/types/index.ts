@@ -230,6 +230,7 @@ export interface ResponseCookie {
   expires?: string;
   httpOnly?: boolean;
   secure?: boolean;
+  sameSite?: 'Strict' | 'Lax' | 'None';
 }
 
 export interface ResponseTiming {

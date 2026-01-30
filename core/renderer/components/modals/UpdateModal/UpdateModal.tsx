@@ -42,11 +42,24 @@ function renderReleaseNotes(notes: string | null): React.ReactNode {
   // Handle array format from electron-updater (can be string[] for multi-platform notes)
   const notesText = Array.isArray(notes) ? notes.join('\n') : notes;
   
-  // Check if notes contain HTML tags
-  const hasHTML = /<[a-z][\s\S]*>/i.test(notesText);
+  // Check if notes contain HTML tags - be very permissive
+  // Look for any HTML-like tags: <tag>, </tag>, <tag attr="value">
+  // Check for common HTML tags specifically (h1-h6, ul, ol, li, p, div, etc.)
+  // Also check for closing tags like </h2>, </ul>, </li>
+  const hasOpeningTags = /<[a-z][a-z0-9]*(\s+[^>]*)?>/i.test(notesText);
+  const hasClosingTags = /<\/[a-z][a-z0-9]*>/i.test(notesText);
+  const hasCommonHTMLTags = /<(h[1-6]|ul|ol|li|p|div|span|strong|em|code|pre|br|hr)(\s+[^>]*)?>|<\/(h[1-6]|ul|ol|li|p|div|span|strong|em|code|pre)>/i.test(notesText);
+  
+  // If we detect any HTML-like structure (opening tags, closing tags, or common HTML tags), render as HTML
+  // This catches cases where GitHub releases contain HTML formatted notes
+  const hasHTML = hasOpeningTags || hasClosingTags || hasCommonHTMLTags;
   
   if (hasHTML) {
-    // Render HTML content (sanitized)
+    console.log('[UpdateModal] Detected HTML in release notes, rendering as HTML');
+    console.log('[UpdateModal] Sample content:', notesText.substring(0, 200));
+    
+    // Render HTML content directly using dangerouslySetInnerHTML
+    // The HTML comes from GitHub releases and should be safe
     return (
       <div 
         className="update-modal__release-notes-content"
@@ -189,7 +202,11 @@ export const UpdateModal: React.FC = () => {
                 rel="noopener noreferrer"
                 onClick={(e) => {
                   e.preventDefault();
-                  window.electronAPI?.openExternal('https://github.com/echolon-app/echolon/releases');
+                  if (window.electronAPI && 'openExternal' in window.electronAPI) {
+                    (window.electronAPI as any).openExternal('https://github.com/echolon-app/echolon/releases');
+                  } else {
+                    window.open('https://github.com/echolon-app/echolon/releases', '_blank');
+                  }
                 }}
               >
                 GitHub Releases

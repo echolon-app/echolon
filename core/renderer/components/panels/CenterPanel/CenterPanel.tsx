@@ -568,18 +568,19 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
     }
   }, []);
 
-  // Extract path variables from URL (e.g., :id, :userId, {id}, {userId})
+  // Extract path variables from URL (e.g., :id, :userId, {id}, {userId}, {match-guid})
   const extractPathVariables = useCallback((url: string): string[] => {
     const results: string[] = [];
     
     // Match :paramName patterns (Express-style, not inside {{ }} which are environment variables)
-    const colonMatches = url.match(/(?<!\{):([a-zA-Z_][a-zA-Z0-9_]*)/g);
+    const colonMatches = url.match(/(?<!\{):([a-zA-Z_][a-zA-Z0-9_-]*)/g);
     if (colonMatches) {
       results.push(...colonMatches.map(m => m.slice(1))); // Remove : prefix
     }
     
     // Match {paramName} patterns (OpenAPI-style, single braces only, not {{var}})
-    const braceMatches = url.match(/(?<!\{)\{([a-zA-Z_][a-zA-Z0-9_]*)\}(?!\})/g);
+    // Supports hyphens in names like {match-guid}
+    const braceMatches = url.match(/(?<!\{)\{([a-zA-Z_][a-zA-Z0-9_-]*)\}(?!\})/g);
     if (braceMatches) {
       results.push(...braceMatches.map(m => m.slice(1, -1))); // Remove { and } 
     }

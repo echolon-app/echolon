@@ -1,4 +1,4 @@
-import { Request, Response, RequestExecution, ResolvedRequest, Environment, ResponseTiming, SizeBreakdown, NetworkInfo, Collection, AuthConfig, AppSettings, CollectionEnvironment, ScriptOutput, ScriptsOutput, KeyValuePair } from '@/types';
+import { Request, Response, RequestExecution, ResolvedRequest, Environment, ResponseTiming, SizeBreakdown, NetworkInfo, Collection, AuthConfig, AppSettings, CollectionEnvironment, ScriptOutput, ScriptsOutput, KeyValuePair, ResponseCookie } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import { SAMPLE_REQUEST } from '../../shared/constants';
 import { isElectron } from '@/utils';
@@ -9,6 +9,7 @@ import {
   evaluateFunction,
   EvaluationContext,
 } from '@/services/DynamicFunctions';
+import { cookieService } from '@/services';
 
 interface HttpRequestOptions {
   method: string;
@@ -103,13 +104,14 @@ export class RequestService {
     // Then, interpolate path parameters - supports both :param and {param} formats
     if (pathParams && pathParams.length > 0) {
       // Handle :param format (Express-style)
-      result = result.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (match, paramName) => {
+      result = result.replace(/:([a-zA-Z_][a-zA-Z0-9_-]*)/g, (match, paramName) => {
         const param = pathParams.find(p => p.key === paramName);
         return param && param.value ? param.value : match;
       });
       
       // Handle {param} format (OpenAPI-style) - single braces only, not {{var}}
-      result = result.replace(/(?<!\{)\{([a-zA-Z_][a-zA-Z0-9_]*)\}(?!\})/g, (match, paramName) => {
+      // Supports hyphens in names like {match-guid}
+      result = result.replace(/(?<!\{)\{([a-zA-Z_][a-zA-Z0-9_-]*)\}(?!\})/g, (match, paramName) => {
         const param = pathParams.find(p => p.key === paramName);
         return param && param.value ? param.value : match;
       });
@@ -137,7 +139,8 @@ export class RequestService {
     request: Request, 
     environment: Environment | null, 
     collection: Collection | null,
-    collectionEnv?: CollectionEnvironment | null
+    collectionEnv?: CollectionEnvironment | null,
+    url?: string
   ): Record<string, string> {
     const headers: Record<string, string> = {};
 
@@ -195,6 +198,17 @@ export class RequestService {
     }
     // Note: AWS Signature v4 is handled in execute() after body is prepared
     // since it requires the payload hash
+
+    // Add cookies from cookie jar (only if Cookie header not already set by user)
+    if (url && !headers['Cookie'] && !headers['cookie']) {
+      const cookieHeader = cookieService.buildCookieHeader(url);
+      if (cookieHeader) {
+        headers['Cookie'] = cookieHeader;
+        console.log('[RequestService] Added Cookie header:', cookieHeader);
+      } else {
+        console.log('[RequestService] No cookies to add for URL:', url);
+      }
+    }
 
     return headers;
   }
@@ -401,8 +415,8 @@ export class RequestService {
     }
 
     try {
-      const headers = this.prepareHeaders(request, environment, collection, collectionEnvironment);
       const url = this.buildUrl(request, environment, collection, collectionEnvironment);
+      const headers = this.prepareHeaders(request, environment, collection, collectionEnvironment, url);
       const body = this.prepareBody(request, environment, headers, collectionEnvironment);
       
       // Handle AWS Signature v4 after body is prepared (needs payload hash)
@@ -496,11 +510,13 @@ export class RequestService {
         };
       }
 
+      const parsedCookies = this.parseCookies(result.headers || []);
+      
       const response: Response = {
         status: result.status || 0,
         statusText: result.statusText || '',
         headers: result.headers || [],
-        cookies: this.parseCookies(result.headers || []),
+        cookies: parsedCookies,
         body: result.body || '',
         bodyBase64: result.bodyBase64,
         size: result.size || 0,
@@ -510,6 +526,11 @@ export class RequestService {
         requestSize: result.requestSize,
         networkInfo: result.networkInfo,
       };
+
+      // Store cookies from response in cookie jar
+      parsedCookies.forEach(cookie => {
+        cookieService.addCookie(cookie, requestUrl);
+      });
 
       // Execute post-request script if defined
       if (request.scripts.post && request.scripts.post.trim()) {
@@ -658,20 +679,61 @@ export class RequestService {
     }
   }
 
-  // Parse cookies from response headers
-  private parseCookies(headers: Array<{ key: string; value: string }>): { name: string; value: string }[] {
-    const cookies: { name: string; value: string }[] = [];
+  // Parse cookies from response headers (RFC 6265)
+  private parseCookies(headers: Array<{ key: string; value: string }>): ResponseCookie[] {
+    const cookies: ResponseCookie[] = [];
     
     headers
       .filter(h => h.key.toLowerCase() === 'set-cookie')
       .forEach(h => {
-        const [nameValue] = h.value.split(';');
-        if (nameValue) {
-          const [name, value] = nameValue.trim().split('=');
-          if (name && value !== undefined) {
-            cookies.push({ name: name.trim(), value: value.trim() });
+        const cookieString = h.value;
+        const parts = cookieString.split(';').map(p => p.trim());
+        
+        if (parts.length === 0) return;
+        
+        // Parse name=value (first part)
+        const [namePart, ...valueParts] = parts[0].split('=');
+        const name = namePart?.trim();
+        const value = valueParts.join('=').trim(); // Handle values that contain '='
+        
+        if (!name || value === undefined) return;
+        
+        const cookie: ResponseCookie = {
+          name,
+          value,
+        };
+        
+        // Parse attributes (remaining parts)
+        for (let i = 1; i < parts.length; i++) {
+          const part = parts[i];
+          const lowerPart = part.toLowerCase();
+          
+          if (lowerPart.startsWith('domain=')) {
+            cookie.domain = part.substring(7).trim();
+          } else if (lowerPart.startsWith('path=')) {
+            cookie.path = part.substring(5).trim();
+          } else if (lowerPart.startsWith('expires=')) {
+            cookie.expires = part.substring(8).trim();
+          } else if (lowerPart.startsWith('max-age=')) {
+            // Convert Max-Age to Expires
+            const maxAge = parseInt(part.substring(8).trim(), 10);
+            if (!isNaN(maxAge)) {
+              const expiresDate = new Date(Date.now() + maxAge * 1000);
+              cookie.expires = expiresDate.toUTCString();
+            }
+          } else if (lowerPart === 'httponly') {
+            cookie.httpOnly = true;
+          } else if (lowerPart === 'secure') {
+            cookie.secure = true;
+          } else if (lowerPart.startsWith('samesite=')) {
+            const sameSiteValue = part.substring(9).trim().toLowerCase();
+            if (sameSiteValue === 'strict' || sameSiteValue === 'lax' || sameSiteValue === 'none') {
+              cookie.sameSite = sameSiteValue.charAt(0).toUpperCase() + sameSiteValue.slice(1) as 'Strict' | 'Lax' | 'None';
+            }
           }
         }
+        
+        cookies.push(cookie);
       });
 
     return cookies;

@@ -205,8 +205,10 @@
 }
 
 .center-panel__option-tab.active {
-  color: var(--text-primary);
+  color: var(--color-primary);
   border-bottom-color: var(--color-primary);
+  font-weight: 500;
+  border-bottom-width: 2px;
 }
 
 .center-panel__option-badge {

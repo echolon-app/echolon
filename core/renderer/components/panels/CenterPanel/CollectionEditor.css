@@ -113,8 +113,9 @@
 }
 
 .collection-editor__tab.active {
-  background-color: var(--bg-hover);
+  background-color: color-mix(in srgb, var(--color-primary) 12%, var(--bg-hover));
   color: var(--color-primary);
+  font-weight: 500;
 }
 
 .collection-editor__tab--action {
@@ -883,8 +884,10 @@
 }
 
 .reference-request-item__tab.active {
-  color: var(--text-primary);
+  color: var(--color-primary);
   border-bottom-color: var(--color-primary);
+  font-weight: 500;
+  border-bottom-width: 2px;
 }
 
 .reference-request-item__tab-badge {

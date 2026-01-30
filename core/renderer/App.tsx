@@ -3,7 +3,7 @@ import { MainLayout } from '@/components/layout';
 import { LeftPanel, CenterPanel, RightPanel, ConsolePanel, CodePanel, MockingPanel, APIReferencePanel } from '@/components/panels';
 import { SettingsModal, ImportModal, GlobalSearchModal, NewCollectionModal, NewEnvironmentModal, MoveCollectionModal, ShortcutsModal, UpdateModal, OnboardingTour } from '@/components/modals';
 import { DemoDebugPanel } from '@/components/DemoDebugPanel';
-import { useApp, useRequest, useDataLoader, useToast, useCollections } from '@/contexts';
+import { useApp, useRequest, useDataLoader, useToast, useCollections, useWorkspace } from '@/contexts';
 import { useGlobalShortcuts } from '@/hooks';
 import { isElectron } from '@/utils';
 import './styles/index.css';
@@ -46,6 +46,7 @@ export const App: React.FC = () => {
   const { isLoading: dataLoading, timings } = useDataLoader();
   const { addToast } = useToast();
   const { collections } = useCollections();
+  const { activeWorkspaceId, setActiveWorkspace } = useWorkspace();
   const startupToastShown = useRef(false);
   
   // Store collections in a ref so event handler has latest version
@@ -59,6 +60,18 @@ export const App: React.FC = () => {
   useEffect(() => {
     addCollectionTabRef.current = addCollectionTab;
   }, [addCollectionTab]);
+  
+  // Store setActiveWorkspace in a ref for event handler
+  const setActiveWorkspaceRef = useRef(setActiveWorkspace);
+  useEffect(() => {
+    setActiveWorkspaceRef.current = setActiveWorkspace;
+  }, [setActiveWorkspace]);
+  
+  // Store activeWorkspaceId in a ref for event handler
+  const activeWorkspaceIdRef = useRef(activeWorkspaceId);
+  useEffect(() => {
+    activeWorkspaceIdRef.current = activeWorkspaceId;
+  }, [activeWorkspaceId]);
 
   // Handler to copy current response to clipboard
   const handleCopyResponse = useCallback(async () => {
@@ -165,7 +178,16 @@ export const App: React.FC = () => {
           // Find the collection and open its sync tab
           const collection = collectionsRef.current.find(c => c.id === collectionId);
           if (collection) {
-            addCollectionTabRef.current(collection, 'sync');
+            // Switch to the collection's workspace if it's different from the active one
+            if (collection.workspaceId && collection.workspaceId !== activeWorkspaceIdRef.current) {
+              setActiveWorkspaceRef.current(collection.workspaceId);
+              // Wait a bit for workspace to switch, then open the collection tab
+              setTimeout(() => {
+                addCollectionTabRef.current(collection, 'sync');
+              }, 100);
+            } else {
+              addCollectionTabRef.current(collection, 'sync');
+            }
           }
         }
       });
@@ -182,7 +204,16 @@ export const App: React.FC = () => {
           window.focus();
           const collection = collectionsRef.current.find(c => c.id === collectionId);
           if (collection) {
-            addCollectionTabRef.current(collection, 'sync');
+            // Switch to the collection's workspace if it's different from the active one
+            if (collection.workspaceId && collection.workspaceId !== activeWorkspaceIdRef.current) {
+              setActiveWorkspaceRef.current(collection.workspaceId);
+              // Wait a bit for workspace to switch, then open the collection tab
+              setTimeout(() => {
+                addCollectionTabRef.current(collection, 'sync');
+              }, 100);
+            } else {
+              addCollectionTabRef.current(collection, 'sync');
+            }
           }
           notification.close();
         };

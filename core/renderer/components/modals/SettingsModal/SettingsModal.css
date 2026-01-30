@@ -52,8 +52,9 @@
 }
 
 .settings-modal__tab.active {
-  background-color: var(--color-primary-alpha);
+  background-color: color-mix(in srgb, var(--color-primary) 15%, var(--bg-tertiary));
   color: var(--color-primary);
+  font-weight: 500;
 }
 
 .settings-modal__tab-icon {

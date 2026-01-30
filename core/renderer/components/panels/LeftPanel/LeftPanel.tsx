@@ -1686,7 +1686,7 @@ export const LeftPanel: React.FC = () => {
                         </span>
                       </Tooltip>
                       <span className="environment-item__name">{env.name}</span>
-                      <span className="environment-item__count">{env.variables.length} vars</span>
+                      <span className="environment-item__count">{env.variables.length} var/s</span>
                     </span>
                   </CollapsibleListItem>
                 ))

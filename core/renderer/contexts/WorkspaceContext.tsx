@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Workspace, WorkspaceEnvironment, KeyValuePair } from '@/types';
-import { fileStorageManager, webFileSystemManager } from '@/services';
+import { fileStorageManager, webFileSystemManager, cookieService } from '@/services';
 import { echoConverter } from '@/services/EchoFileConverter';
 import { WORKSPACE_COLORS } from '../../shared/constants';
 import { useDataLoader } from './DataLoaderContext';
@@ -153,6 +153,24 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [activeWorkspaceId, isLoading, shouldSkipFileOps, getStorageManager]);
 
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId) || null;
+
+  // Initialize cookie service when active workspace changes
+  useEffect(() => {
+    if (!activeWorkspace || isLoading) return;
+    
+    const manager = getStorageManager();
+    cookieService.initialize(
+      activeWorkspace.name,
+      manager,
+      isWebMode,
+      isWebFileSystemEnabled
+    );
+    
+    // Load cookies for this workspace (async, but don't block)
+    cookieService.loadCookies().catch(err => {
+      console.error('[WorkspaceContext] Failed to load cookies:', err);
+    });
+  }, [activeWorkspace, isLoading, isWebMode, isWebFileSystemEnabled, getStorageManager]);
 
   const addWorkspace = useCallback(async (name: string, description?: string, color?: string): Promise<Workspace | null> => {
     const workspaceColor = color || WORKSPACE_COLORS[workspaces.length % WORKSPACE_COLORS.length];

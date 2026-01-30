@@ -77,8 +77,8 @@
 }
 
 .websocket-panel__tab.active {
-  background-color: var(--bg-active);
-  color: var(--text-primary);
+  background-color: color-mix(in srgb, var(--color-primary) 12%, var(--bg-active));
+  color: var(--color-primary);
   font-weight: 500;
 }
 

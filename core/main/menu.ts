@@ -192,7 +192,7 @@ export function setupMenu(mainWindow: BrowserWindow | null): void {
         {
           label: 'Report Issue',
           click: async () => {
-            await shell.openExternal('https://github.com/echolon/echolon/issues');
+            await shell.openExternal('https://github.com/echolon-app/echolon/issues');
           },
         },
         { type: 'separator' },

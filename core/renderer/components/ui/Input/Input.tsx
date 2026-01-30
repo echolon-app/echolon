@@ -410,7 +410,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
     const result: React.ReactNode[] = [];
     // Combined regex: env variables {{...}}, path params :name, or path params {name} (single braces)
     // The (?<!\{) and (?!\}) ensure we don't match {{var}} as {var}
-    const regex = /({{[^}]+}}|:([a-zA-Z_][a-zA-Z0-9_]*)|(?<!\{)\{([a-zA-Z_][a-zA-Z0-9_]*)\}(?!\}))/g;
+    // Supports hyphens in names like {match-guid}
+    const regex = /({{[^}]+}}|:([a-zA-Z_][a-zA-Z0-9_-]*)|(?<!\{)\{([a-zA-Z_][a-zA-Z0-9_-]*)\}(?!\}))/g;
     let lastIndex = 0;
     let match;
     let keyIndex = 0;

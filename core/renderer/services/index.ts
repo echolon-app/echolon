@@ -8,6 +8,7 @@ export type { GitHubUser, GitHubRepository, GitHubBranch, GitHubCommit, GitHubCo
 export { githubSyncService } from './GitHubSyncService';
 export type { GitHubSyncState, FileChange, SyncStatus, PushResult, PullResult } from './GitHubSyncService';
 export { requestService } from './RequestService';
+export { cookieService } from './CookieService';
 export { swaggerImporter } from './SwaggerImporter';
 export { specImporter, SpecImporter, OpenAPIAdapter, PostmanAdapter } from './SpecImporter';
 export type { SpecImportOptions, SpecImportResult, SpecImporterAdapter, SpecInfo, ServerInfo } from './SpecImporter';

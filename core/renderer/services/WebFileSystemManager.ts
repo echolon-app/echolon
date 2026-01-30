@@ -968,6 +968,56 @@ class WebFileSystemManager {
     return this.deleteDirectory(workspaceHandle, 'mocking');
   }
 
+  // ==================== Workspace Data File Operations ====================
+  // Workspace-specific data files for state like sync states, pending changes, cookies, etc.
+
+  /**
+   * Get the data directory handle for a workspace
+   */
+  private async getDataHandle(workspaceName: string): Promise<FileSystemDirectoryHandle | null> {
+    const workspaceHandle = await this.getWorkspaceHandle(workspaceName);
+    if (!workspaceHandle) return null;
+
+    try {
+      return await workspaceHandle.getDirectoryHandle('data', { create: true });
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Read a workspace-specific data file
+   */
+  async readWorkspaceDataFile<T>(workspaceName: string, filename: string): Promise<T | null> {
+    const dataHandle = await this.getDataHandle(workspaceName);
+    if (!dataHandle) return null;
+
+    const safeFilename = this.sanitizeFilename(filename);
+    return this.readJsonFileFromDir<T>(dataHandle, `${safeFilename}.json`);
+  }
+
+  /**
+   * Write a workspace-specific data file
+   */
+  async writeWorkspaceDataFile<T>(workspaceName: string, filename: string, data: T): Promise<boolean> {
+    const dataHandle = await this.getDataHandle(workspaceName);
+    if (!dataHandle) return false;
+
+    const safeFilename = this.sanitizeFilename(filename);
+    return this.writeJsonFileToDir(dataHandle, `${safeFilename}.json`, data);
+  }
+
+  /**
+   * Delete a workspace-specific data file
+   */
+  async deleteWorkspaceDataFile(workspaceName: string, filename: string): Promise<boolean> {
+    const dataHandle = await this.getDataHandle(workspaceName);
+    if (!dataHandle) return false;
+
+    const safeFilename = this.sanitizeFilename(filename);
+    return this.deleteFileFromDir(dataHandle, `${safeFilename}.json`);
+  }
+
   // ==================== Utilities ====================
 
   /**

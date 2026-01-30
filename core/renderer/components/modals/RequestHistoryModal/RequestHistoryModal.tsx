@@ -423,7 +423,15 @@ export const RequestHistoryModal: React.FC<RequestHistoryModalProps> = ({
                       <div className="request-history-modal__item-status">
                         {entry.response ? (
                           <span className={`request-history-modal__status-badge request-history-modal__status-badge--${getStatusClass(entry.response.status)}`}>
-                            {entry.response.status}
+                            <a 
+                              href={`https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/${entry.response.status}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="request-history-modal__status-link"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {entry.response.status}
+                            </a>
                           </span>
                         ) : (
                           <span className="request-history-modal__status-badge request-history-modal__status-badge--error">
@@ -467,7 +475,15 @@ export const RequestHistoryModal: React.FC<RequestHistoryModalProps> = ({
                         Response
                         {selectedEntry.response && (
                           <span className={`request-history-modal__tab-badge request-history-modal__tab-badge--${getStatusClass(selectedEntry.response.status)}`}>
-                            {selectedEntry.response.status}
+                            <a 
+                              href={`https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/${selectedEntry.response.status}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="request-history-modal__status-link"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {selectedEntry.response.status}
+                            </a>
                           </span>
                         )}
                       </button>
@@ -505,7 +521,16 @@ export const RequestHistoryModal: React.FC<RequestHistoryModalProps> = ({
                                 ) : (
                                   <XIcon />
                                 )}
-                                {selectedEntry.response.status} {selectedEntry.response.statusText}
+                                <a 
+                                  href={`https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/${selectedEntry.response.status}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="request-history-modal__status-link"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {selectedEntry.response.status}
+                                </a>
+                                {' '}{selectedEntry.response.statusText}
                               </span>
                               <span className="request-history-modal__response-info">
                                 {formatDuration(selectedEntry.duration)} • {(selectedEntry.response.size / 1024).toFixed(2)} KB

@@ -442,7 +442,7 @@ export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const newWebSocket: WebSocketConnection = websocket || {
       id: uuidv4(),
       name: 'New WebSocket',
-      url: 'wss://api.echolon.app/ws',
+      url: 'wss://sample-ws-api.echolon.app',
       status: 'disconnected',
       headers: [],
       queryParams: [],

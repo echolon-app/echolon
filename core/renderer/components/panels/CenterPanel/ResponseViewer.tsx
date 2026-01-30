@@ -9,7 +9,8 @@ import {
   HelpIcon, CloseIcon, HorizontalLayoutIcon, VerticalLayoutIcon, ErrorIcon, EyeIcon 
 } from '@/components/ui/icons';
 import { RequestExecution, ScriptOutput } from '@/types';
-import { ContextMenu, useContextMenu, Tooltip, Dropdown } from '@/components/ui';
+import { ContextMenu, useContextMenu, Tooltip, Dropdown, Button } from '@/components/ui';
+import { cookieService } from '@/services';
 import { ResponseTimeTooltip } from './ResponseTimeTooltip';
 import { ResponseSizeTooltip } from './ResponseSizeTooltip';
 import { NetworkInfoTooltip } from './NetworkInfoTooltip';
@@ -402,9 +403,17 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
   const [showSearch, setShowSearch] = useState(false);
   const [filterError, setFilterError] = useState<string | null>(null);
   const filterInputRef = useRef<HTMLInputElement>(null);
+  const [headersSearchQuery, setHeadersSearchQuery] = useState('');
+  const [showHeadersSearch, setShowHeadersSearch] = useState(false);
+  const [headersSearchMatchIndex, setHeadersSearchMatchIndex] = useState(0);
+  const [headersSearchMatches, setHeadersSearchMatches] = useState<Array<{ index: number; type: 'key' | 'value' }>>([]);
+  const headersSearchInputRef = useRef<HTMLInputElement>(null);
+  const headersContainerRef = useRef<HTMLDivElement>(null);
   const [bodyViewMode, setBodyViewMode] = useState<BodyViewMode>('response');
   const [contentDisplayMode, setContentDisplayMode] = useState<ContentDisplayMode>('auto');
   const [showHtmlPreview, setShowHtmlPreview] = useState(false);
+  const [cookieSearchQuery, setCookieSearchQuery] = useState('');
+  const [showCookieSearch, setShowCookieSearch] = useState(false);
   
   // Track the previous execution to detect new responses
   const prevExecutionRef = useRef<RequestExecution | null>(null);
@@ -473,6 +482,18 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
     }
   }, [activeTab, editorHeight]);
 
+  const response = execution?.response;
+
+  // Clear headers search when switching away from headers tab
+  useEffect(() => {
+    if (activeTab !== 'headers') {
+      setShowHeadersSearch(false);
+      setHeadersSearchQuery('');
+      setHeadersSearchMatchIndex(0);
+      setHeadersSearchMatches([]);
+    }
+  }, [activeTab]);
+
   // Setup editor with search functionality (CMD+F / Ctrl+F)
   const handleEditorLoad = useCallback((editor: any) => {
     // Override find command to track search state and work with read-only editors
@@ -515,12 +536,25 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
       setTimeout(() => clearInterval(checkInterval), 5000);
     }
   }, []);
-  
+
   // Handle CMD+F at the container level to trigger search even when editor doesn't have focus
   const handleContainerKeyDown = useCallback((e: React.KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
       e.preventDefault();
       e.stopPropagation();
+      
+      // If headers tab is active, show headers search
+      if (activeTab === 'headers' && response) {
+        setShowHeadersSearch(true);
+        setHeadersSearchQuery('');
+        setHeadersSearchMatchIndex(0);
+        setTimeout(() => {
+          headersSearchInputRef.current?.focus();
+        }, 0);
+        return;
+      }
+      
+      // Otherwise, use editor search
       const editor = editorRef.current?.editor;
       if (editor) {
         editor.focus();
@@ -541,9 +575,15 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
         setShowSearch(true);
       }
     }
-  }, []);
-
-  const response = execution?.response;
+    
+    // Handle ESC to close headers search
+    if (e.key === 'Escape' && activeTab === 'headers' && showHeadersSearch) {
+      setShowHeadersSearch(false);
+      setHeadersSearchQuery('');
+      setHeadersSearchMatchIndex(0);
+      setHeadersSearchMatches([]);
+    }
+  }, [activeTab, response, showHeadersSearch]);
 
   const formatBytes = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
@@ -661,6 +701,116 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
     setFilterError(null);
     setShowHtmlPreview(false);
   }, [response?.body]);
+
+  // Search headers when query changes
+  useEffect(() => {
+    if (!headersSearchQuery.trim() || !response) {
+      setHeadersSearchMatches([]);
+      setHeadersSearchMatchIndex(0);
+      return;
+    }
+
+    const query = headersSearchQuery.toLowerCase();
+    const matches: Array<{ index: number; type: 'key' | 'value' }> = [];
+
+    response.headers.forEach((header, index) => {
+      if (header.key.toLowerCase().includes(query)) {
+        matches.push({ index, type: 'key' });
+      }
+      if (header.value.toLowerCase().includes(query)) {
+        matches.push({ index, type: 'value' });
+      }
+    });
+
+    setHeadersSearchMatches(matches);
+    setHeadersSearchMatchIndex(matches.length > 0 ? 1 : 0);
+
+    // Scroll to first match
+    if (matches.length > 0 && headersContainerRef.current) {
+      const firstMatchRow = headersContainerRef.current.querySelector(`tr[data-header-index="${matches[0].index}"]`);
+      if (firstMatchRow) {
+        firstMatchRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+  }, [headersSearchQuery, response]);
+
+  // Navigate to next/previous match
+  const handleHeadersSearchNavigate = useCallback((direction: 'next' | 'prev') => {
+    if (headersSearchMatches.length === 0) return;
+
+    let newIndex = headersSearchMatchIndex;
+    if (direction === 'next') {
+      newIndex = (newIndex % headersSearchMatches.length) + 1;
+    } else {
+      newIndex = newIndex <= 1 ? headersSearchMatches.length : newIndex - 1;
+    }
+
+    setHeadersSearchMatchIndex(newIndex);
+    const match = headersSearchMatches[newIndex - 1];
+    if (match && headersContainerRef.current) {
+      const row = headersContainerRef.current.querySelector(`tr[data-header-index="${match.index}"]`);
+      if (row) {
+        row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+  }, [headersSearchMatches, headersSearchMatchIndex]);
+
+  // Global keyboard listener for CMD+F, CMD+G, and SHIFT+CMD+G when headers tab is active
+  useEffect(() => {
+    if (activeTab !== 'headers' || !response) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowHeadersSearch(true);
+        setHeadersSearchQuery('');
+        setHeadersSearchMatchIndex(0);
+        setTimeout(() => {
+          headersSearchInputRef.current?.focus();
+        }, 0);
+      } else if ((e.metaKey || e.ctrlKey) && e.key === 'g' && showHeadersSearch) {
+        // CMD+G or Ctrl+G: navigate to next match
+        // SHIFT+CMD+G or SHIFT+Ctrl+G: navigate to previous match
+        e.preventDefault();
+        e.stopPropagation();
+        if (headersSearchMatches.length > 0) {
+          if (e.shiftKey) {
+            handleHeadersSearchNavigate('prev');
+          } else {
+            handleHeadersSearchNavigate('next');
+          }
+        }
+      } else if (e.key === 'Escape' && showHeadersSearch) {
+        e.preventDefault();
+        setShowHeadersSearch(false);
+        setHeadersSearchQuery('');
+        setHeadersSearchMatchIndex(0);
+        setHeadersSearchMatches([]);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeTab, response, showHeadersSearch, headersSearchMatches, handleHeadersSearchNavigate]);
+
+  // Handle keyboard shortcuts in headers search
+  const handleHeadersSearchKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        handleHeadersSearchNavigate('prev');
+      } else {
+        handleHeadersSearchNavigate('next');
+      }
+    } else if (e.key === 'Escape') {
+      setHeadersSearchQuery('');
+      setHeadersSearchMatchIndex(0);
+      setHeadersSearchMatches([]);
+    }
+  }, [handleHeadersSearchNavigate]);
 
   const handleCopyToClipboard = useCallback(async () => {
     let content: string | undefined;
@@ -961,7 +1111,7 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
   }
 
   return (
-    <div className="response-viewer" data-onboarding="response">
+    <div className="response-viewer" data-onboarding="response" onKeyDown={handleContainerKeyDown} tabIndex={-1}>
       <div className="response-viewer__header">
         <div className="response-viewer__tabs">
           <button
@@ -1018,7 +1168,16 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
           {response ? (
             <>
           <span className={`response-viewer__status response-viewer__status--${getStatusClass(response.status)}`}>
-            {response.status} {response.statusText}
+            <a 
+              href={`https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/${response.status}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="response-viewer__status-link"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {response.status}
+            </a>
+            {' '}{response.statusText}
           </span>
           {response.timing ? (
             <Tooltip 
@@ -1259,28 +1418,206 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
             {response.cookies.length === 0 ? (
               <p className="response-viewer__empty-message">No cookies</p>
             ) : (
-              <table className="response-viewer__table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {response.cookies.map((cookie, index) => (
-                    <tr key={index}>
-                      <td>{cookie.name}</td>
-                      <td>{cookie.value}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <>
+                <div className="response-viewer__cookies-toolbar">
+                  <div className="response-viewer__cookies-search">
+                    <button
+                      className={`response-viewer__cookies-search-toggle ${showCookieSearch ? 'active' : ''}`}
+                      onClick={() => {
+                        setShowCookieSearch(!showCookieSearch);
+                        if (!showCookieSearch) {
+                          setTimeout(() => {
+                            const input = document.querySelector('.response-viewer__cookies-search-input') as HTMLInputElement;
+                            input?.focus();
+                          }, 0);
+                        } else {
+                          setCookieSearchQuery('');
+                        }
+                      }}
+                      title="Search cookies"
+                    >
+                      <SearchIcon />
+                    </button>
+                    {showCookieSearch && (
+                      <input
+                        type="text"
+                        className="response-viewer__cookies-search-input"
+                        placeholder="Search by name, domain, or path..."
+                        value={cookieSearchQuery}
+                        onChange={(e) => setCookieSearchQuery(e.target.value)}
+                      />
+                    )}
+                  </div>
+                  <div className="response-viewer__cookies-actions">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={async () => {
+                        if (confirm('Clear all cookies from cookie jar?')) {
+                          cookieService.clearCookies();
+                          // Refresh the view by triggering a re-render
+                          setCookieSearchQuery('');
+                        }
+                      }}
+                    >
+                      Clear All
+                    </Button>
+                  </div>
+                </div>
+                <div className="response-viewer__cookies-table-wrapper">
+                  <table className="response-viewer__table response-viewer__table--cookies">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Value</th>
+                        <th>Domain</th>
+                        <th>Path</th>
+                        <th>Expires</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {response.cookies
+                        .filter(cookie => {
+                          if (!cookieSearchQuery) return true;
+                          const query = cookieSearchQuery.toLowerCase();
+                          return (
+                            cookie.name.toLowerCase().includes(query) ||
+                            cookie.value.toLowerCase().includes(query) ||
+                            cookie.domain?.toLowerCase().includes(query) ||
+                            cookie.path?.toLowerCase().includes(query)
+                          );
+                        })
+                        .map((cookie, index) => {
+                          const isExpired = cookie.expires ? new Date(cookie.expires).getTime() < Date.now() : false;
+                          const expiresSoon = cookie.expires ? {
+                            expires: new Date(cookie.expires).getTime(),
+                            soon: new Date(cookie.expires).getTime() - Date.now() < 24 * 60 * 60 * 1000 // 24 hours
+                          } : null;
+                          
+                          return (
+                            <tr key={index} className={isExpired ? 'expired' : ''}>
+                              <td className="response-viewer__cookie-name">{cookie.name}</td>
+                              <td className="response-viewer__cookie-value">
+                                <span className="response-viewer__cookie-value-text">{cookie.value}</span>
+                              </td>
+                              <td className="response-viewer__cookie-domain">{cookie.domain || '-'}</td>
+                              <td className="response-viewer__cookie-path">{cookie.path || '/'}</td>
+                              <td className="response-viewer__cookie-expires">
+                                {cookie.expires ? (
+                                  <span className={isExpired ? 'expired' : expiresSoon?.soon ? 'expires-soon' : ''}>
+                                    {new Date(cookie.expires).toLocaleString()}
+                                  </span>
+                                ) : (
+                                  <span className="session-cookie">Session</span>
+                                )}
+                              </td>
+                              <td className="response-viewer__cookie-actions">
+                                <div className="response-viewer__cookie-actions-buttons">
+                                  <button
+                                    className="response-viewer__cookie-copy"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(cookie.value);
+                                      setCopied(true);
+                                      setTimeout(() => setCopied(false), 2000);
+                                    }}
+                                    title="Copy cookie value"
+                                  >
+                                    {copied ? <CheckIcon /> : <CopyIcon />}
+                                  </button>
+                                  <button
+                                    className="response-viewer__cookie-delete"
+                                    onClick={() => {
+                                      // Get domain and path from cookie or derive from request URL
+                                      let cookieDomain = cookie.domain;
+                                      let cookiePath = cookie.path || '/';
+                                      
+                                      // If domain is missing, try to get it from the request URL
+                                      if (!cookieDomain && execution?.resolvedRequest?.url) {
+                                        try {
+                                          const url = new URL(execution.resolvedRequest.url);
+                                          cookieDomain = url.hostname;
+                                        } catch {
+                                          // Invalid URL, skip deletion
+                                        }
+                                      }
+                                      
+                                      if (cookieDomain && confirm(`Delete cookie "${cookie.name}"?`)) {
+                                        cookieService.deleteCookie(cookie.name, cookieDomain, cookiePath);
+                                        // Refresh by clearing search
+                                        setCookieSearchQuery('');
+                                      }
+                                    }}
+                                    title="Delete cookie from cookie jar"
+                                    disabled={!cookie.domain && !execution?.resolvedRequest?.url}
+                                  >
+                                    <CloseIcon />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         )}
 
         {activeTab === 'headers' && response && (
-          <div className="response-viewer__headers">
+          <div className="response-viewer__headers" ref={headersContainerRef}>
+            {showHeadersSearch && (
+              <div className="response-viewer__headers-search">
+                <input
+                  ref={headersSearchInputRef}
+                  type="text"
+                  className="response-viewer__headers-search-input"
+                  placeholder="Search headers..."
+                  value={headersSearchQuery}
+                  onChange={(e) => setHeadersSearchQuery(e.target.value)}
+                  onKeyDown={handleHeadersSearchKeyDown}
+                />
+                <div className="response-viewer__headers-search-info">
+                  {headersSearchMatches.length > 0 ? (
+                    <>
+                      <span className="response-viewer__headers-search-count">
+                        {headersSearchMatchIndex} / {headersSearchMatches.length}
+                      </span>
+                      <button
+                        className="response-viewer__headers-search-btn"
+                        onClick={() => handleHeadersSearchNavigate('prev')}
+                        title="Previous (Shift+Enter)"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        className="response-viewer__headers-search-btn"
+                        onClick={() => handleHeadersSearchNavigate('next')}
+                        title="Next (Enter)"
+                      >
+                        ↓
+                      </button>
+                    </>
+                  ) : (
+                    <span className="response-viewer__headers-search-no-matches">No matches</span>
+                  )}
+                </div>
+                <button
+                  className="response-viewer__headers-search-close"
+                  onClick={() => {
+                    setShowHeadersSearch(false);
+                    setHeadersSearchQuery('');
+                    setHeadersSearchMatchIndex(0);
+                    setHeadersSearchMatches([]);
+                  }}
+                  title="Close (Esc)"
+                >
+                  ×
+                </button>
+              </div>
+            )}
             <table className="response-viewer__table">
               <thead>
                 <tr>
@@ -1289,12 +1626,41 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
                 </tr>
               </thead>
               <tbody>
-                {response.headers.map((header, index) => (
-                  <tr key={index}>
-                    <td>{header.key}</td>
-                    <td>{header.value}</td>
-                  </tr>
-                ))}
+                {response.headers.map((header, index) => {
+                  const isMatched = headersSearchMatches.some(m => m.index === index);
+                  const currentMatch = headersSearchMatches[headersSearchMatchIndex - 1];
+                  const isCurrentMatch = currentMatch?.index === index;
+                  const query = headersSearchQuery.toLowerCase();
+                  
+                  const highlightText = (text: string, type: 'key' | 'value') => {
+                    if (!query || !isMatched) return text;
+                    const isMatchType = headersSearchMatches.some(m => m.index === index && m.type === type);
+                    if (!isMatchType) return text;
+                    
+                    const parts = text.split(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'));
+                    return parts.map((part, i) => {
+                      const isHighlight = part.toLowerCase() === query;
+                      return isHighlight ? (
+                        <mark key={i} className={`response-viewer__headers-match ${isCurrentMatch ? 'response-viewer__headers-match--current' : ''}`}>
+                          {part}
+                        </mark>
+                      ) : (
+                        <span key={i}>{part}</span>
+                      );
+                    });
+                  };
+
+                  return (
+                    <tr
+                      key={index}
+                      data-header-index={index}
+                      className={`${isMatched ? 'response-viewer__headers-row--matched' : ''} ${isCurrentMatch ? 'response-viewer__headers-row--current' : ''}`}
+                    >
+                      <td>{highlightText(header.key, 'key')}</td>
+                      <td>{highlightText(header.value, 'value')}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
