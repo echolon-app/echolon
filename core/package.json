@@ -8,7 +8,7 @@
   "email": "support@echolon.app",
   "license": "MIT",
   "scripts": {
-    "dev": "ENV=dev vite",
+    "dev": "AIRPLAY_DEBUG=1 ENV=dev vite",
     "build": "ENV=prod npm run build:vite && npm run build:electron",
     "build:vite": "ENV=prod rm -rf dist && vite build",
     "analyze": "ANALYZE=true ENV=prod vite build",
