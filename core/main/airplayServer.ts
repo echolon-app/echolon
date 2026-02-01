@@ -188,7 +188,7 @@ class AirPlayServer {
       if (bonjour) {
         const bonjourInstance = bonjour.default();
         this.bonjourService = bonjourInstance.publish({
-          name: 'Echolon V4',
+          name: 'Echolon V5',
           type: 'airplay',
           port: this.port,
           txt: {
@@ -219,8 +219,15 @@ class AirPlayServer {
   private handleRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
     const url = req.url || '/';
     const method = req.method || 'GET';
+    
+    // Check if this is an RTSP request (RTSP/1.0 in first line)
+    // Node.js HTTP parser doesn't expose the protocol version directly,
+    // but we can detect RTSP by checking the raw request or headers
+    const isRTSP = req.headers['x-apple-qr'] !== undefined || 
+                   (req as any).httpVersion === 'RTSP/1.0' ||
+                   url.includes('RTSP/1.0');
 
-    console.log(`[AirPlay] ${method} ${url}`, {
+    console.log(`[AirPlay] ${method} ${url} ${isRTSP ? '(RTSP)' : '(HTTP)'}`, {
       headers: req.headers,
     });
 
@@ -246,8 +253,8 @@ class AirPlayServer {
       return;
     }
 
-    // Add CORS headers to all responses
-    const corsHeaders = {
+    // Add CORS headers to all responses (for HTTP, not RTSP)
+    const corsHeaders = isRTSP ? {} : {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, User-Agent, X-Apple-*',
@@ -257,13 +264,26 @@ class AirPlayServer {
     // Log all requests to see what iPhone is trying
     console.log(`[AirPlay] Routing ${method} ${url} - checking handlers...`);
     
-    if (url === '/server-info' || url === '/info') {
-      this.handleServerInfo(req, res, corsHeaders).catch((err) => {
+    // Parse URL to extract path and query params
+    // RTSP requests may have format: "/info?txtAirPlay&txtRAOP RTSP/1.0"
+    const cleanUrl = url.split(' ')[0]; // Remove protocol version if present
+    let pathname = cleanUrl.split('?')[0];
+    const queryString = cleanUrl.includes('?') ? cleanUrl.split('?')[1] : '';
+    const searchParams = new URLSearchParams(queryString);
+    
+    if (pathname === '/server-info' || pathname === '/info') {
+      this.handleServerInfo(req, res, corsHeaders, isRTSP, searchParams).catch((err) => {
         console.error('[AirPlay] Error handling server-info:', err);
-        res.writeHead(500, {
-          'Content-Type': 'text/plain',
-          ...corsHeaders,
-        });
+        if (isRTSP) {
+          res.writeHead(500, {
+            'Content-Type': 'text/plain',
+          });
+        } else {
+          res.writeHead(500, {
+            'Content-Type': 'text/plain',
+            ...corsHeaders,
+          });
+        }
         res.end('Internal Server Error');
       });
     } else if (url.startsWith('/pair-setup')) {
@@ -296,8 +316,14 @@ class AirPlayServer {
     }
   }
 
-  private async handleServerInfo(req: http.IncomingMessage, res: http.ServerResponse, corsHeaders: Record<string, string>): Promise<void> {
-    console.log('[AirPlay] Handling server-info request');
+  private async handleServerInfo(
+    req: http.IncomingMessage, 
+    res: http.ServerResponse, 
+    corsHeaders: Record<string, string>,
+    isRTSP: boolean = false,
+    searchParams?: URLSearchParams
+  ): Promise<void> {
+    console.log('[AirPlay] Handling server-info request', { isRTSP, hasSearchParams: !!searchParams });
     
     // Read request body if present (iPhone sends binary PLIST in body)
     let requestData: any = null;
@@ -328,9 +354,12 @@ class AirPlayServer {
     const deviceId = this.getDeviceId();
     
     // Check if iPhone is requesting specific qualifiers (txtAirPlay or txtRAOP)
-    const wantsTxtAirPlay = requestData?.qualifier?.includes('txtAirPlay') || 
+    // Check query params first (RTSP requests use query params), then request body, then URL
+    const wantsTxtAirPlay = searchParams?.has('txtAirPlay') ||
+                            requestData?.qualifier?.includes('txtAirPlay') || 
                             req.url?.includes('txtAirPlay');
-    const wantsTxtRAOP = requestData?.qualifier?.includes('txtRAOP') || 
+    const wantsTxtRAOP = searchParams?.has('txtRAOP') ||
+                         requestData?.qualifier?.includes('txtRAOP') || 
                          req.url?.includes('txtRAOP');
     
     // UxPlay's logic: if content_type exists AND it's a txtAirPlay-only request, return early
@@ -405,7 +434,7 @@ class AirPlayServer {
       protocolVersion: '1.1',
       sourceVersion: '220.68',
       statusFlags: 68, // UxPlay uses 68, not 4! (68 = ready, 4 might mean something else)
-      name: 'Echolon V2', // Server name
+      name: 'Echolon V5', // Server name
       pi: 'B8E5AA8E-58B1-4136-A5C6-2650298C23D2', // Pairing identifier (from UxPlay)
       vv: 2, // Version (UxPlay uses AIRPLAY_VV which is "2")
       keepAliveLowPower: 1, // UxPlay includes this
@@ -530,15 +559,31 @@ class AirPlayServer {
     const responseHeaders: Record<string, string> = {
       'Content-Type': responseContentType,
       'Content-Length': responseBody.length.toString(),
-      'Server': 'AirPlay/220.68',
+      'Server': isRTSP ? 'AirTunes/860.7.1' : 'AirPlay/220.68', // Match captured response for RTSP
       'CSeq': cseq,
       'X-Apple-ProtocolVersion': '1',
     };
+    
+    // Add RTSP-specific headers from captured response
+    if (isRTSP) {
+      responseHeaders['Date'] = new Date().toUTCString();
+      responseHeaders['X-Apple-ProcessingTime'] = '12'; // Processing time in ms
+      responseHeaders['X-Apple-RequestReceivedTimestamp'] = Date.now().toString();
+    }
 
     console.log('[AirPlay] Response headers:', responseHeaders);
     console.log('[AirPlay] Response body preview (first 100 bytes hex):', responseBody.toString('hex').substring(0, 100));
     
-    // Use HTTP/1.1 as required by AirPlay spec
+    // For RTSP, we need to write the status line manually
+    // Node.js HTTP doesn't support RTSP directly, but we can write the status line
+    if (isRTSP) {
+      // Write RTSP status line: RTSP/1.0 200 OK
+      res.statusCode = 200;
+      res.statusMessage = 'OK';
+      // Note: Node.js HTTP will write "HTTP/1.1 200 OK" by default
+      // For true RTSP support, we'd need raw socket access, but this should work for most clients
+    }
+    
     res.writeHead(200, responseHeaders);
     res.end(responseBody);
     
