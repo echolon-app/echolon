@@ -4,7 +4,12 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
 const headings = [
   { depth: 2, slug: 'overview', text: 'Overview' },
   { depth: 2, slug: 'configuration', text: 'Configuration' },
-  { depth: 2, slug: 'cors-proxy', text: 'CORS Proxy' },
+  { depth: 3, slug: 'proxy-profiles', text: 'Proxy Profiles' },
+  { depth: 3, slug: 'echolon-proxy', text: 'Echolon Proxy' },
+  { depth: 3, slug: 'custom-proxy', text: 'Custom Proxy' },
+  { depth: 2, slug: 'cors-proxy', text: 'How It Works' },
+  { depth: 3, slug: 'echolon-proxy-format', text: 'Echolon Proxy Format' },
+  { depth: 3, slug: 'custom-proxy-formats', text: 'Custom Proxy Formats' },
 ];
 ---
 
@@ -17,9 +22,83 @@ const headings = [
     
     <h2 id="overview">Overview</h2>
     <p>
-      Route your requests through a proxy server for debugging, testing, or bypassing network restrictions.
+      Proxy settings allow you to route your API requests through a proxy server. This is useful for:
+    </p>
+    <ul class="list">
+      <li><strong>Web App:</strong> Bypass CORS restrictions that block browser requests</li>
+      <li><strong>Desktop App:</strong> Route traffic through a specific server for debugging or compliance</li>
+      <li><strong>Both:</strong> Access APIs that are only reachable from the proxy server's network</li>
+    </ul>
+    
+    <h2 id="configuration">Configuration</h2>
+    <p>
+      To configure proxy settings, open the Settings modal (<code>Ctrl/Cmd + ,</code>) and navigate to the <strong>Request Proxy</strong> section.
     </p>
     
+    <h3 id="proxy-profiles">Proxy Profiles</h3>
+    <p>
+      Echolon uses proxy profiles to manage different proxy configurations. You can select from:
+    </p>
+    <ul class="list">
+      <li><strong>No Proxy:</strong> Send requests directly without proxying (default)</li>
+      <li><strong>Echolon Proxy:</strong> Use the built-in Echolon proxy service</li>
+      <li><strong>Custom Proxy:</strong> Add your own proxy server</li>
+    </ul>
+    
+    <h3 id="echolon-proxy">Echolon Proxy</h3>
+    <p>
+      The <strong>Echolon Proxy</strong> is a built-in proxy service provided by Echolon at <code>https://proxy.echolon.app</code>. It's pre-configured and ready to use.
+    </p>
+    <p>
+      This proxy is particularly useful for the web app to bypass CORS restrictions. When enabled, your requests are automatically routed through the Echolon proxy server.
+    </p>
+    
+    <h3 id="custom-proxy">Custom Proxy</h3>
+    <p>
+      You can add custom proxy profiles for your own proxy servers. To add a custom proxy:
+    </p>
+    <ol class="list numbered">
+      <li>Click the <strong>+</strong> button next to the proxy profile dropdown</li>
+      <li>Enter a name for your proxy profile (e.g., "Company Proxy")</li>
+      <li>Enter the proxy URL (e.g., <code>https://proxy.example.com</code>)</li>
+      <li>Click <strong>Create Profile</strong></li>
+    </ol>
+    <p>
+      Once created, you can select your custom proxy from the dropdown. Custom proxy URLs can be edited or deleted at any time.
+    </p>
+    
+    <h2 id="cors-proxy">How It Works</h2>
+    <p>
+      When a proxy is enabled, Echolon transforms your request URLs before sending them. The transformation depends on the proxy type:
+    </p>
+    
+    <h3 id="echolon-proxy-format">Echolon Proxy Format</h3>
+    <p>
+      The Echolon proxy uses a path-based format:
+    </p>
+    <pre><code>proxy.echolon.app/{'{scheme}'}/{'{host}'}/{'{path}'}</code></pre>
+    <p>
+      For example, a request to:
+    </p>
+    <pre><code>https://api.github.com/repos/octocat/hello-world</code></pre>
+    <p>
+      Would be transformed to:
+    </p>
+    <pre><code>https://proxy.echolon.app/https/api.github.com/repos/octocat/hello-world</code></pre>
+    
+    <h3 id="custom-proxy-formats">Custom Proxy Formats</h3>
+    <p>
+      Custom proxies support multiple URL formats:
+    </p>
+    <ul class="list">
+      <li><strong>Query parameter format:</strong> <code>https://proxy.com/?url=</code> — The target URL is appended as a query parameter</li>
+      <li><strong>Simple prefix format:</strong> <code>https://proxy.com/</code> — The target URL is appended directly</li>
+      <li><strong>Echolon format:</strong> Custom proxies that use the same path-based format as Echolon proxy</li>
+    </ul>
+    
+    <p>
+      Echolon automatically detects the proxy format and applies the appropriate transformation.
+    </p>
   </div>
 </DocsLayout>
 
@@ -28,9 +107,15 @@ const headings = [
   .prose h1 { font-size: var(--font-size-4xl); color: var(--color-text); margin-bottom: var(--spacing-4); }
   .prose h2 { font-size: var(--font-size-2xl); color: var(--color-text); margin-top: var(--spacing-10); margin-bottom: var(--spacing-4); padding-top: var(--spacing-4); border-top: 1px solid var(--color-border-subtle); }
   .prose h2:first-of-type { border-top: none; padding-top: 0; }
+  .prose h3 { font-size: var(--font-size-xl); color: var(--color-text); margin-top: var(--spacing-6); margin-bottom: var(--spacing-3); }
   .prose p { margin-bottom: var(--spacing-4); }
   .prose .lead { font-size: var(--font-size-lg); margin-bottom: var(--spacing-6); }
   .prose .list { margin: var(--spacing-4) 0; padding-left: var(--spacing-6); }
   .prose .list li { margin-bottom: var(--spacing-2); list-style: disc; }
+  .prose .list.numbered li { list-style: decimal; }
+  .prose code { padding: var(--spacing-1) var(--spacing-2); font-size: var(--font-size-sm); background: var(--color-bg-tertiary); border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
+  .prose pre { margin: var(--spacing-4) 0; padding: var(--spacing-4); background: var(--color-bg-tertiary); border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow-x: auto; }
+  .prose pre code { padding: 0; background: none; border: none; font-size: var(--font-size-sm); }
+  .prose strong { color: var(--color-text); font-weight: 600; }
 </style>
 

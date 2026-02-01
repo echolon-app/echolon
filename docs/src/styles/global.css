@@ -302,3 +302,74 @@ input, textarea, select {
   .hide-desktop { display: none !important; }
 }
 
+
+/* =====================================================
+   MOBILE RESPONSIVE FIXES FOR DOCS
+   ===================================================== */
+
+@media (max-width: 767px) {
+  /* Ensure prose content wraps properly */
+  .prose {
+    overflow-x: hidden;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+  
+  /* Make code blocks scrollable instead of overflowing */
+  .prose pre {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    word-wrap: normal;
+    white-space: pre;
+  }
+  
+  /* Allow inline code to break if needed */
+  .prose code {
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+  
+  /* Make tables scrollable on mobile */
+  .prose table,
+  .config-table,
+  .comparison-table,
+  .function-table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Remove white-space: nowrap from table cells on mobile */
+  .prose table td:first-child,
+  .config-table td:first-child,
+  .comparison-table td:first-child,
+  .function-table td:first-child {
+    white-space: normal;
+  }
+  
+  /* Ensure SVG diagrams scale properly */
+  .hierarchy-diagram svg {
+    max-width: 100%;
+    height: auto;
+  }
+  
+  /* Reduce font sizes on mobile for better fit */
+  .prose h1 {
+    font-size: var(--font-size-3xl);
+  }
+  
+  .prose h2 {
+    font-size: var(--font-size-xl);
+  }
+  
+  .prose h3 {
+    font-size: var(--font-size-lg);
+  }
+  
+  /* Ensure URLs break properly */
+  .prose a {
+    word-break: break-all;
+    overflow-wrap: break-word;
+  }
+}
