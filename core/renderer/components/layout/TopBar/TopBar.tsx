@@ -3,7 +3,7 @@ import { Button, Tooltip, AutoComplete, AutoCompleteOption } from '@/components/
 import { 
   ChevronLeftIcon, ChevronRightIcon, SearchIcon, SettingsIcon, DevToolsIcon,
   ChevronDownIcon, CheckIcon, PlusIcon, EditIcon, TrashIcon, GlobeIcon,
-  TabsIcon, ListIcon, GitHubIcon, ArrowUpIcon, ArrowDownIcon, RefreshIcon, GitBranchIcon
+  TabsIcon, ListIcon, GitHubIcon, ArrowUpIcon, ArrowDownIcon, RefreshIcon, GitBranchIcon, PhoneIcon
 } from '@/components/ui/icons';
 import { useApp, useRequest, useWorkspace, useEnvironments, useCollections, useWebMode, useFileStorage, useGitHub, useGitOptional, useToast } from '@/contexts';
 import './TopBar.css';
@@ -167,7 +167,7 @@ const EcholonLogo = () => (
 );
 
 export const TopBar: React.FC = () => {
-  const { openSettingsModal, openGlobalSearch, openNewEnvironmentModal, viewMode, setViewMode, settings, setSidebarView } = useApp();
+  const { openSettingsModal, openGlobalSearch, openNewEnvironmentModal, viewMode, setViewMode, settings, setSidebarView, openScreenMirrorModal } = useApp();
   const { canGoBack, canGoForward, goBack, goForward, activeTab } = useRequest();
   const { workspaces, activeWorkspace, setActiveWorkspace, addWorkspace, updateWorkspace, deleteWorkspace, selectedWorkspaceEnvironment, selectWorkspaceEnvironment } = useWorkspace();
   const { activeEnvironments, selectedEnvironment, selectEnvironment, addEnvironment } = useEnvironments();
@@ -753,6 +753,11 @@ export const TopBar: React.FC = () => {
               </Button>
             </Tooltip>
           )}
+          <Tooltip content="Screen Mirroring" position="bottom">
+            <Button variant="ghost" size="sm" onClick={() => openScreenMirrorModal()}>
+              <PhoneIcon />
+            </Button>
+          </Tooltip>
           <Tooltip content="Settings" position="bottom">
             <Button variant="ghost" size="sm" onClick={() => openSettingsModal()}>
               <SettingsIcon />

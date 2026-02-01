@@ -11,3 +11,4 @@ export { RequestHistoryModal } from './RequestHistoryModal';
 export { UpdateModal } from './UpdateModal';
 export { FunctionConfigModal } from './FunctionConfigModal';
 export { OnboardingTour } from './OnboardingTour';
+export { ScreenMirrorModal } from './ScreenMirrorModal';

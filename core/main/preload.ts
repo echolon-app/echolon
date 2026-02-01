@@ -8,6 +8,7 @@ import {
   GIT_CHANNELS,
   GITHUB_CHANNELS,
   PUBLIC_SPECS_CHANNELS,
+  AIRPLAY_CHANNELS,
 } from '../shared/ipc-channels';
 
 // HTTP Request options interface
@@ -786,6 +787,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   publicSpecsUpdateManifest: (manifest: SpecManifest): Promise<boolean> =>
     ipcRenderer.invoke(PUBLIC_SPECS_CHANNELS.UPDATE_MANIFEST, manifest),
 
+  // AirPlay
+  airplayStartServer: (): Promise<{ success: boolean; error?: string; pairingCode?: string }> =>
+    ipcRenderer.invoke(AIRPLAY_CHANNELS.START_SERVER),
+  airplayStopServer: (): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke(AIRPLAY_CHANNELS.STOP_SERVER),
+  airplayGetStatus: (): Promise<{ status: string; pairingCode?: string; error?: string }> =>
+    ipcRenderer.invoke(AIRPLAY_CHANNELS.GET_STATUS),
+
   // Event listeners
   onUpdateAvailable: (callback: (data: { version: string; releaseNotes: string | null; releaseDate: string; releaseName?: string }) => void) => {
     const handler = (_event: IpcRendererEvent, data: { version: string; releaseNotes: string | null; releaseDate: string; releaseName?: string }) => callback(data);
@@ -875,6 +884,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_event: IpcRendererEvent, data: { action: string; path: string; params: Record<string, string>; url: string }) => callback(data);
     ipcRenderer.on(APP_CHANNELS.DEEP_LINK, handler);
     return () => ipcRenderer.removeListener(APP_CHANNELS.DEEP_LINK, handler);
+  },
+  // AirPlay events
+  onAirPlayStatusUpdate: (callback: (data: { status: string; pairingCode?: string; error?: string }) => void) => {
+    const handler = (_event: IpcRendererEvent, data: { status: string; pairingCode?: string; error?: string }) => {
+      // Dispatch custom event for React components
+      window.dispatchEvent(new CustomEvent('airplay:status-update', { detail: data }));
+      callback(data);
+    };
+    ipcRenderer.on(AIRPLAY_CHANNELS.STATUS_UPDATE, handler);
+    return () => ipcRenderer.removeListener(AIRPLAY_CHANNELS.STATUS_UPDATE, handler);
   },
 });
 
@@ -1056,6 +1075,10 @@ declare global {
       publicSpecsDeleteVersion: (subdomain: string, version: string) => Promise<boolean>;
       publicSpecsGetManifest: (subdomain: string) => Promise<SpecManifest | null>;
       publicSpecsUpdateManifest: (manifest: SpecManifest) => Promise<boolean>;
+      // AirPlay
+      airplayStartServer: () => Promise<{ success: boolean; error?: string; pairingCode?: string }>;
+      airplayStopServer: () => Promise<{ success: boolean }>;
+      airplayGetStatus: () => Promise<{ status: string; pairingCode?: string; error?: string }>;
       // Updates
       onUpdateAvailable: (callback: (data: { version: string; releaseNotes: string | null; releaseDate: string; releaseName?: string }) => void) => () => void;
       onUpdateNotAvailable: (callback: (data: { currentVersion: string }) => void) => () => void;
@@ -1075,6 +1098,8 @@ declare global {
       onCheckForUpdates: (callback: () => void) => () => void;
       // Deep link
       onDeepLink: (callback: (data: { action: string; path: string; params: Record<string, string>; url: string }) => void) => () => void;
+      // AirPlay events
+      onAirPlayStatusUpdate: (callback: (data: { status: string; pairingCode?: string; error?: string }) => void) => () => void;
     };
   }
 }

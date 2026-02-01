@@ -38,6 +38,7 @@ interface AppContextValue {
   globalSearchOpen: boolean;
   shortcutsModalOpen: boolean;
   onboardingOpen: boolean;
+  screenMirrorModalOpen: boolean;
   
   // Settings
   settings: AppSettings;
@@ -75,6 +76,8 @@ interface AppContextValue {
   closeShortcutsModal: () => void;
   openOnboarding: () => void;
   closeOnboarding: () => void;
+  openScreenMirrorModal: () => void;
+  closeScreenMirrorModal: () => void;
   updateSettings: (updates: Partial<AppSettings>) => void;
   logToConsole: (type: ConsoleEntry['type'], message: string, details?: string) => void;
   clearConsole: () => void;
@@ -114,6 +117,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [screenMirrorModalOpen, setScreenMirrorModalOpen] = useState(false);
 
   // Settings
   const [settings, setSettings] = useState<AppSettings>(() => storageManager.getSettings());
@@ -266,6 +270,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const closeShortcutsModal = useCallback(() => setShortcutsModalOpen(false), []);
   const openOnboarding = useCallback(() => setOnboardingOpen(true), []);
   const closeOnboarding = useCallback(() => setOnboardingOpen(false), []);
+  const openScreenMirrorModal = useCallback(() => setScreenMirrorModalOpen(true), []);
+  const closeScreenMirrorModal = useCallback(() => setScreenMirrorModalOpen(false), []);
 
   const updateSettings = useCallback((updates: Partial<AppSettings>) => {
     setSettings(prev => ({ ...prev, ...updates }));
@@ -338,6 +344,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     globalSearchOpen,
     shortcutsModalOpen,
     onboardingOpen,
+    screenMirrorModalOpen,
     settings,
     consoleEntries,
     customHttpMethods,
@@ -367,6 +374,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     closeShortcutsModal,
     openOnboarding,
     closeOnboarding,
+    openScreenMirrorModal,
+    closeScreenMirrorModal,
     updateSettings,
     logToConsole,
     clearConsole,
@@ -389,6 +398,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     globalSearchOpen,
     shortcutsModalOpen,
     onboardingOpen,
+    screenMirrorModalOpen,
     settings,
     consoleEntries,
     customHttpMethods,
@@ -418,6 +428,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     closeShortcutsModal,
     openOnboarding,
     closeOnboarding,
+    openScreenMirrorModal,
+    closeScreenMirrorModal,
     updateSettings,
     logToConsole,
     clearConsole,

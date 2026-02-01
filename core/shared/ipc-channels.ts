@@ -169,6 +169,15 @@ export const PUBLIC_SPECS_CHANNELS = {
   UPDATE_MANIFEST: 'public-specs-update-manifest',
 } as const;
 
+// ==================== AirPlay Channels ====================
+export const AIRPLAY_CHANNELS = {
+  START_SERVER: 'airplay:start-server',
+  STOP_SERVER: 'airplay:stop-server',
+  GET_STATUS: 'airplay:get-status',
+  STATUS_UPDATE: 'airplay:status-update',
+  VIDEO_FRAME: 'airplay:video-frame',
+} as const;
+
 // ==================== GitHub Channels ====================
 export const GITHUB_CHANNELS = {
   // Authentication
@@ -211,4 +220,5 @@ export type FileStorageChannel = typeof FILE_STORAGE_CHANNELS[keyof typeof FILE_
 export type GitChannel = typeof GIT_CHANNELS[keyof typeof GIT_CHANNELS];
 export type GitHubChannel = typeof GITHUB_CHANNELS[keyof typeof GITHUB_CHANNELS];
 export type PublicSpecsChannel = typeof PUBLIC_SPECS_CHANNELS[keyof typeof PUBLIC_SPECS_CHANNELS];
+export type AirPlayChannel = typeof AIRPLAY_CHANNELS[keyof typeof AIRPLAY_CHANNELS];
 

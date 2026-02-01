@@ -39,6 +39,10 @@ export default defineConfig({
               external: [
                 'electron',
                 'electron-updater',
+                'bonjour',
+                'plist',
+                'bplist-parser',
+                'bplist-creator',
                 ...builtinModules,
                 ...builtinModules.map(m => `node:${m}`),
               ],

@@ -19,9 +19,11 @@ import {
   FILE_STORAGE_CHANNELS,
   GIT_CHANNELS,
   GITHUB_CHANNELS,
-  PUBLIC_SPECS_CHANNELS 
+  PUBLIC_SPECS_CHANNELS,
+  AIRPLAY_CHANNELS
 } from '../shared/ipc-channels';
 import { s3UploadManager, UploadSpecOptions } from './s3Upload';
+import { airplayServer } from './airplayServer';
 
 // Disable GPU acceleration for better compatibility
 app.disableHardwareAcceleration();
@@ -153,11 +155,13 @@ function createWindow(): void {
     mainWindow = null;
     mockServerManager.setMainWindow(null);
     cloudProxyManager.setMainWindow(null);
+    airplayServer.setMainWindow(null);
   });
 
-  // Set main window reference for mock server and cloud proxy
+  // Set main window reference for mock server, cloud proxy, and airplay server
   mockServerManager.setMainWindow(mainWindow);
   cloudProxyManager.setMainWindow(mainWindow);
+  airplayServer.setMainWindow(mainWindow);
 }
 
 // Mock server config interface
@@ -1101,6 +1105,21 @@ function setupIpcHandlers(): void {
 
   ipcMain.handle(PUBLIC_SPECS_CHANNELS.UPDATE_MANIFEST, async (_event, manifest: Parameters<typeof s3UploadManager.updateManifest>[0]) => {
     return s3UploadManager.updateManifest(manifest);
+  });
+
+  // ==================== AirPlay Handlers ====================
+
+  ipcMain.handle(AIRPLAY_CHANNELS.START_SERVER, async () => {
+    return airplayServer.start();
+  });
+
+  ipcMain.handle(AIRPLAY_CHANNELS.STOP_SERVER, async () => {
+    await airplayServer.stop();
+    return { success: true };
+  });
+
+  ipcMain.handle(AIRPLAY_CHANNELS.GET_STATUS, () => {
+    return airplayServer.getStatus();
   });
 }
 

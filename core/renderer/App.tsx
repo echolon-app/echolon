@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { MainLayout } from '@/components/layout';
 import { LeftPanel, CenterPanel, RightPanel, ConsolePanel, CodePanel, MockingPanel, APIReferencePanel } from '@/components/panels';
-import { SettingsModal, ImportModal, GlobalSearchModal, NewCollectionModal, NewEnvironmentModal, MoveCollectionModal, ShortcutsModal, UpdateModal, OnboardingTour } from '@/components/modals';
+import { SettingsModal, ImportModal, GlobalSearchModal, NewCollectionModal, NewEnvironmentModal, MoveCollectionModal, ShortcutsModal, UpdateModal, OnboardingTour, ScreenMirrorModal } from '@/components/modals';
 import { DemoDebugPanel } from '@/components/DemoDebugPanel';
 import { useApp, useRequest, useDataLoader, useToast, useCollections, useWorkspace } from '@/contexts';
 import { useGlobalShortcuts } from '@/hooks';
@@ -319,6 +319,7 @@ export const App: React.FC = () => {
       <MoveCollectionModal />
       <ShortcutsModal />
       <UpdateModal />
+      <ScreenMirrorModal />
       
       {/* Code Panel Slide-in */}
       {codePanelVisible && (
