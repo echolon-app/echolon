@@ -263,6 +263,7 @@
 }
 
 .response-viewer__body .ace_editor {
+  position:absolute;
   flex: 1;
   min-height: 100px;
   background-color: var(--bg-primary) !important;

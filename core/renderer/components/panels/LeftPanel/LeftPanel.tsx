@@ -742,13 +742,13 @@ export const LeftPanel: React.FC = () => {
       }
       
       return [
-        { id: 'open', label: 'Open', icon: <OpenIcon />, onClick: () => {
+       /* { id: 'open', label: 'Open', icon: <OpenIcon />, onClick: () => {
           handleOpenRequest(contextTarget.item as Request);
         }},
         { id: 'open-new-tab', label: 'Open in New Tab', icon: <NewTabIcon />, onClick: () => {
           handleOpenRequest(contextTarget.item as Request);
         }},
-        { id: 'divider1', label: '', divider: true },
+        { id: 'divider1', label: '', divider: true },*/
         { id: 'duplicate', label: 'Duplicate', icon: <CopyIcon />, onClick: () => {
           const originalRequest = contextTarget.item as Request;
           const collectionId = contextTarget.collectionId || originalRequest.collectionId;

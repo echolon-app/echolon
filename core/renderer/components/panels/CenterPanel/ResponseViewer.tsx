@@ -394,6 +394,7 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
   const [activeTab, setActiveTab] = useState<ResponseTab>('body');
   const editorRef = useRef<AceEditor>(null);
   const bodyContainerRef = useRef<HTMLDivElement>(null);
+  const contentContainerRef = useRef<HTMLDivElement>(null);
   const { contextMenu, showContextMenu, hideContextMenu } = useContextMenu();
   const [selectedText, setSelectedText] = useState('');
   const [editorHeight, setEditorHeight] = useState(200);
@@ -475,11 +476,72 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
     updateHeight();
   }, [height]);
 
-  // Resize editor when tab changes
+  // Resize editor when height prop changes (after resize completes)
+  // This is critical - when the panel resize ends, the height prop updates and we need to resize the editor
   useEffect(() => {
-    if (editorRef.current?.editor) {
-      editorRef.current.editor.resize();
-    }
+    // Use double requestAnimationFrame to ensure DOM has fully updated after resize completes
+    const rafId = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const editor = editorRef.current?.editor;
+        if (editor) {
+          editor.resize();
+        }
+      });
+    });
+
+    return () => cancelAnimationFrame(rafId);
+  }, [height, activeTab]);
+
+  // Use ResizeObserver to watch the body container (where Ace editor is) and resize editor efficiently
+  // This ensures the editor resizes when the container size changes during drag
+  useEffect(() => {
+    // Watch the body container where the Ace editor actually lives
+    const container = bodyContainerRef.current;
+    if (!container) return;
+
+    // Throttle resize calls to avoid performance issues during drag (max ~60fps)
+    let resizeTimeout: NodeJS.Timeout | null = null;
+    const resizeEditor = () => {
+      if (resizeTimeout) return; // Skip if already scheduled
+      
+      resizeTimeout = setTimeout(() => {
+        resizeTimeout = null;
+        // Use double requestAnimationFrame to ensure DOM has fully updated before resizing
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            const editor = editorRef.current?.editor;
+            if (editor) {
+              editor.resize();
+            }
+          });
+        });
+      }, 16); // ~60fps throttling
+    };
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      // Only resize if the container actually changed size
+      for (const entry of entries) {
+        if (entry.contentRect.height > 0) {
+          resizeEditor();
+        }
+      }
+    });
+
+    resizeObserver.observe(container);
+
+    // Also resize when tab or editorHeight changes (for initial setup)
+    // Delay slightly to ensure editor is mounted if it wasn't ready yet
+    const initialResizeTimeout = setTimeout(() => {
+      resizeEditor();
+    }, 100);
+
+    return () => {
+      resizeObserver.disconnect();
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+      clearTimeout(initialResizeTimeout);
+    };
   }, [activeTab, editorHeight]);
 
   const response = execution?.response;
@@ -1258,7 +1320,7 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
         </div>
       </div>
 
-      <div className="response-viewer__content">
+      <div className="response-viewer__content" ref={contentContainerRef}>
         {activeTab === 'body' && (
           <div 
             ref={bodyContainerRef}
