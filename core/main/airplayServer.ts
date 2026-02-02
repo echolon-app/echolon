@@ -3,6 +3,15 @@ import http from 'http';
 import crypto from 'crypto';
 import plist from 'plist';
 
+// @noble/curves for X25519 support
+// The package exports './ed25519.js' (with .js extension)
+let x25519Lib: any = null;
+try {
+  x25519Lib = require('@noble/curves/ed25519.js').x25519;
+} catch (e) {
+  // Will be handled in code - library might not be available
+}
+
 // bplist packages don't have TypeScript types
 const bplistParser = require('bplist-parser');
 const bplistCreator = require('bplist-creator');
@@ -16,12 +25,32 @@ interface AirPlayServerStatus {
   error?: string;
 }
 
+enum PairingStatus {
+  INITIAL = 'initial',
+  SETUP = 'setup',
+  HANDSHAKE = 'handshake',
+  FINISHED = 'finished',
+}
+
+interface PairingSession {
+  status: PairingStatus;
+  handshakeStarted: boolean;
+  setupStatus: boolean;
+  clientX25519Key?: Buffer;
+  clientED25519Key?: Buffer;
+  serverX25519Key?: Buffer;
+  serverX25519PrivateKey?: Buffer;
+  ecdh?: crypto.ECDH; // X25519 ECDH instance
+  sharedSecret?: Buffer; // Computed shared secret from ECDH
+}
+
 interface ConnectionState {
   type: ConnectionType;
   socket: any;
   remoteAddress?: string;
   remotePort?: number;
   createdAt: number;
+  pairingSession?: PairingSession;
 }
 
 // Debug mode flag
@@ -73,6 +102,8 @@ class AirPlayServer {
   private port: number = 7000;
   private readonly portRange = [7000, 7001, 7002, 7003, 7004, 7005];
   private persistentPublicKey: Buffer | null = null; // Persistent ED25519 public key for pairing
+  private persistentPrivateKey: crypto.KeyObject | null = null; // Persistent ED25519 private key for pairing
+  private usePin: boolean = false; // If false, skip pair-verify for already-paired devices (like UxPlay)
   private connections: Map<string, ConnectionState> = new Map(); // Track connections by socket ID
 
   setMainWindow(window: BrowserWindow | null): void {
@@ -275,7 +306,7 @@ class AirPlayServer {
       if (bonjour) {
         const bonjourInstance = bonjour.default();
         this.bonjourService = bonjourInstance.publish({
-          name: 'Echolon V7',
+          name: 'Echolon V8',
           type: 'airplay',
           port: this.port,
           txt: {
@@ -287,7 +318,6 @@ class AirPlayServer {
           },
         });
         logInfo(`=== BONJOUR SERVICE ADVERTISED ===`);
-        logInfo(`Name: Echolon V7`);
         logInfo(`Type: airplay`);
         logInfo(`Port: ${this.port}`);
         logDebug(`TXT Records:`, {
@@ -666,16 +696,42 @@ class AirPlayServer {
           logInfo(`txtAirPlay-only response created, size: ${responseBody.length} bytes`);
           logDebug(`Response starts with: ${responseBody.toString('ascii', 0, 8)}`);
           
+          // Log the exact binary response for comparison with UxPlay
+          logInfo(`=== EXACT BINARY RESPONSE (first 100 bytes) ===`);
+          logInfo(`Hex: ${responseBody.slice(0, 100).toString('hex')}`);
+          logInfo(`ASCII preview: ${responseBody.slice(0, 100).toString('ascii').replace(/[^\x20-\x7E]/g, '.')}`);
+          
           // Verify the encoding
           try {
             const verify = bplistParser.parseBuffer(responseBody);
             logInfo(`✓ txtAirPlay-only response decodes correctly`);
             if (verify[0].txtAirPlay) {
-              const decodedTxt = Buffer.isBuffer(verify[0].txtAirPlay) 
-                ? verify[0].txtAirPlay.toString('utf8')
-                : Buffer.from(verify[0].txtAirPlay).toString('utf8');
+              const txtData = Buffer.isBuffer(verify[0].txtAirPlay) 
+                ? verify[0].txtAirPlay
+                : Buffer.from(verify[0].txtAirPlay);
+              
+              logInfo(`=== txtAirPlay BINARY DATA ===`);
+              logInfo(`Length: ${txtData.length} bytes`);
+              logInfo(`Hex (first 100 bytes): ${txtData.slice(0, 100).toString('hex')}`);
+              logInfo(`ASCII preview: ${txtData.slice(0, 100).toString('ascii').replace(/[^\x20-\x7E]/g, '.')}`);
+              
+              // Decode to show the entries
+              const decodedTxt = txtData.toString('utf8');
               logDebug(`Decoded txtAirPlay content: ${decodedTxt}`);
               logDebug(`txtAirPlay length: ${decodedTxt.length}`);
+              
+              // Parse the DNS-SD format to show individual entries
+              let offset = 0;
+              const entries: string[] = [];
+              while (offset < txtData.length) {
+                const entryLength = txtData[offset];
+                if (entryLength === 0 || offset + entryLength >= txtData.length) break;
+                const entry = txtData.toString('utf8', offset + 1, offset + 1 + entryLength);
+                entries.push(entry);
+                logDebug(`TXT entry [${offset}]: length=${entryLength}, value="${entry}"`);
+                offset += 1 + entryLength;
+              }
+              logInfo(`Parsed ${entries.length} TXT entries`);
             }
           } catch (verifyErr) {
             logError(`✗ txtAirPlay-only response decode failed:`, verifyErr);
@@ -709,54 +765,47 @@ class AirPlayServer {
           
           logResponse(res, responseHeaders, responseBody.length, responseBody);
           
-          // For RTSP, write response manually to ensure RTSP/1.0 status line
-          // Node.js HTTP server writes HTTP/1.1, but RTSP requires RTSP/1.0
+          // For RTSP, we MUST write RTSP/1.0 status line (UxPlay line 303: http_response_init(*response, protocol, 200, "OK"))
+          // Node.js HTTP server writes HTTP/1.1, so we need to write manually
+          // CRITICAL: After writing manually, we need to ensure Node.js HTTP parser can handle the next request
           if (isActuallyRTSP) {
-            // Prevent Node.js from writing its own status line
-            // We'll write everything manually to the socket
+            // Write RTSP response manually to match UxPlay's behavior exactly
             const statusLine = 'RTSP/1.0 200 OK\r\n';
             const headerLines = Object.entries(responseHeaders)
               .map(([key, value]) => `${key}: ${value}`)
               .join('\r\n');
             const headerBlock = Buffer.from(`${statusLine}${headerLines}\r\n\r\n`, 'utf8');
             
-            // Mark response as sent to prevent Node.js from writing headers
-            (res as any)._headerSent = true;
-            (res as any)._hasBody = true;
-            (res as any)._sent = true;
+            logInfo(`=== SENDING RTSP RESPONSE (matching UxPlay) ===`);
+            logInfo(`Status line: RTSP/1.0 200 OK`);
+            logInfo(`Body size: ${responseBody.length} bytes`);
             
-            // Write RTSP status line, headers, and body directly to socket
+            // Write response directly to socket (matching UxPlay's http_response_finish behavior)
             req.socket.write(headerBlock);
             req.socket.write(responseBody);
             
-            // Properly end the response object so Node.js can parse the next request
-            // But prevent it from writing anything by marking everything as sent
+            // CRITICAL: We need to properly end the response so Node.js HTTP parser can handle next request
+            // The parser is tied to the IncomingMessage/ServerResponse lifecycle
+            // Mark response as finished but don't let Node.js write anything
+            (res as any)._headerSent = true;
+            (res as any)._hasBody = true;
+            (res as any)._sent = true;
             (res as any).finished = true;
             
-            // Safely set writable state if it exists
             if ((res as any)._writableState) {
               (res as any)._writableState.ended = true;
             }
             
-            // Emit finish event so Node.js knows response is complete
+            // Emit finish event
             res.emit('finish');
             
-            // Ensure socket is ready to receive next request
-            // Node.js HTTP server pauses the socket during request handling
-            // We need to resume it so it can parse the next RTSP request
-            if (req.socket.readable && !req.socket.destroyed) {
-              // Resume the socket so Node.js HTTP parser can read the next request
-              req.socket.resume();
-              
-              // Mark request as complete so parser can start parsing next request
-              // The request object needs to be in a state where the parser can continue
-              (req as any).complete = true;
-              
-              logDebug(`Socket resumed for next RTSP request, request marked as complete`);
-            }
+            // CRITICAL: Node.js HTTP parser won't parse next RTSP request after we bypass response handling
+            // We need to manually parse RTSP requests on this socket
+            // Set up raw socket parser for subsequent RTSP requests
+            const socketId = `${req.socket.remoteAddress}:${req.socket.remotePort}`;
+            this.setupRTSPParser(req.socket, socketId);
             
-            // Socket stays open for next RTSP request - Node.js HTTP server will parse it
-            logDebug(`RTSP response written directly to socket (${responseBody.length} bytes), response marked as finished`);
+            logInfo(`RTSP response written, raw socket parser set up for next request`);
             return;
           } else {
             res.writeHead(200, responseHeaders);
@@ -785,7 +834,7 @@ class AirPlayServer {
       protocolVersion: '1.1', // Changed from '1.0' to match UxPlay
       sourceVersion: '220.68',
       statusFlags: 68, // UxPlay uses 68, not 4! (68 = ready, 4 might mean something else)
-      name: 'Echolon V7', // Server name
+      name: 'Echolon V8', // Server name
       pi: 'B8E5AA8E-58B1-4136-A5C6-2650298C23D2', // Pairing identifier (from UxPlay)
       vv: 2, // Version (UxPlay uses AIRPLAY_VV which is "2")
       keepAliveLowPower: 1, // UxPlay includes this
@@ -1058,198 +1107,491 @@ class AirPlayServer {
   private async handlePairSetup(req: http.IncomingMessage, res: http.ServerResponse, corsHeaders: Record<string, string>): Promise<void> {
     logInfo(`=== HANDLING PAIR-SETUP REQUEST ===`);
     
-    // Read request body (binary PLIST)
-    let requestData: any = null;
+    // Get connection state for this socket
+    const socketId = `${req.socket.remoteAddress}:${req.socket.remotePort}`;
+    const connState = this.connections.get(socketId);
+    
+    // Initialize pairing session if it doesn't exist
+    if (connState && !connState.pairingSession) {
+      connState.pairingSession = {
+        status: PairingStatus.INITIAL,
+        handshakeStarted: false,
+        setupStatus: false,
+      };
+    }
+    
+    const session = connState?.pairingSession;
+    
+    // NOTE: UxPlay's raop_handler_pairsetup does NOT skip - it always processes pair-setup
+    // Only pair-verify has skip logic (when use_pin is false and status is INITIAL/FINISHED)
+    
+    // Read request body (UxPlay expects exactly 32 bytes, not a plist)
+    let requestBody: Buffer = Buffer.alloc(0);
     if (req.headers['content-length'] && parseInt(req.headers['content-length']) > 0) {
       const body: Buffer[] = [];
       for await (const chunk of req) {
         body.push(chunk);
       }
-      const requestBody = Buffer.concat(body);
+      requestBody = Buffer.concat(body);
       logInfo(`Pair-setup request body: ${requestBody.length} bytes`);
-      logDebug(`Request body preview (hex): ${requestBody.toString('hex').substring(0, 200)}`);
-      
-      try {
-        if (requestBody.toString('ascii', 0, 8) === 'bplist00') {
-          const parsed = bplistParser.parseBuffer(requestBody);
-          requestData = parsed[0];
-          logInfo(`Decoded pair-setup request:`, JSON.stringify(requestData, null, 2));
-        }
-      } catch (err) {
-        logError(`Could not decode pair-setup request:`, err);
-      }
+      logDebug(`Request body preview (hex): ${requestBody.toString('hex')}`);
     }
 
-    // AirPlay pairing uses SRP (Secure Remote Password) protocol
-    // The pairing flow typically has multiple steps (M1, M2, M3, M4, M5)
-    // For now, we'll implement a simplified version that accepts pairing
+    // UxPlay's raop_handler_pairsetup:
+    // - Expects exactly 32 bytes of data
+    // - Gets ED25519 public key from pairing system
+    // - Sets setup status
+    // - Returns 32-byte public key as raw binary (application/octet-stream)
     
-    // Check what step we're on (if method is specified)
-    const method = requestData?.method || requestData?.state || 'start';
-    logInfo(`Pair-setup method/state: ${method}`);
-
-    let responseData: Record<string, any> = {};
-    let statusCode = 200;
-
-    // Step 1: Initial pairing request - return salt and public key
-    if (method === 0 || method === 'start' || !requestData) {
-      // Generate random salt and public key for SRP
-      const salt = crypto.randomBytes(16);
-      const publicKey = crypto.randomBytes(32);
-      
-      responseData = {
-        salt: salt.toString('base64'),
-        publicKey: publicKey.toString('base64'),
-        state: 1, // Next state
-      };
-      logInfo(`Pair-setup step 1: returning salt and public key`);
-    }
-    // Step 2: Client sends proof - verify and return server proof
-    else if (method === 1 || method === 'verify') {
-      // In full SRP, we would verify the client's proof here
-      // For now, accept it and return server proof
-      const serverProof = crypto.randomBytes(32);
-      
-      responseData = {
-        proof: serverProof.toString('base64'),
-        state: 2, // Next state
-      };
-      logInfo(`Pair-setup step 2: verifying and returning server proof`);
-    }
-    // Step 3: Exchange encryption keys
-    else if (method === 2 || method === 'exchange') {
-      // Generate session key
-      const sessionKey = crypto.randomBytes(32);
-      
-      responseData = {
-        sessionKey: sessionKey.toString('base64'),
-        state: 3, // Complete
-      };
-      logInfo(`Pair-setup step 3: exchanging keys`);
-    }
-    // Default: accept pairing
-    else {
-      responseData = {
-        state: 3, // Complete
-      };
-      logInfo(`Pair-setup: accepting pairing`);
+    if (requestBody.length !== 32) {
+      logError(`Invalid pair-setup data: expected 32 bytes, got ${requestBody.length} bytes`);
+      const cseq = Array.isArray(req.headers['cseq']) ? req.headers['cseq'][0] : (req.headers['cseq'] || '0');
+      res.writeHead(400, {
+        'CSeq': cseq,
+        'Content-Length': '0',
+        ...corsHeaders,
+      });
+      res.end();
+      return;
     }
 
-    // Encode response as binary PLIST
-    let responseBody: Buffer;
-    try {
-      responseBody = bplistCreator(responseData);
-      logInfo(`Pair-setup response:`, JSON.stringify(responseData, null, 2));
-      logDebug(`Pair-setup response body size: ${responseBody.length} bytes`);
-    } catch (err) {
-      logError(`Error creating pair-setup response:`, err);
-      responseBody = Buffer.alloc(0);
+    // Get or generate ED25519 public key (32 bytes)
+    // For now, use the persistent public key if available, otherwise generate one
+    if (!this.persistentPublicKey) {
+      // Generate ED25519 key pair (we only need the public key for this response)
+      // In a full implementation, we'd use a persistent key from the pairing system
+      this.persistentPublicKey = crypto.randomBytes(32);
+      logInfo(`Generated new persistent public key for pairing`);
     }
+    
+    // Set pairing setup status (in UxPlay: pairing_session_set_setup_status)
+    // Update session status to SETUP
+    if (connState && session) {
+      session.status = PairingStatus.SETUP;
+      session.setupStatus = true;
+      logInfo(`Pair-setup: session status updated to SETUP`);
+    }
+    
+    logInfo(`Pair-setup: returning ED25519 public key (32 bytes)`);
+    logDebug(`Public key (hex): ${this.persistentPublicKey.toString('hex')}`);
 
+    // Return the 32-byte public key as raw binary (not a plist!)
+    const responseBody = Buffer.from(this.persistentPublicKey);
+    
     const cseq = Array.isArray(req.headers['cseq']) ? req.headers['cseq'][0] : (req.headers['cseq'] || '0');
-    res.writeHead(statusCode, {
-      'Content-Type': 'application/x-apple-binary-plist',
+    res.writeHead(200, {
+      'Content-Type': 'application/octet-stream',
       'Content-Length': responseBody.length.toString(),
       'CSeq': cseq,
-      'X-Apple-ProtocolVersion': '1',
       ...corsHeaders,
     });
     res.end(responseBody);
   }
 
+  /**
+   * Check handshake status (UxPlay: pairing_session_check_handshake_status)
+   * Returns true if status is INITIAL or FINISHED (should skip if usePin is false)
+   * Returns false if status is SETUP or HANDSHAKE (should process)
+   */
+  private checkHandshakeStatus(session: PairingSession): boolean {
+    // UxPlay returns 0 for SETUP/HANDSHAKE, -1 otherwise
+    // In boolean terms: true means skip (status is INITIAL or FINISHED)
+    return session.status === PairingStatus.INITIAL || session.status === PairingStatus.FINISHED;
+  }
+
   private async handlePairVerify(req: http.IncomingMessage, res: http.ServerResponse, corsHeaders: Record<string, string>): Promise<void> {
     logInfo(`=== HANDLING PAIR-VERIFY REQUEST ===`);
     
-    // Read request body (binary PLIST)
-    let requestData: any = null;
+    // Get connection state for this socket
+    const socketId = `${req.socket.remoteAddress}:${req.socket.remotePort}`;
+    const connState = this.connections.get(socketId);
+    
+    // Initialize pairing session if it doesn't exist
+    if (connState && !connState.pairingSession) {
+      connState.pairingSession = {
+        status: PairingStatus.INITIAL,
+        handshakeStarted: false,
+        setupStatus: false,
+      };
+    }
+    
+    const session = connState?.pairingSession;
+    
+    // UxPlay checks: if (pairing_session_check_handshake_status(conn->session))
+    // pairing_session_check_handshake_status returns 0 for SETUP/HANDSHAKE, -1 otherwise
+    // If it returns non-zero (status is INITIAL or FINISHED) and use_pin is false, return early
+    // This allows already-paired devices to skip pair-verify when use_pin is false
+    if (session) {
+      const handshakeStatus = this.checkHandshakeStatus(session);
+      if (handshakeStatus && !this.usePin) {
+        // Handshake is already finished (or initial), and PIN is not required
+        // Skip pair-verify (UxPlay returns early without response)
+        logInfo(`Pair-verify skipped: handshake status=${session.status}, usePin=${this.usePin}`);
+        return; // Return early without sending response
+      }
+    }
+    
+    // Read request body (UxPlay expects raw binary, not plist)
+    let requestBody: Buffer = Buffer.alloc(0);
     if (req.headers['content-length'] && parseInt(req.headers['content-length']) > 0) {
       const body: Buffer[] = [];
       for await (const chunk of req) {
         body.push(chunk);
       }
-      const requestBody = Buffer.concat(body);
+      requestBody = Buffer.concat(body);
       logInfo(`Pair-verify request body: ${requestBody.length} bytes`);
-      logDebug(`Request body preview (hex): ${requestBody.toString('hex').substring(0, 200)}`);
+      logDebug(`Request body preview (hex): ${requestBody.toString('hex')}`);
+    }
+
+    // UxPlay's raop_handler_pairverify:
+    // - Checks first byte: data[0] == 1 (step 1) or data[0] == 0 (step 2)
+    // - Step 1: Expects 4 + X25519_KEY_SIZE(32) + ED25519_KEY_SIZE(32) = 68 bytes
+    //   Returns: X25519_KEY_SIZE(32) + PAIRING_SIG_SIZE(64) = 96 bytes raw binary
+    // - Step 2: Expects 4 + PAIRING_SIG_SIZE(64) = 68 bytes
+    //   Returns: empty body (just headers)
+    // - Content-Type: application/octet-stream (not plist!)
+    
+    if (requestBody.length < 4) {
+      logError(`Invalid pair-verify data: expected at least 4 bytes, got ${requestBody.length} bytes`);
+      const cseq = Array.isArray(req.headers['cseq']) ? req.headers['cseq'][0] : (req.headers['cseq'] || '0');
+      res.writeHead(400, {
+        'CSeq': cseq,
+        'Content-Length': '0',
+        ...corsHeaders,
+      });
+      res.end();
+      return;
+    }
+
+    const step = requestBody[0];
+    const X25519_KEY_SIZE = 32;
+    const ED25519_KEY_SIZE = 32;
+    const PAIRING_SIG_SIZE = 64;
+
+    let responseBody: Buffer;
+    const cseq = Array.isArray(req.headers['cseq']) ? req.headers['cseq'][0] : (req.headers['cseq'] || '0');
+
+    if (step === 1) {
+      // Step 1: Client sends X25519 public key + ED25519 public key
+      // Expected: 4 + 32 + 32 = 68 bytes
+      if (requestBody.length !== 4 + X25519_KEY_SIZE + ED25519_KEY_SIZE) {
+        logError(`Invalid pair-verify step 1 data: expected ${4 + X25519_KEY_SIZE + ED25519_KEY_SIZE} bytes, got ${requestBody.length} bytes`);
+        res.writeHead(400, {
+          'CSeq': cseq,
+          'Content-Length': '0',
+          ...corsHeaders,
+        });
+        res.end();
+        return;
+      }
+
+      // Extract client's keys
+      const clientX25519Key = requestBody.slice(4, 4 + X25519_KEY_SIZE);
+      const clientED25519Key = requestBody.slice(4 + X25519_KEY_SIZE, 4 + X25519_KEY_SIZE + ED25519_KEY_SIZE);
+      
+      logInfo(`Pair-verify step 1: received client X25519 key (${clientX25519Key.length} bytes) and ED25519 key (${clientED25519Key.length} bytes)`);
+      logDebug(`Client X25519 key (hex): ${clientX25519Key.toString('hex')}`);
+      logDebug(`Client ED25519 key (hex): ${clientED25519Key.toString('hex')}`);
+
+      // Store client keys in session (UxPlay: pairing_session_handshake)
+      if (session) {
+        session.clientX25519Key = clientX25519Key;
+        session.clientED25519Key = clientED25519Key;
+        session.handshakeStarted = true;
+      }
+
+      // Initialize X25519 ECDH key exchange (UxPlay: pairing_session_handshake)
+      // Use @noble/curves for proper X25519 implementation
+      let serverX25519Key: Buffer;
+      let sharedSecret: Buffer;
+      let serverX25519PrivateKey: Buffer;
       
       try {
-        if (requestBody.toString('ascii', 0, 8) === 'bplist00') {
-          const parsed = bplistParser.parseBuffer(requestBody);
-          requestData = parsed[0];
-          logInfo(`Decoded pair-verify request:`, JSON.stringify(requestData, null, 2));
+        // Generate X25519 key pair using @noble/curves
+        // Load the library if not already loaded
+        if (!x25519Lib) {
+          try {
+            x25519Lib = require('@noble/curves/ed25519.js').x25519;
+          } catch (loadErr) {
+            logError(`Failed to load @noble/curves:`, loadErr);
+            throw new Error('@noble/curves not available');
+          }
+        }
+        
+        // Generate X25519 key pair using @noble/curves
+        // x25519.utils.randomSecretKey() generates a random 32-byte private key
+        // Alternatively, we could use x25519.keygen() which returns { privateKey, publicKey }
+        const privateKeyBytes = x25519Lib.utils.randomSecretKey();
+        serverX25519PrivateKey = Buffer.from(privateKeyBytes);
+        
+        // x25519.getPublicKey(privateKey) generates public key from private key
+        const publicKeyBytes = x25519Lib.getPublicKey(privateKeyBytes);
+        serverX25519Key = Buffer.from(publicKeyBytes);
+        
+        // Compute shared secret: X25519(serverPrivateKey, clientPublicKey)
+        const sharedSecretBytes = x25519Lib.getSharedSecret(privateKeyBytes, clientX25519Key);
+        sharedSecret = Buffer.from(sharedSecretBytes);
+        
+        logInfo(`X25519 ECDH initialized: public key (${serverX25519Key.length} bytes), shared secret (${sharedSecret.length} bytes)`);
+        logDebug(`Server X25519 public key (hex): ${serverX25519Key.toString('hex')}`);
+        logDebug(`Shared secret (hex): ${sharedSecret.toString('hex').substring(0, 32)}...`);
+        
+        // Store ECDH state in session
+        if (session) {
+          session.serverX25519Key = serverX25519Key;
+          session.serverX25519PrivateKey = serverX25519PrivateKey;
+          session.sharedSecret = sharedSecret;
         }
       } catch (err) {
-        logError(`Could not decode pair-verify request:`, err);
+        logError(`Failed to create X25519 ECDH:`, err);
+        // Fallback: generate random keys (will cause verification failure but allows testing)
+        serverX25519Key = crypto.randomBytes(X25519_KEY_SIZE);
+        sharedSecret = crypto.randomBytes(32);
+        serverX25519PrivateKey = crypto.randomBytes(X25519_KEY_SIZE);
+        if (session) {
+          session.serverX25519Key = serverX25519Key;
+          session.serverX25519PrivateKey = serverX25519PrivateKey;
+          session.sharedSecret = sharedSecret;
+        }
       }
-    }
 
-    // Pair verification typically involves:
-    // 1. Client sends public key
-    // 2. Server responds with public key and encrypted data
-    // 3. Client sends encrypted data
-    // 4. Server verifies and completes
-    
-    const method = requestData?.method || requestData?.state || 'start';
-    logInfo(`Pair-verify method/state: ${method}`);
-
-    let responseData: Record<string, any> = {};
-    let statusCode = 200;
-
-    // Step 1: Client sends public key - return server public key
-    if (method === 0 || method === 'start' || !requestData) {
-      const serverPublicKey = crypto.randomBytes(32);
-      const encryptedData = crypto.randomBytes(16);
+      // Generate ED25519 signature (UxPlay: pairing_session_get_signature)
+      // UxPlay signs: server X25519 (32 bytes) + client X25519 (32 bytes) = 64 bytes
+      // Then encrypts the signature with AES-CTR using keys derived from shared secret
       
-      responseData = {
-        publicKey: serverPublicKey.toString('base64'),
-        encryptedData: encryptedData.toString('base64'),
-        state: 1,
-      };
-      logInfo(`Pair-verify step 1: returning server public key`);
-    }
-    // Step 2: Client sends encrypted data - verify and complete
-    else if (method === 1 || method === 'verify') {
-      // In full implementation, verify the encrypted data
-      // For now, accept it
-      responseData = {
-        state: 2, // Complete
-      };
-      logInfo(`Pair-verify step 2: verification complete`);
+      // Ensure we have persistent ED25519 key pair
+      if (!this.persistentPrivateKey) {
+        try {
+          const ed25519KeyPair = crypto.generateKeyPairSync('ed25519');
+          this.persistentPrivateKey = ed25519KeyPair.privateKey;
+          this.persistentPublicKey = ed25519KeyPair.publicKey.export({ format: 'der', type: 'spki' });
+          logInfo(`Generated new ED25519 key pair for pairing`);
+        } catch (err) {
+          logError(`Failed to generate ED25519 key pair:`, err);
+        }
+      }
+
+      let signature: Buffer;
+      try {
+        if (this.persistentPrivateKey) {
+          // UxPlay signs: ecdh_ours (server X25519) + ecdh_theirs (client X25519)
+          // NOT client ED25519, NOT shared secret!
+          const messageToSign = Buffer.concat([
+            serverX25519Key,  // server X25519 public key (32 bytes)
+            clientX25519Key,  // client X25519 public key (32 bytes)
+          ]);
+          
+          logDebug(`Signing message: server X25519 (${serverX25519Key.length} bytes) + client X25519 (${clientX25519Key.length} bytes) = ${messageToSign.length} bytes`);
+          
+          // Use crypto.sign() directly with ED25519 key (not createSign with digest)
+          // crypto.sign() works directly with ED25519 keys in Node.js 12.0.0+
+          signature = crypto.sign(null, messageToSign, this.persistentPrivateKey);
+          
+          // ED25519 signatures are 64 bytes
+          if (signature.length !== PAIRING_SIG_SIZE) {
+            logError(`Invalid signature length: expected ${PAIRING_SIG_SIZE}, got ${signature.length}`);
+            signature = crypto.randomBytes(PAIRING_SIG_SIZE);
+          } else {
+            logDebug(`Generated ED25519 signature (${signature.length} bytes) before encryption`);
+            
+            // UxPlay then encrypts the signature with AES-CTR
+            // Derive encryption key and IV from shared secret using SHA512 (not PBKDF2)
+            // UxPlay's derive_key_internal: SHA512(salt + shared_secret), then take first keylen bytes
+            const SALT_KEY = 'Pair-Verify-AES-Key';
+            const SALT_IV = 'Pair-Verify-AES-IV';
+            
+            // Derive AES key (16 bytes) and IV (16 bytes) from shared secret
+            // SHA512(salt + shared_secret), take first 16 bytes
+            const keyHash = crypto.createHash('sha512').update(SALT_KEY).update(sharedSecret).digest();
+            const ivHash = crypto.createHash('sha512').update(SALT_IV).update(sharedSecret).digest();
+            const aesKey = keyHash.slice(0, 16);
+            const aesIV = ivHash.slice(0, 16);
+            
+            logDebug(`Derived AES key and IV from shared secret`);
+            
+            // Encrypt signature with AES-CTR
+            const cipher = crypto.createCipheriv('aes-128-ctr', aesKey, aesIV);
+            const encryptedSignature = Buffer.concat([
+              cipher.update(signature),
+              cipher.final(),
+            ]);
+            
+            signature = encryptedSignature;
+            logDebug(`Encrypted signature (${signature.length} bytes)`);
+            logDebug(`Encrypted signature (hex): ${signature.toString('hex').substring(0, 32)}...`);
+          }
+        } else {
+          throw new Error('No persistent private key available');
+        }
+      } catch (err) {
+        logError(`Failed to generate ED25519 signature:`, err);
+        // Fallback to random signature (will cause verification failure)
+        signature = crypto.randomBytes(PAIRING_SIG_SIZE);
+      }
+      
+      // Response: X25519 public key (32 bytes) + ED25519 signature (64 bytes) = 96 bytes
+      responseBody = Buffer.concat([serverX25519Key, signature]);
+      
+      logInfo(`Pair-verify step 1: returning server X25519 key (32 bytes) + signature (64 bytes) = ${responseBody.length} bytes`);
+      logDebug(`Server X25519 key (hex): ${serverX25519Key.toString('hex')}`);
+      logDebug(`Signature (hex): ${signature.toString('hex').substring(0, 32)}...`);
+
+      res.writeHead(200, {
+        'Content-Type': 'application/octet-stream',
+        'Content-Length': responseBody.length.toString(),
+        'CSeq': cseq,
+        'Server': 'AirTunes/220.68',
+        ...corsHeaders,
+      });
+      res.end(responseBody);
+    } else if (step === 0) {
+      // Step 2: Client sends signature for verification
+      // Expected: 4 + 64 = 68 bytes
+      if (requestBody.length !== 4 + PAIRING_SIG_SIZE) {
+        logError(`Invalid pair-verify step 2 data: expected ${4 + PAIRING_SIG_SIZE} bytes, got ${requestBody.length} bytes`);
+        res.writeHead(400, {
+          'CSeq': cseq,
+          'Content-Length': '0',
+          ...corsHeaders,
+        });
+        res.end();
+        return;
+      }
+
+      const clientSignature = requestBody.slice(4, 4 + PAIRING_SIG_SIZE);
+      logInfo(`Pair-verify step 2: received client signature (${clientSignature.length} bytes)`);
+      logDebug(`Client signature (hex): ${clientSignature.toString('hex').substring(0, 32)}...`);
+
+      // Verify the client's signature (UxPlay: pairing_session_finish)
+      // UxPlay: First decrypts the signature, then verifies with client X25519 + server X25519
+      let signatureValid = false;
+      
+      if (session && session.clientX25519Key && session.serverX25519Key && session.sharedSecret && session.clientED25519Key) {
+        try {
+          // UxPlay first decrypts the signature with AES-CTR
+          const SALT_KEY = 'Pair-Verify-AES-Key';
+          const SALT_IV = 'Pair-Verify-AES-IV';
+          
+          // Derive AES key and IV from shared secret (same as step 1)
+          const keyHash = crypto.createHash('sha512').update(SALT_KEY).update(session.sharedSecret).digest();
+          const ivHash = crypto.createHash('sha512').update(SALT_IV).update(session.sharedSecret).digest();
+          const aesKey = keyHash.slice(0, 16);
+          const aesIV = ivHash.slice(0, 16);
+          
+          // Decrypt the signature
+          // UxPlay: One fake round (encrypt zeros), then encrypt the encrypted signature to decrypt it
+          // In CTR mode, encryption and decryption are the same operation
+          const cipher = crypto.createCipheriv('aes-128-ctr', aesKey, aesIV);
+          
+          // Fake round: encrypt zeros (advances counter)
+          const fakeRound = Buffer.concat([
+            cipher.update(Buffer.alloc(PAIRING_SIG_SIZE)),
+            cipher.final(),
+          ]);
+          
+          // Now encrypt the encrypted signature to decrypt it
+          const decryptedSignature = Buffer.concat([
+            cipher.update(clientSignature),
+            cipher.final(),
+          ]);
+          
+          logDebug(`Decrypted client signature (${decryptedSignature.length} bytes)`);
+          
+          // Create verifier
+          const verifier = crypto.createVerify('ed25519');
+          
+          // UxPlay verifies: ecdh_theirs (client X25519) + ecdh_ours (server X25519)
+          // NOT client ED25519, NOT shared secret!
+          const messageToVerify = Buffer.concat([
+            session.clientX25519Key,  // client X25519 public key (32 bytes)
+            session.serverX25519Key,  // server X25519 public key (32 bytes)
+          ]);
+          
+          logDebug(`Verifying message: client X25519 (${session.clientX25519Key.length} bytes) + server X25519 (${session.serverX25519Key.length} bytes) = ${messageToVerify.length} bytes`);
+          
+          verifier.update(messageToVerify);
+          
+          // Create a public key object from the raw ED25519 public key
+          const ed25519OID = Buffer.from([0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70]); // SEQUENCE { OID id-Ed25519 }
+          const publicKeyBitString = Buffer.concat([
+            Buffer.from([0x03, 0x21, 0x00]), // BIT STRING with 0 unused bits, length 33
+            session.clientED25519Key,
+          ]);
+          const algorithmIdentifier = Buffer.concat([ed25519OID, publicKeyBitString]);
+          const spkiStructure = Buffer.concat([
+            Buffer.from([0x30, algorithmIdentifier.length]), // SEQUENCE with length
+            algorithmIdentifier,
+          ]);
+          
+          const clientPublicKeyObj = crypto.createPublicKey({
+            key: spkiStructure,
+            format: 'der',
+            type: 'spki',
+          });
+          
+          // Use crypto.verify() directly (not verifier.verify())
+          signatureValid = crypto.verify(null, messageToVerify, clientPublicKeyObj, decryptedSignature);
+          
+          if (signatureValid) {
+            logInfo(`Pair-verify step 2: signature verified successfully`);
+          } else {
+            logError(`Pair-verify step 2: signature verification failed`);
+          }
+        } catch (keyErr) {
+          logError(`Failed to verify signature:`, keyErr);
+          // Don't accept invalid signatures - this should fail
+          signatureValid = false;
+        }
+      } else {
+        logError(`Missing session data for signature verification`);
+        signatureValid = false;
+      }
+
+      if (!signatureValid) {
+        logError(`Pair-verify step 2: signature verification failed, closing connection`);
+        // UxPlay sets http_response_set_disconnect(response, 1) on failure
+        res.writeHead(200, {
+          'Content-Type': 'application/octet-stream',
+          'Content-Length': '0',
+          'CSeq': cseq,
+          'Server': 'AirTunes/220.68',
+          ...corsHeaders,
+        });
+        res.end();
+        // Close connection after response
+        req.socket.end();
+        return;
+      }
+      
+      // Update pairing session status to FINISHED (UxPlay: session->status = STATUS_FINISHED)
+      if (session) {
+        session.status = PairingStatus.FINISHED;
+        logInfo(`Pairing session status updated to FINISHED`);
+      }
       
       // Update status to connected
       this.status = 'connected';
       this.sendStatusUpdate();
       logInfo(`Status updated to: connected`);
-    }
-    // Default: accept verification
-    else {
-      responseData = {
-        state: 2, // Complete
-      };
-      this.status = 'connected';
-      this.sendStatusUpdate();
-      logInfo(`Pair-verify: accepting verification, status updated to: connected`);
-    }
 
-    // Encode response as binary PLIST
-    let responseBody: Buffer;
-    try {
-      responseBody = bplistCreator(responseData);
-      logInfo(`Pair-verify response:`, JSON.stringify(responseData, null, 2));
-      logDebug(`Pair-verify response body size: ${responseBody.length} bytes`);
-    } catch (err) {
-      logError(`Error creating pair-verify response:`, err);
-      responseBody = Buffer.alloc(0);
+      // Response: empty body (just headers)
+      res.writeHead(200, {
+        'Content-Type': 'application/octet-stream',
+        'Content-Length': '0',
+        'CSeq': cseq,
+        'Server': 'AirTunes/220.68',
+        ...corsHeaders,
+      });
+      res.end();
+    } else {
+      logError(`Invalid pair-verify step: expected 0 or 1, got ${step}`);
+      res.writeHead(400, {
+        'CSeq': cseq,
+        'Content-Length': '0',
+        ...corsHeaders,
+      });
+      res.end();
     }
-
-    const cseq = Array.isArray(req.headers['cseq']) ? req.headers['cseq'][0] : (req.headers['cseq'] || '0');
-    res.writeHead(statusCode, {
-      'Content-Type': 'application/x-apple-binary-plist',
-      'Content-Length': responseBody.length.toString(),
-      'CSeq': cseq,
-      'X-Apple-ProtocolVersion': '1',
-      ...corsHeaders,
-    });
-    res.end(responseBody);
   }
 
   private handlePlay(req: http.IncomingMessage, res: http.ServerResponse, corsHeaders: Record<string, string>): void {
@@ -1576,6 +1918,313 @@ ${entries}
     };
 
     this.mainWindow.webContents.send('airplay:status-update', status);
+  }
+
+  /**
+   * Set up raw socket parser for RTSP requests after first response
+   * Node.js HTTP parser won't parse subsequent RTSP requests after we bypass response handling
+   */
+  private setupRTSPParser(socket: any, socketId: string): void {
+    // Check if parser is already set up for this socket
+    if ((socket as any)._rtspParserSetup) {
+      logDebug(`[RTSP_PARSER] Parser already set up for socket ${socketId}, skipping`);
+      return;
+    }
+    
+    // Mark socket as having parser set up
+    (socket as any)._rtspParserSetup = true;
+    
+    // Remove Node.js HTTP parser's data listener
+    socket.removeAllListeners('data');
+    
+    let buffer = Buffer.alloc(0);
+    let headersComplete = false;
+    let contentLength = 0;
+    let bodyReceived = 0;
+    // Store request state for when body arrives in chunks
+    let currentMethod = '';
+    let currentUrl = '';
+    let currentProtocol = '';
+    let currentHeaders: Record<string, string> = {};
+    
+    const parseRTSPRequest = (data: Buffer): void => {
+      buffer = Buffer.concat([buffer, data]);
+      
+      // Parse request line: METHOD URL PROTOCOL\r\n
+      if (!headersComplete) {
+        const headerEnd = buffer.indexOf('\r\n\r\n');
+        if (headerEnd === -1) {
+          // Headers not complete yet, wait for more data
+          return;
+        }
+        
+        const headerBlock = buffer.slice(0, headerEnd);
+        const headerLines = headerBlock.toString('utf8').split('\r\n');
+        
+        // Parse request line
+        const requestLine = headerLines[0];
+        const parts = requestLine.split(' ');
+        if (parts.length < 3) {
+          logError(`[RTSP_PARSER] Invalid request line: ${requestLine}`);
+          return;
+        }
+        
+        currentMethod = parts[0];
+        currentUrl = parts[1];
+        currentProtocol = parts[2];
+        
+        logInfo(`[RTSP_PARSER] Parsed request: ${currentMethod} ${currentUrl} ${currentProtocol}`);
+        
+        // Parse headers
+        currentHeaders = {};
+        for (let i = 1; i < headerLines.length; i++) {
+          const line = headerLines[i];
+          const colonIndex = line.indexOf(':');
+          if (colonIndex > 0) {
+            const key = line.slice(0, colonIndex).trim().toLowerCase();
+            const value = line.slice(colonIndex + 1).trim();
+            currentHeaders[key] = value;
+          }
+        }
+        
+        // Get content length
+        contentLength = parseInt(currentHeaders['content-length'] || '0', 10);
+        headersComplete = true;
+        
+        // Check if we have the body already
+        const bodyStart = headerEnd + 4;
+        const bodyData = buffer.slice(bodyStart);
+        
+        if (bodyData.length >= contentLength) {
+          // We have the full request, process it
+          const body = bodyData.slice(0, contentLength);
+          buffer = bodyData.slice(contentLength);
+          headersComplete = false;
+          bodyReceived = 0;
+          
+          this.handleRTSPRequest(socket, socketId, currentMethod, currentUrl, currentProtocol, currentHeaders, body);
+          
+          // If there's more data in buffer, parse next request
+          if (buffer.length > 0) {
+            parseRTSPRequest(Buffer.alloc(0));
+          }
+        } else {
+          // Need more data for body - store what we have so far
+          bodyReceived = bodyData.length;
+          buffer = bodyData;
+        }
+      } else {
+        // Headers complete, receiving body
+        bodyReceived += buffer.length;
+        
+        if (bodyReceived >= contentLength) {
+          const body = buffer.slice(0, contentLength);
+          buffer = buffer.slice(contentLength);
+          headersComplete = false;
+          bodyReceived = 0;
+          
+          // Process the request with stored state
+          this.handleRTSPRequest(socket, socketId, currentMethod, currentUrl, currentProtocol, currentHeaders, body);
+          
+          // If there's more data in buffer, parse next request
+          if (buffer.length > 0) {
+            parseRTSPRequest(Buffer.alloc(0));
+          }
+        }
+      }
+    };
+    
+    socket.on('data', (data: Buffer) => {
+      logDebug(`[RTSP_PARSER] Received ${data.length} bytes on socket ${socketId}`);
+      parseRTSPRequest(data);
+    });
+    
+    socket.on('error', (err: Error) => {
+      logError(`[RTSP_PARSER] Socket error on ${socketId}:`, err);
+      this.connections.delete(socketId);
+    });
+    
+    socket.on('close', () => {
+      logInfo(`[RTSP_PARSER] Socket closed: ${socketId}`);
+      this.connections.delete(socketId);
+    });
+    
+    // Resume socket to start receiving data
+    socket.resume();
+    logInfo(`[RTSP_PARSER] Raw socket parser set up for socket ${socketId}`);
+  }
+  
+  /**
+   * Handle parsed RTSP request from raw socket parser
+   */
+  private handleRTSPRequest(
+    socket: any,
+    socketId: string,
+    method: string,
+    url: string,
+    protocol: string,
+    headers: Record<string, string>,
+    body: Buffer
+  ): void {
+    logInfo(`[RTSP_PARSER] Handling RTSP request: ${method} ${url}`);
+    
+    // Create mock IncomingMessage that supports async iteration
+    // Node.js IncomingMessage implements Symbol.asyncIterator for for-await-of loops
+    const req = {
+      method,
+      url,
+      headers,
+      socket,
+      httpVersion: '1.0',
+      httpVersionMajor: 1,
+      httpVersionMinor: 0,
+      rawHeaders: Object.entries(headers).flat(),
+      on: (event: string, handler: Function) => {
+        if (event === 'data' && body.length > 0) {
+          // Emit body data
+          setImmediate(() => handler(body));
+        }
+        if (event === 'end') {
+          setImmediate(() => handler());
+        }
+      },
+      readable: true,
+      readableLength: body.length,
+      // Implement async iterator for for-await-of loops
+      [Symbol.asyncIterator]: async function* () {
+        if (body.length > 0) {
+          yield body;
+        }
+      },
+    } as any;
+    
+    // Create mock ServerResponse that writes RTSP responses
+    const res = {
+      socket,
+      shouldKeepAlive: true,
+      writeHead: (statusCode: number, responseHeaders?: Record<string, string>) => {
+        logInfo(`[RTSP_PARSER] writeHead called: ${statusCode}`);
+        // Store headers for write/end
+        (res as any)._statusCode = statusCode;
+        (res as any)._headers = responseHeaders || {};
+      },
+      write: (chunk: Buffer | string) => {
+        const chunkBuffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        logDebug(`[RTSP_PARSER] write called: ${chunkBuffer.length} bytes`);
+        // Store chunks for end()
+        if (!(res as any)._bodyChunks) {
+          (res as any)._bodyChunks = [];
+        }
+        (res as any)._bodyChunks.push(chunkBuffer);
+        return true;
+      },
+      end: (chunk?: Buffer | string) => {
+        const statusCode = (res as any)._statusCode || 200;
+        const responseHeaders = (res as any)._headers || {};
+        const bodyChunks = (res as any)._bodyChunks || [];
+        
+        if (chunk) {
+          const chunkBuffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          bodyChunks.push(chunkBuffer);
+        }
+        
+        const responseBody = Buffer.concat(bodyChunks);
+        
+        // Ensure Server header is present (UxPlay always includes it for RTSP)
+        if (!responseHeaders['Server'] && !responseHeaders['server']) {
+          responseHeaders['Server'] = 'AirTunes/220.68';
+        }
+        
+        // Add Audio-Jack-Status header for RTSP requests (UxPlay always includes this)
+        // UxPlay log shows: Audio-Jack-Status: connected; type=digital
+        if (!responseHeaders['Audio-Jack-Status'] && !responseHeaders['audio-jack-status']) {
+          responseHeaders['Audio-Jack-Status'] = 'connected; type=digital';
+        }
+        
+        // Write RTSP response manually
+        // UxPlay's http_response_finish adds headers in this exact order (from log):
+        // 1. Audio-Jack-Status (from raop.c line 336)
+        // 2. Content-Type (from handler)
+        // 3. Server (from raop.c)
+        // 4. CSeq (from raop.c)
+        // 5. Content-Length (added by http_response_finish, then \r\n\r\n)
+        // Match this exact order
+        const orderedHeaders: string[] = [];
+        
+        // First: Audio-Jack-Status (from raop.c)
+        if (responseHeaders['Audio-Jack-Status'] || responseHeaders['audio-jack-status']) {
+          orderedHeaders.push(`Audio-Jack-Status: ${responseHeaders['Audio-Jack-Status'] || responseHeaders['audio-jack-status']}`);
+        }
+        
+        // Second: Content-Type (added by handler)
+        if (responseHeaders['Content-Type'] || responseHeaders['content-type']) {
+          orderedHeaders.push(`Content-Type: ${responseHeaders['Content-Type'] || responseHeaders['content-type']}`);
+        }
+        
+        // Third: Server (added by raop.c)
+        if (responseHeaders['Server'] || responseHeaders['server']) {
+          orderedHeaders.push(`Server: ${responseHeaders['Server'] || responseHeaders['server']}`);
+        }
+        
+        // Fourth: CSeq (added by raop.c)
+        if (responseHeaders['CSeq'] || responseHeaders['cseq']) {
+          orderedHeaders.push(`CSeq: ${responseHeaders['CSeq'] || responseHeaders['cseq']}`);
+        }
+        
+        // Fifth: Content-Length (added by http_response_finish)
+        if (responseHeaders['Content-Length'] || responseHeaders['content-length']) {
+          orderedHeaders.push(`Content-Length: ${responseHeaders['Content-Length'] || responseHeaders['content-length']}`);
+        }
+        
+        // Add any other headers (shouldn't be any for RTSP, but just in case)
+        for (const [key, value] of Object.entries(responseHeaders)) {
+          const lowerKey = key.toLowerCase();
+          if (lowerKey !== 'audio-jack-status' && lowerKey !== 'content-type' && lowerKey !== 'server' && lowerKey !== 'cseq' && lowerKey !== 'content-length') {
+            orderedHeaders.push(`${key}: ${value}`);
+          }
+        }
+        
+        const statusLine = `RTSP/1.0 ${statusCode} OK\r\n`;
+        const headerLines = orderedHeaders.join('\r\n');
+        const headerBlock = Buffer.from(`${statusLine}${headerLines}\r\n\r\n`, 'utf8');
+        
+        logInfo(`[RTSP_PARSER] Writing RTSP response: ${statusCode}`);
+        logDebug(`[RTSP_PARSER] Headers: ${headerLines}`);
+        logDebug(`[RTSP_PARSER] Body size: ${responseBody.length} bytes`);
+        logDebug(`[RTSP_PARSER] Header block size: ${headerBlock.length} bytes`);
+        if (responseBody.length > 0) {
+          logDebug(`[RTSP_PARSER] Response body preview (hex): ${responseBody.toString('hex').substring(0, 64)}...`);
+        }
+        
+        // Write response atomically (headers + body together)
+        const fullResponse = Buffer.concat([headerBlock, responseBody]);
+        socket.write(fullResponse);
+        
+        logInfo(`[RTSP_PARSER] Response sent: ${statusCode}, total ${fullResponse.length} bytes (headers: ${headerBlock.length}, body: ${responseBody.length})`);
+        
+        // Ensure socket stays open and readable for next request
+        if (!socket.destroyed && socket.readable) {
+          socket.resume();
+          logDebug(`[RTSP_PARSER] Socket resumed, ready for next request`);
+        } else {
+          logError(`[RTSP_PARSER] Socket is destroyed or not readable after response!`);
+        }
+        
+        // Don't set up parser again - it's already set up and will handle the next request
+        // The parser is persistent and will continue listening for data
+        // We only set it up once after the first response, then it persists
+        logDebug(`[RTSP_PARSER] Response complete, parser will handle next request`);
+        
+        return true;
+      },
+      on: () => {},
+      emit: () => {},
+      finished: false,
+      _headerSent: false,
+    } as any;
+    
+    // Handle the request using existing handler
+    this.handleRequest(req, res);
   }
 }
 

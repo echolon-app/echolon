@@ -33,6 +33,7 @@
     "update:release-notes": "node scripts/fetch-changelog.js && node scripts/update-release-notes.js"
   },
   "dependencies": {
+    "@noble/curves": "^2.0.1",
     "ace-builds": "^1.32.3",
     "bonjour": "^3.5.0",
     "bplist-creator": "^0.1.0",
