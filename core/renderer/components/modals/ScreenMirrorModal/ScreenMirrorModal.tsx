@@ -13,7 +13,20 @@ export const ScreenMirrorModal: React.FC = () => {
   const [pairingCode, setPairingCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isServerRunning, setIsServerRunning] = useState(false);
+  
+  // Video decoding state
+  const videoDecoderRef = useRef<VideoDecoder | null>(null);
+  const videoConfigRef = useRef<VideoDecoderConfig | null>(null);
+  const isH265Ref = useRef<boolean>(false);
+  const spsPpsRef = useRef<Uint8Array | null>(null);
+  
+  // Audio playback state
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const audioQueueRef = useRef<ArrayBuffer[]>([]);
+  const isAudioInitializedRef = useRef<boolean>(false);
 
   // Start AirPlay server when modal opens
   useEffect(() => {
@@ -44,7 +57,7 @@ export const ScreenMirrorModal: React.FC = () => {
       setStatus('starting');
       setError(null);
       
-      const result = await window.electronAPI?.airplayStartServer();
+      const result = await (window.electronAPI as any)?.airplayStartServer();
       
       if (result.success) {
         setIsServerRunning(true);
@@ -68,7 +81,7 @@ export const ScreenMirrorModal: React.FC = () => {
     }
 
     try {
-      await window.electronAPI?.airplayStopServer();
+      await (window.electronAPI as any)?.airplayStopServer();
       setIsServerRunning(false);
       setStatus('idle');
       setPairingCode(null);
@@ -83,7 +96,7 @@ export const ScreenMirrorModal: React.FC = () => {
     if (!isElectron() || !window.electronAPI) return;
 
     // Set up IPC listener
-    const unsubscribe = window.electronAPI.onAirPlayStatusUpdate((data) => {
+    const unsubscribe = (window.electronAPI as any).onAirPlayStatusUpdate((data: any) => {
       const { status: newStatus, pairingCode: code, error: err } = data;
       setStatus(newStatus as ConnectionStatus);
       if (code) setPairingCode(code);
@@ -112,19 +125,308 @@ export const ScreenMirrorModal: React.FC = () => {
     };
   }, []);
 
-  // Handle video frames (if implemented)
+  // Initialize video decoder
   useEffect(() => {
-    if (!isElectron() || !window.electronAPI || !videoRef.current) return;
+    if (!isElectron() || !canvasRef.current) return;
 
-    const handleVideoFrame = (event: CustomEvent<{ data: string }>) => {
-      // Handle video frame data
-      // This would need to be implemented based on how video frames are sent
-      console.log('Video frame received');
+    const initVideoDecoder = async () => {
+      try {
+        // Check WebCodecs API support
+        if (!('VideoDecoder' in window)) {
+          console.error('[RENDERER] WebCodecs API not supported');
+          return;
+        }
+
+        const canvas = canvasRef.current!;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          console.error('[RENDERER] Failed to get canvas context');
+          return;
+        }
+
+        // Create video decoder
+        const decoder = new VideoDecoder({
+          output: (frame: VideoFrame) => {
+            console.log(`[RENDERER] Video frame decoded: ${frame.displayWidth}x${frame.displayHeight}, timestamp=${frame.timestamp}`);
+            
+            // Update canvas size if needed
+            if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
+              canvas.width = frame.displayWidth;
+              canvas.height = frame.displayHeight;
+              console.log(`[RENDERER] Canvas resized to ${canvas.width}x${canvas.height}`);
+            }
+            
+            // Render frame to canvas
+            try {
+              ctx.drawImage(frame, 0, 0, frame.displayWidth, frame.displayHeight);
+              console.log(`[RENDERER] Frame rendered to canvas`);
+            } catch (err) {
+              console.error('[RENDERER] Failed to draw frame:', err);
+            }
+            
+            frame.close();
+          },
+          error: (error: Error) => {
+            console.error('[RENDERER] Video decoder error:', error);
+          },
+        });
+
+        videoDecoderRef.current = decoder;
+        console.log('[RENDERER] Video decoder initialized');
+      } catch (err) {
+        console.error('[RENDERER] Failed to initialize video decoder:', err);
+      }
     };
 
-    window.addEventListener('airplay:video-frame', handleVideoFrame as EventListener);
+    initVideoDecoder();
+
     return () => {
+      if (videoDecoderRef.current && videoDecoderRef.current.state !== 'closed') {
+        videoDecoderRef.current.close();
+      }
+    };
+  }, []);
+
+  // Handle video codec changes
+  useEffect(() => {
+    if (!isElectron() || !window.electronAPI) return;
+
+    const handleVideoCodec = (event: CustomEvent<{ isH265: boolean; spsPps: string }>) => {
+      const { isH265, spsPps } = event.detail;
+      isH265Ref.current = isH265;
+      
+      // Decode base64 SPS/PPS
+      const spsPpsBuffer = Uint8Array.from(atob(spsPps), c => c.charCodeAt(0));
+      spsPpsRef.current = spsPpsBuffer;
+
+      // Configure decoder
+      if (videoDecoderRef.current && videoDecoderRef.current.state === 'configured') {
+        videoDecoderRef.current.reset();
+      }
+
+      if (videoDecoderRef.current && videoDecoderRef.current.state === 'unconfigured') {
+        try {
+          const codec = isH265 ? 'hev1.1.6.L93.B0' : 'avc1.42E01E'; // H.265 or H.264
+          
+          // Extract SPS and PPS from buffer
+          // SPS/PPS are separated by start codes (0x00000001)
+          const sps: Uint8Array[] = [];
+          const pps: Uint8Array[] = [];
+          let offset = 0;
+          
+          while (offset < spsPpsBuffer.length) {
+            if (offset + 4 <= spsPpsBuffer.length &&
+                spsPpsBuffer[offset] === 0x00 &&
+                spsPpsBuffer[offset + 1] === 0x00 &&
+                spsPpsBuffer[offset + 2] === 0x00 &&
+                spsPpsBuffer[offset + 3] === 0x01) {
+              offset += 4;
+              const start = offset;
+              
+              // Find next start code
+              while (offset < spsPpsBuffer.length) {
+                if (offset + 4 <= spsPpsBuffer.length &&
+                    spsPpsBuffer[offset] === 0x00 &&
+                    spsPpsBuffer[offset + 1] === 0x00 &&
+                    spsPpsBuffer[offset + 2] === 0x00 &&
+                    spsPpsBuffer[offset + 3] === 0x01) {
+                  break;
+                }
+                offset++;
+              }
+              
+              const nalUnit = spsPpsBuffer.slice(start, offset);
+              const nalType = nalUnit[0] & (isH265 ? 0x7e : 0x1f);
+              
+              if (isH265) {
+                // H.265: NAL type 33 = VPS, 34 = SPS, 35 = PPS
+                if (nalType === 34) sps.push(nalUnit);
+                else if (nalType === 35) pps.push(nalUnit);
+              } else {
+                // H.264: NAL type 7 = SPS, 8 = PPS
+                if (nalType === 7) sps.push(nalUnit);
+                else if (nalType === 8) pps.push(nalUnit);
+              }
+            } else {
+              offset++;
+            }
+          }
+
+          if (sps.length > 0 && pps.length > 0) {
+            // Parse SPS to get dimensions (simplified - full SPS parsing is complex)
+            let width = 1920;
+            let height = 1080;
+            
+            if (!isH265) {
+              // H.264 SPS parsing (simplified)
+              // SPS contains width/height info, but parsing is complex
+              // For now, use default dimensions - will be updated when we receive actual frames
+            } else {
+              // H.265 SPS parsing (simplified)
+              // Similar to H.264, complex parsing required
+            }
+
+            const config: VideoDecoderConfig = {
+              codec: codec,
+              codedWidth: width,
+              codedHeight: height,
+              description: new Uint8Array([...sps[0], ...pps[0]]),
+            };
+
+            videoDecoderRef.current.configure(config);
+            videoConfigRef.current = config;
+            
+            // Update canvas size
+            if (canvasRef.current) {
+              canvasRef.current.width = width;
+              canvasRef.current.height = height;
+            }
+            
+            console.log(`[RENDERER] Video decoder configured: ${isH265 ? 'H.265' : 'H.264'} (${width}x${height})`);
+            console.log(`[RENDERER] SPS/PPS length: ${sps.length} SPS, ${pps.length} PPS`);
+          }
+        } catch (err) {
+          console.error('Failed to configure video decoder:', err);
+        }
+      }
+    };
+
+    const unsubscribe = (window.electronAPI as any)?.onAirPlayVideoCodec?.(handleVideoCodec);
+    window.addEventListener('airplay:video-codec', handleVideoCodec as EventListener);
+
+    return () => {
+      unsubscribe?.();
+      window.removeEventListener('airplay:video-codec', handleVideoCodec as EventListener);
+    };
+  }, []);
+
+  // Handle video frames
+  useEffect(() => {
+    if (!isElectron() || !window.electronAPI) return;
+
+    const handleVideoFrame = (event: Event) => {
+      const customEvent = event as CustomEvent<{ isH265: boolean; nalCount: number; data: string; ntpTimeLocal: string; ntpTimeRemote: string }>;
+      
+      if (!customEvent.detail) {
+        console.error('[RENDERER] Video frame event missing detail');
+        return;
+      }
+      
+      const { isH265, nalCount, data: base64Data } = customEvent.detail;
+      
+      console.log(`[RENDERER] Video frame received: ${nalCount} NAL units, isH265=${isH265}, dataLength=${base64Data.length}`);
+      
+      try {
+        // Decode base64 to Uint8Array
+        const videoData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+        console.log(`[RENDERER] Decoded video data: ${videoData.length} bytes`);
+        
+        // Check decoder state
+        if (!videoDecoderRef.current) {
+          console.error('[RENDERER] Video decoder not initialized');
+          return;
+        }
+        
+        if (videoDecoderRef.current.state !== 'configured') {
+          console.warn(`[RENDERER] Video decoder not configured (state: ${videoDecoderRef.current.state}), skipping frame`);
+          return;
+        }
+        
+        // Determine chunk type from NAL units (check first NAL unit)
+        let chunkType: 'key' | 'delta' = 'delta';
+        if (videoData.length >= 5) {
+          // Check NAL unit type (after start code 0x00000001)
+          const nalType = videoData[4] & (isH265 ? 0x7e : 0x1f);
+          // H.264: type 5 = IDR, H.265: type 19-21 = IDR
+          if (isH265) {
+            chunkType = (nalType >= 19 && nalType <= 21) ? 'key' : 'delta';
+          } else {
+            chunkType = (nalType === 5) ? 'key' : 'delta';
+          }
+        }
+        
+        console.log(`[RENDERER] Decoding video chunk: type=${chunkType}, size=${videoData.length}`);
+        
+        const chunk = new EncodedVideoChunk({
+          type: chunkType,
+          timestamp: Date.now() * 1000, // microseconds
+          data: videoData,
+        });
+        
+        videoDecoderRef.current.decode(chunk);
+        console.log(`[RENDERER] Video chunk decoded successfully`);
+      } catch (err) {
+        console.error('[RENDERER] Failed to decode video frame:', err);
+      }
+    };
+
+    const unsubscribe = (window.electronAPI as any)?.onAirPlayVideoFrame?.(handleVideoFrame);
+    window.addEventListener('airplay:video-frame', handleVideoFrame as EventListener);
+    
+    console.log('[RENDERER] Video frame listener registered');
+
+    return () => {
+      unsubscribe?.();
       window.removeEventListener('airplay:video-frame', handleVideoFrame as EventListener);
+    };
+  }, []);
+
+  // Initialize audio context
+  useEffect(() => {
+    if (!isElectron()) return;
+
+    const initAudio = async () => {
+      try {
+        const audioContext = new AudioContext({ sampleRate: 44100 });
+        audioContextRef.current = audioContext;
+        isAudioInitializedRef.current = true;
+      } catch (err) {
+        console.error('Failed to initialize audio context:', err);
+      }
+    };
+
+    initAudio();
+
+    return () => {
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+    };
+  }, []);
+
+  // Handle audio frames
+  useEffect(() => {
+    if (!isElectron() || !window.electronAPI || !audioContextRef.current) return;
+
+    const handleAudioFrame = async (event: CustomEvent<{ data: string; ct: number; syncStatus: number; ntpTimeLocal: string; ntpTimeRemote: string; rtpTime: number; seqnum: number }>) => {
+      const { data: base64Data, ct } = event.detail;
+      
+      try {
+        // Decode base64 to ArrayBuffer
+        const audioData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0)).buffer;
+        
+        // TODO: Decode AAC-ELD or ALAC based on ct value
+        // For now, we'll queue the audio data
+        // ct values: 0x8c-0x8e = AAC-ELD, 0x80-0x82 = ALAC
+        audioQueueRef.current.push(audioData);
+        
+        // Process audio queue
+        if (audioQueueRef.current.length > 0 && isAudioInitializedRef.current) {
+          // TODO: Implement actual audio decoding
+          // This requires a library like aac.js or alac.js, or using Web Audio API with MediaSource
+          console.log('Audio frame received (decoding not yet implemented)', { ct });
+        }
+      } catch (err) {
+        console.error('Failed to process audio frame:', err);
+      }
+    };
+
+    const unsubscribe = (window.electronAPI as any)?.onAirPlayAudioFrame?.(handleAudioFrame);
+    window.addEventListener('airplay:audio-frame', handleAudioFrame as unknown as EventListener);
+
+    return () => {
+      unsubscribe?.();
+      window.removeEventListener('airplay:audio-frame', handleAudioFrame as unknown as EventListener);
     };
   }, []);
 
@@ -202,12 +504,18 @@ export const ScreenMirrorModal: React.FC = () => {
 
             {/* Video Display */}
             <div className="screen-mirror-modal__video-container">
+              <canvas
+                ref={canvasRef}
+                className="screen-mirror-modal__video"
+                style={{ display: status === 'connected' ? 'block' : 'none', width: '100%', height: 'auto' }}
+              />
               <video
                 ref={videoRef}
                 className="screen-mirror-modal__video"
                 autoPlay
                 playsInline
                 muted
+                style={{ display: 'none' }}
               />
               {status !== 'connected' && (
                 <div className="screen-mirror-modal__video-placeholder">
@@ -223,7 +531,6 @@ export const ScreenMirrorModal: React.FC = () => {
                 <Button
                   variant="danger"
                   onClick={handleClose}
-                  leadingIcon={<StopIcon />}
                 >
                   Stop Mirroring
                 </Button>

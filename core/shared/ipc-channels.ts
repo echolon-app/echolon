@@ -176,6 +176,8 @@ export const AIRPLAY_CHANNELS = {
   GET_STATUS: 'airplay:get-status',
   STATUS_UPDATE: 'airplay:status-update',
   VIDEO_FRAME: 'airplay:video-frame',
+  VIDEO_CODEC: 'airplay:video-codec',
+  AUDIO_FRAME: 'airplay:audio-frame',
 } as const;
 
 // ==================== GitHub Channels ====================

@@ -2,14 +2,56 @@ import { BrowserWindow } from 'electron';
 import http from 'http';
 import crypto from 'crypto';
 import plist from 'plist';
+import dgram from 'dgram';
+import net from 'net';
+import * as fs from 'fs';
+import * as path from 'path';
+import { playfairDecrypt } from './fairplay';
+
+// Polyfill crypto.getRandomValues for @noble/curves (required for Node.js)
+// @noble/curves expects Web Crypto API's getRandomValues, but Node.js doesn't expose it globally
+if (!crypto.getRandomValues) {
+  (crypto as any).getRandomValues = function <T extends ArrayBufferView | null>(array: T): T {
+    if (!array) {
+      throw new Error('getRandomValues requires an array-like object');
+    }
+    const buffer = Buffer.from(array.buffer, array.byteOffset, array.byteLength);
+    crypto.randomFillSync(buffer);
+    return array;
+  };
+}
+
+// Also ensure it's available globally (some libraries check globalThis.crypto)
+if (typeof globalThis !== 'undefined' && !globalThis.crypto) {
+  (globalThis as any).crypto = crypto;
+} else if (typeof globalThis !== 'undefined' && globalThis.crypto && !globalThis.crypto.getRandomValues) {
+  (globalThis.crypto as any).getRandomValues = crypto.getRandomValues;
+}
 
 // @noble/curves for X25519 support
 // The package exports './ed25519.js' (with .js extension)
+// Note: This is an ES module, so we must use dynamic import() instead of require()
 let x25519Lib: any = null;
-try {
-  x25519Lib = require('@noble/curves/ed25519.js').x25519;
-} catch (e) {
-  // Will be handled in code - library might not be available
+let x25519LibPromise: Promise<any> | null = null;
+
+// Lazy loader function for @noble/curves (ES module)
+async function loadX25519Lib(): Promise<any> {
+  if (x25519Lib) {
+    return x25519Lib;
+  }
+  
+  if (!x25519LibPromise) {
+    x25519LibPromise = import('@noble/curves/ed25519.js').then((module) => {
+      x25519Lib = module.x25519;
+      return x25519Lib;
+    }).catch((err) => {
+      console.error('[AirPlay] Failed to load @noble/curves:', err);
+      x25519LibPromise = null; // Reset promise so we can retry
+      throw err;
+    });
+  }
+  
+  return x25519LibPromise;
 }
 
 // bplist packages don't have TypeScript types
@@ -57,18 +99,85 @@ interface ConnectionState {
 const DEBUG_MODE = process.env.AIRPLAY_DEBUG === '1' || process.env.AIRPLAY_DEBUG === 'true';
 
 // Logging helper functions
+// File logging for debugging
+// Use process.cwd() or a fixed path since __dirname might not be available in Electron
+const LOG_FILE = path.join(process.cwd(), 'airplay-debug.log');
+
+const writeToLogFile = (level: string, message: string, ...args: any[]): void => {
+  try {
+    const timestamp = new Date().toISOString();
+    const argsStr = args.length > 0 ? ' ' + args.map(a => {
+      if (a === null) return 'null';
+      if (a === undefined) return 'undefined';
+      if (typeof a === 'object') {
+        try {
+          return JSON.stringify(a);
+        } catch {
+          return String(a);
+        }
+      }
+      return String(a);
+    }).join(' ') : '';
+    const logLine = `[${timestamp}] [${level}] ${message}${argsStr}\n`;
+    
+    // Force synchronous write with error handling
+    try {
+      const fd = fs.openSync(LOG_FILE, 'a', 0o666);
+      const buffer = Buffer.from(logLine, 'utf8');
+      fs.writeSync(fd, buffer, 0, buffer.length, null);
+      fs.fsyncSync(fd); // Force write to disk immediately
+      fs.closeSync(fd);
+    } catch (writeErr: any) {
+      // Log write error to console
+      console.error(`[LOG_FILE_ERROR] Failed to append to ${LOG_FILE}:`, writeErr?.message || String(writeErr));
+      console.error(`[LOG_FILE_ERROR] Error code:`, writeErr?.code);
+      console.error(`[LOG_FILE_ERROR] Error stack:`, writeErr?.stack);
+      
+      // Try to create file if it doesn't exist
+      if (writeErr?.code === 'ENOENT') {
+        try {
+          fs.writeFileSync(LOG_FILE, logLine, { encoding: 'utf8', flag: 'w', mode: 0o666 });
+          console.log(`[LOG_FILE] Created new log file: ${LOG_FILE}`);
+        } catch (createErr) {
+          console.error(`[LOG_FILE_ERROR] Failed to create log file:`, createErr);
+        }
+      }
+    }
+  } catch (err: any) {
+    // Log to console as fallback, but don't throw
+    try {
+      console.error(`[LOG_FILE_ERROR] Outer catch - Failed to write to ${LOG_FILE}:`, err?.message || String(err));
+      console.error(`[LOG_FILE_ERROR] Error code:`, err?.code);
+      console.error(`[LOG_FILE_ERROR] Error stack:`, err?.stack);
+    } catch {
+      // Ignore if even console.error fails
+    }
+  }
+};
+
+// Test file logging on startup
+try {
+  writeToLogFile('INFO', '=== AirPlay Server Starting - File Logging Test ===');
+  console.log(`[AirPlay] Log file initialized at: ${LOG_FILE}`);
+} catch (err) {
+  console.error(`[AirPlay] Failed to initialize log file:`, err);
+}
+
 const logDebug = (message: string, ...args: any[]): void => {
   if (DEBUG_MODE) {
     console.log(`[AirPlay:DEBUG] ${message}`, ...args);
   }
+  writeToLogFile('DEBUG', message, ...args);
 };
 
 const logInfo = (message: string, ...args: any[]): void => {
   console.log(`[AirPlay:INFO] ${message}`, ...args);
+  writeToLogFile('INFO', message, ...args);
 };
 
 const logError = (message: string, ...args: any[]): void => {
   console.error(`[AirPlay:ERROR] ${message}`, ...args);
+  writeToLogFile('ERROR', message, ...args);
 };
 
 const logRequest = (req: http.IncomingMessage, method: string, url: string, isRTSP: boolean): void => {
@@ -467,6 +576,7 @@ class AirPlayServer {
     } else if (url.startsWith('/play')) {
       this.handlePlay(req, res, corsHeaders);
     } else if (pathname === '/fp-setup') {
+      logInfo(`[FAIRPLAY] /fp-setup request received - calling handleFPSetup`);
       this.handleFPSetup(req, res, corsHeaders, isRTSP, method).catch((err) => {
         logError('[AirPlay] Error handling fp-setup:', err);
         if (isRTSP) {
@@ -483,8 +593,27 @@ class AirPlayServer {
       });
     } else if (method === 'SETUP' && isRTSP) {
       // RTSP SETUP method - handles session initialization with FairPlay keys
+      logInfo(`[FAIRPLAY] RTSP SETUP request received - calling handleRTSPSetup`);
       this.handleRTSPSetup(req, res, corsHeaders, isRTSP).catch((err) => {
         logError('[AirPlay] Error handling RTSP SETUP:', err);
+        res.writeHead(500, {
+          'Content-Type': 'text/plain',
+        });
+        res.end('Internal Server Error');
+      });
+    } else if (method === 'RECORD' && isRTSP) {
+      // RTSP RECORD method - starts the streaming session
+      this.handleRTSPRecord(req, res, corsHeaders, isRTSP).catch((err) => {
+        logError('[AirPlay] Error handling RTSP RECORD:', err);
+        res.writeHead(500, {
+          'Content-Type': 'text/plain',
+        });
+        res.end('Internal Server Error');
+      });
+    } else if (method === 'POST' && pathname === '/feedback' && isRTSP) {
+      // RTSP POST /feedback - client heartbeat/keepalive
+      this.handleRTSPFeedback(req, res, corsHeaders, isRTSP).catch((err) => {
+        logError('[AirPlay] Error handling RTSP feedback:', err);
         res.writeHead(500, {
           'Content-Type': 'text/plain',
         });
@@ -691,21 +820,21 @@ class AirPlayServer {
         logError(`Content-Type present but no txtAirPlay/txtRAOP to return - this should not happen`);
         // Fall through to full response instead of returning empty
       } else {
-        try {
-          const responseBody = bplistCreator(minimalResponse);
-          logInfo(`txtAirPlay-only response created, size: ${responseBody.length} bytes`);
-          logDebug(`Response starts with: ${responseBody.toString('ascii', 0, 8)}`);
+      try {
+        const responseBody = bplistCreator(minimalResponse);
+        logInfo(`txtAirPlay-only response created, size: ${responseBody.length} bytes`);
+        logDebug(`Response starts with: ${responseBody.toString('ascii', 0, 8)}`);
           
           // Log the exact binary response for comparison with UxPlay
           logInfo(`=== EXACT BINARY RESPONSE (first 100 bytes) ===`);
           logInfo(`Hex: ${responseBody.slice(0, 100).toString('hex')}`);
           logInfo(`ASCII preview: ${responseBody.slice(0, 100).toString('ascii').replace(/[^\x20-\x7E]/g, '.')}`);
-          
-          // Verify the encoding
-          try {
-            const verify = bplistParser.parseBuffer(responseBody);
-            logInfo(`✓ txtAirPlay-only response decodes correctly`);
-            if (verify[0].txtAirPlay) {
+        
+        // Verify the encoding
+        try {
+          const verify = bplistParser.parseBuffer(responseBody);
+          logInfo(`✓ txtAirPlay-only response decodes correctly`);
+          if (verify[0].txtAirPlay) {
               const txtData = Buffer.isBuffer(verify[0].txtAirPlay) 
                 ? verify[0].txtAirPlay
                 : Buffer.from(verify[0].txtAirPlay);
@@ -717,8 +846,8 @@ class AirPlayServer {
               
               // Decode to show the entries
               const decodedTxt = txtData.toString('utf8');
-              logDebug(`Decoded txtAirPlay content: ${decodedTxt}`);
-              logDebug(`txtAirPlay length: ${decodedTxt.length}`);
+            logDebug(`Decoded txtAirPlay content: ${decodedTxt}`);
+            logDebug(`txtAirPlay length: ${decodedTxt.length}`);
               
               // Parse the DNS-SD format to show individual entries
               let offset = 0;
@@ -732,23 +861,23 @@ class AirPlayServer {
                 offset += 1 + entryLength;
               }
               logInfo(`Parsed ${entries.length} TXT entries`);
-            }
-          } catch (verifyErr) {
-            logError(`✗ txtAirPlay-only response decode failed:`, verifyErr);
           }
-          
-          // Add RTSP headers if this is an RTSP request
-          const responseHeaders: Record<string, string> = {
-            'Content-Type': 'application/x-apple-binary-plist',
-            'Content-Length': responseBody.length.toString(),
-          };
-          
-          // Add CSeq if present in request (UxPlay always includes CSeq in response)
+        } catch (verifyErr) {
+          logError(`✗ txtAirPlay-only response decode failed:`, verifyErr);
+        }
+        
+        // Add RTSP headers if this is an RTSP request
+        const responseHeaders: Record<string, string> = {
+          'Content-Type': 'application/x-apple-binary-plist',
+          'Content-Length': responseBody.length.toString(),
+        };
+        
+        // Add CSeq if present in request (UxPlay always includes CSeq in response)
           // Also add RTSP-specific headers
           const cseqHeader = req.headers['cseq'] || req.headers['CSeq'];
           const cseq = Array.isArray(cseqHeader) ? cseqHeader[0] : (cseqHeader || '0');
           if (hasCSeqHeader) {
-            responseHeaders['CSeq'] = cseq;
+          responseHeaders['CSeq'] = cseq;
           }
           
           // Set Server header based on protocol
@@ -761,9 +890,9 @@ class AirPlayServer {
           if (isActuallyRTSP && hasCSeqHeader) {
             responseHeaders['Audio-Jack-Status'] = 'connected; type=digital';
             logDebug(`Added Audio-Jack-Status header for RTSP request`);
-          }
-          
-          logResponse(res, responseHeaders, responseBody.length, responseBody);
+        }
+        
+        logResponse(res, responseHeaders, responseBody.length, responseBody);
           
           // For RTSP, we MUST write RTSP/1.0 status line (UxPlay line 303: http_response_init(*response, protocol, 200, "OK"))
           // Node.js HTTP server writes HTTP/1.1, so we need to write manually
@@ -808,15 +937,15 @@ class AirPlayServer {
             logInfo(`RTSP response written, raw socket parser set up for next request`);
             return;
           } else {
-            res.writeHead(200, responseHeaders);
-            res.end(responseBody);
-            return;
+        res.writeHead(200, responseHeaders);
+        res.end(responseBody);
+        return;
           }
-        } catch (err) {
-          logError(`Error creating txtAirPlay-only response:`, err);
-          res.writeHead(500);
-          res.end();
-          return;
+      } catch (err) {
+        logError(`Error creating txtAirPlay-only response:`, err);
+        res.writeHead(500);
+        res.end();
+        return;
         }
       }
     }
@@ -1155,13 +1284,26 @@ class AirPlayServer {
       return;
     }
 
-    // Get or generate ED25519 public key (32 bytes)
-    // For now, use the persistent public key if available, otherwise generate one
-    if (!this.persistentPublicKey) {
-      // Generate ED25519 key pair (we only need the public key for this response)
-      // In a full implementation, we'd use a persistent key from the pairing system
-      this.persistentPublicKey = crypto.randomBytes(32);
-      logInfo(`Generated new persistent public key for pairing`);
+    // Get or generate ED25519 key pair (CRITICAL: must use same key pair in pair-setup and pair-verify!)
+    // The client will verify the signature in pair-verify using the public key from pair-setup
+    if (!this.persistentPrivateKey || !this.persistentPublicKey) {
+      try {
+        // Generate ED25519 key pair - this MUST be the same key used in pair-verify!
+        const ed25519KeyPair = crypto.generateKeyPairSync('ed25519');
+        this.persistentPrivateKey = ed25519KeyPair.privateKey;
+        // Export public key as raw 32-byte buffer (not DER format)
+        const publicKeyDer = ed25519KeyPair.publicKey.export({ format: 'der', type: 'spki' });
+        // Extract the raw 32-byte public key from the DER structure
+        // ED25519 public key in SPKI format: SEQUENCE { AlgorithmIdentifier, BIT STRING { 32-byte key } }
+        // The key is the last 32 bytes of the DER structure
+        this.persistentPublicKey = publicKeyDer.slice(-32);
+        logInfo(`Generated new persistent ED25519 key pair for pairing (public key will be used in pair-setup, private key in pair-verify)`);
+        logDebug(`Public key (hex): ${this.persistentPublicKey.toString('hex')}`);
+      } catch (err) {
+        logError(`Failed to generate ED25519 key pair:`, err);
+        // Fallback to random bytes (will cause verification failure)
+        this.persistentPublicKey = crypto.randomBytes(32);
+      }
     }
     
     // Set pairing setup status (in UxPlay: pairing_session_set_setup_status)
@@ -1268,6 +1410,9 @@ class AirPlayServer {
     const ED25519_KEY_SIZE = 32;
     const PAIRING_SIG_SIZE = 64;
 
+    logDebug(`Pair-verify step detected: ${step} (expected 1 for step 1, 0 for step 2)`);
+    logDebug(`Pair-verify request body length: ${requestBody.length} bytes`);
+
     let responseBody: Buffer;
     const cseq = Array.isArray(req.headers['cseq']) ? req.headers['cseq'][0] : (req.headers['cseq'] || '0');
 
@@ -1308,14 +1453,9 @@ class AirPlayServer {
       
       try {
         // Generate X25519 key pair using @noble/curves
-        // Load the library if not already loaded
+        // Load the library if not already loaded (using dynamic import for ES module)
         if (!x25519Lib) {
-          try {
-            x25519Lib = require('@noble/curves/ed25519.js').x25519;
-          } catch (loadErr) {
-            logError(`Failed to load @noble/curves:`, loadErr);
-            throw new Error('@noble/curves not available');
-          }
+          x25519Lib = await loadX25519Lib();
         }
         
         // Generate X25519 key pair using @noble/curves
@@ -1342,7 +1482,7 @@ class AirPlayServer {
           session.serverX25519PrivateKey = serverX25519PrivateKey;
           session.sharedSecret = sharedSecret;
         }
-      } catch (err) {
+    } catch (err) {
         logError(`Failed to create X25519 ECDH:`, err);
         // Fallback: generate random keys (will cause verification failure but allows testing)
         serverX25519Key = crypto.randomBytes(X25519_KEY_SIZE);
@@ -1359,16 +1499,11 @@ class AirPlayServer {
       // UxPlay signs: server X25519 (32 bytes) + client X25519 (32 bytes) = 64 bytes
       // Then encrypts the signature with AES-CTR using keys derived from shared secret
       
-      // Ensure we have persistent ED25519 key pair
+      // CRITICAL: Use the SAME persistent ED25519 key pair from pair-setup!
+      // The client verifies the signature using the public key it received in pair-setup
       if (!this.persistentPrivateKey) {
-        try {
-          const ed25519KeyPair = crypto.generateKeyPairSync('ed25519');
-          this.persistentPrivateKey = ed25519KeyPair.privateKey;
-          this.persistentPublicKey = ed25519KeyPair.publicKey.export({ format: 'der', type: 'spki' });
-          logInfo(`Generated new ED25519 key pair for pairing`);
-        } catch (err) {
-          logError(`Failed to generate ED25519 key pair:`, err);
-        }
+        logError(`No persistent private key available - pair-setup must be called first!`);
+        throw new Error('No persistent private key available - pair-setup must be called first');
       }
 
       let signature: Buffer;
@@ -1410,6 +1545,8 @@ class AirPlayServer {
             logDebug(`Derived AES key and IV from shared secret`);
             
             // Encrypt signature with AES-CTR
+            // UxPlay: pairing_session_get_signature() encrypts directly without fake round
+            // aes_ctr_encrypt(aes_ctx, signature, signature, PAIRING_SIG_SIZE);
             const cipher = crypto.createCipheriv('aes-128-ctr', aesKey, aesIV);
             const encryptedSignature = Buffer.concat([
               cipher.update(signature),
@@ -1430,21 +1567,37 @@ class AirPlayServer {
       }
       
       // Response: X25519 public key (32 bytes) + ED25519 signature (64 bytes) = 96 bytes
+      // UxPlay: memcpy(*response_data, public_key, sizeof(public_key));
+      //        memcpy(*response_data + sizeof(public_key), signature, sizeof(signature));
       responseBody = Buffer.concat([serverX25519Key, signature]);
+      
+      // Verify response format matches UxPlay exactly
+      if (responseBody.length !== 96) {
+        logError(`Invalid response body length: expected 96 bytes, got ${responseBody.length}`);
+      }
+      if (serverX25519Key.length !== 32) {
+        logError(`Invalid X25519 key length: expected 32 bytes, got ${serverX25519Key.length}`);
+      }
+      if (signature.length !== 64) {
+        logError(`Invalid signature length: expected 64 bytes, got ${signature.length}`);
+      }
       
       logInfo(`Pair-verify step 1: returning server X25519 key (32 bytes) + signature (64 bytes) = ${responseBody.length} bytes`);
       logDebug(`Server X25519 key (hex): ${serverX25519Key.toString('hex')}`);
       logDebug(`Signature (hex): ${signature.toString('hex').substring(0, 32)}...`);
+      logDebug(`Full response body (hex, first 64 bytes): ${responseBody.toString('hex').substring(0, 128)}`);
 
       res.writeHead(200, {
         'Content-Type': 'application/octet-stream',
-        'Content-Length': responseBody.length.toString(),
-        'CSeq': cseq,
+      'Content-Length': responseBody.length.toString(),
+      'CSeq': cseq,
         'Server': 'AirTunes/220.68',
-        ...corsHeaders,
-      });
-      res.end(responseBody);
+      ...corsHeaders,
+    });
+    res.end(responseBody);
+      logInfo(`Pair-verify step 1: response sent (${responseBody.length} bytes), waiting for step 2...`);
     } else if (step === 0) {
+      logInfo(`Pair-verify step 2: received (step byte = ${step})`);
       // Step 2: Client sends signature for verification
       // Expected: 4 + 64 = 68 bytes
       if (requestBody.length !== 4 + PAIRING_SIG_SIZE) {
@@ -1481,24 +1634,28 @@ class AirPlayServer {
           // Decrypt the signature
           // UxPlay: One fake round (encrypt zeros), then encrypt the encrypted signature to decrypt it
           // In CTR mode, encryption and decryption are the same operation
+          // CRITICAL: We can't reuse a cipher after final(), so we need to process both operations
+          // in a single cipher instance, or manually advance the counter
+          // Approach: Create one cipher, process fake round + signature together
           const cipher = crypto.createCipheriv('aes-128-ctr', aesKey, aesIV);
           
-          // Fake round: encrypt zeros (advances counter)
-          const fakeRound = Buffer.concat([
-            cipher.update(Buffer.alloc(PAIRING_SIG_SIZE)),
+          // Process both: fake round (64 bytes zeros) + encrypted signature (64 bytes)
+          // This advances the counter correctly
+          const combinedInput = Buffer.concat([
+            Buffer.alloc(PAIRING_SIG_SIZE), // Fake round: zeros
+            clientSignature, // Encrypted signature to decrypt
+          ]);
+          
+          const combinedOutput = Buffer.concat([
+            cipher.update(combinedInput),
             cipher.final(),
           ]);
           
-          // Now encrypt the encrypted signature to decrypt it
-          const decryptedSignature = Buffer.concat([
-            cipher.update(clientSignature),
-            cipher.final(),
-          ]);
+          // Extract the decrypted signature (second 64 bytes)
+          const decryptedSignature = combinedOutput.slice(PAIRING_SIG_SIZE);
           
           logDebug(`Decrypted client signature (${decryptedSignature.length} bytes)`);
-          
-          // Create verifier
-          const verifier = crypto.createVerify('ed25519');
+          logDebug(`Decrypted signature (hex, first 32 bytes): ${decryptedSignature.toString('hex').substring(0, 64)}`);
           
           // UxPlay verifies: ecdh_theirs (client X25519) + ecdh_ours (server X25519)
           // NOT client ED25519, NOT shared secret!
@@ -1508,14 +1665,16 @@ class AirPlayServer {
           ]);
           
           logDebug(`Verifying message: client X25519 (${session.clientX25519Key.length} bytes) + server X25519 (${session.serverX25519Key.length} bytes) = ${messageToVerify.length} bytes`);
-          
-          verifier.update(messageToVerify);
+          logDebug(`Message to verify (hex, first 32 bytes): ${messageToVerify.toString('hex').substring(0, 64)}`);
           
           // Create a public key object from the raw ED25519 public key
+          // ED25519 public key in SPKI format: SEQUENCE { AlgorithmIdentifier, BIT STRING { 32-byte key } }
+          // AlgorithmIdentifier: SEQUENCE { OID id-Ed25519 }
+          // OID for Ed25519: 1.3.101.112 (0x2b 0x65 0x70 in DER encoding)
           const ed25519OID = Buffer.from([0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70]); // SEQUENCE { OID id-Ed25519 }
           const publicKeyBitString = Buffer.concat([
-            Buffer.from([0x03, 0x21, 0x00]), // BIT STRING with 0 unused bits, length 33
-            session.clientED25519Key,
+            Buffer.from([0x03, 0x21, 0x00]), // BIT STRING with 0 unused bits, length 33 (32 bytes + 1 byte header)
+            session.clientED25519Key, // 32-byte raw public key
           ]);
           const algorithmIdentifier = Buffer.concat([ed25519OID, publicKeyBitString]);
           const spkiStructure = Buffer.concat([
@@ -1523,14 +1682,33 @@ class AirPlayServer {
             algorithmIdentifier,
           ]);
           
-          const clientPublicKeyObj = crypto.createPublicKey({
-            key: spkiStructure,
-            format: 'der',
-            type: 'spki',
-          });
+          logDebug(`SPKI structure length: ${spkiStructure.length} bytes`);
+          logDebug(`SPKI structure (hex, first 32 bytes): ${spkiStructure.toString('hex').substring(0, 64)}`);
           
-          // Use crypto.verify() directly (not verifier.verify())
-          signatureValid = crypto.verify(null, messageToVerify, clientPublicKeyObj, decryptedSignature);
+          let clientPublicKeyObj: crypto.KeyObject;
+          try {
+            clientPublicKeyObj = crypto.createPublicKey({
+              key: spkiStructure,
+              format: 'der',
+              type: 'spki',
+            });
+            logDebug(`Created public key object successfully`);
+          } catch (keyErr) {
+            logError(`Failed to create public key object:`, keyErr);
+            throw keyErr;
+          }
+          
+          // Use crypto.verify() directly with ED25519 (null = no digest algorithm)
+          // Signature: decryptedSignature (64 bytes)
+          // Message: messageToVerify (client X25519 + server X25519, 64 bytes)
+          // Public key: clientPublicKeyObj (from client ED25519 public key)
+          try {
+            signatureValid = crypto.verify(null, messageToVerify, clientPublicKeyObj, decryptedSignature);
+            logDebug(`crypto.verify() returned: ${signatureValid}`);
+          } catch (verifyErr) {
+            logError(`crypto.verify() threw error:`, verifyErr);
+            signatureValid = false;
+          }
           
           if (signatureValid) {
             logInfo(`Pair-verify step 2: signature verified successfully`);
@@ -1548,8 +1726,10 @@ class AirPlayServer {
       }
 
       if (!signatureValid) {
-        logError(`Pair-verify step 2: signature verification failed, closing connection`);
+        logError(`Pair-verify step 2: signature verification failed`);
         // UxPlay sets http_response_set_disconnect(response, 1) on failure
+        // But we should still send a response and let the client decide to close
+        // Don't immediately close the socket - the client might send fp-setup anyway
         res.writeHead(200, {
           'Content-Type': 'application/octet-stream',
           'Content-Length': '0',
@@ -1558,8 +1738,9 @@ class AirPlayServer {
           ...corsHeaders,
         });
         res.end();
-        // Close connection after response
-        req.socket.end();
+        // Don't close socket immediately - let client decide
+        // The client will likely close on its own if verification fails
+        logInfo(`Pair-verify step 2: sent failure response (empty body), connection may close`);
         return;
       }
       
@@ -1611,6 +1792,18 @@ class AirPlayServer {
     corsHeaders: Record<string, string>,
     isRTSP: boolean = false
   ): Promise<void> {
+    // CRITICAL: Log immediately to file and console
+    // Try direct file write first to test
+    try {
+      const testLine = `[${new Date().toISOString()}] [INFO] === HANDLING RTSP SETUP REQUEST === (DIRECT WRITE)\n`;
+      fs.appendFileSync(LOG_FILE, testLine, { encoding: 'utf8', flag: 'a' });
+      console.log('[DIRECT_WRITE] Successfully wrote to log file');
+    } catch (directErr: any) {
+      console.error('[DIRECT_WRITE] Failed:', directErr?.message, directErr?.code);
+    }
+    
+    writeToLogFile('INFO', '=== HANDLING RTSP SETUP REQUEST ===');
+    console.log('=== HANDLING RTSP SETUP REQUEST ===');
     logInfo(`=== HANDLING RTSP SETUP REQUEST ===`);
     
     // Read request body (binary plist)
@@ -1633,13 +1826,27 @@ class AirPlayServer {
 
     // Parse binary plist
     let requestData: any = null;
+    writeToLogFile('INFO', 'Starting plist parsing...');
+    console.log('Starting plist parsing...');
+    
     try {
+      writeToLogFile('INFO', `Calling bplistParser.parseBuffer with ${requestBody.length} bytes`);
+      console.log(`Calling bplistParser.parseBuffer with ${requestBody.length} bytes`);
+      
       const parsed = bplistParser.parseBuffer(requestBody);
+      
+      writeToLogFile('INFO', `Plist parsed, result: ${parsed ? 'not null' : 'null'}, length: ${parsed?.length || 0}`);
+      console.log(`Plist parsed, result: ${parsed ? 'not null' : 'null'}, length: ${parsed?.length || 0}`);
+      
       if (parsed && parsed.length > 0) {
         requestData = parsed[0];
+        writeToLogFile('INFO', `SETUP request parsed successfully, requestData keys: ${Object.keys(requestData).join(', ')}`);
+        console.log(`SETUP request parsed successfully, requestData keys: ${Object.keys(requestData).join(', ')}`);
         logInfo(`SETUP request parsed successfully`);
         logDebug(`SETUP request keys:`, Object.keys(requestData));
       } else {
+        writeToLogFile('ERROR', 'SETUP request plist is empty');
+        console.error('SETUP request plist is empty');
         logError(`SETUP request plist is empty`);
         res.writeHead(400, {
           'Content-Type': 'text/plain',
@@ -1648,6 +1855,8 @@ class AirPlayServer {
         return;
       }
     } catch (err) {
+      writeToLogFile('ERROR', `Error parsing SETUP request plist: ${err instanceof Error ? err.message : String(err)}`);
+      console.error(`Error parsing SETUP request plist:`, err);
       logError(`Error parsing SETUP request plist:`, err);
       res.writeHead(400, {
         'Content-Type': 'text/plain',
@@ -1655,37 +1864,150 @@ class AirPlayServer {
       res.end('Bad Request: Invalid plist format');
       return;
     }
+    
+    writeToLogFile('INFO', 'Plist parsing try-catch completed successfully');
+    console.log('Plist parsing try-catch completed successfully');
+    
+    // Force immediate file write to ensure we see this
+    writeToLogFile('INFO', '[FAIRPLAY] ===== AFTER PLIST PARSING TRY-CATCH =====');
+    console.log('[FAIRPLAY] ===== AFTER PLIST PARSING TRY-CATCH =====');
+    
+    writeToLogFile('INFO', `[FAIRPLAY] requestData is: ${requestData ? 'not null' : 'null'}`);
+    console.log(`[FAIRPLAY] requestData is: ${requestData ? 'not null' : 'null'}`);
+    
+    writeToLogFile('INFO', `[FAIRPLAY] requestData type: ${typeof requestData}`);
+    console.log(`[FAIRPLAY] requestData type: ${typeof requestData}`);
+    
+    if (requestData) {
+      const keys = Object.keys(requestData);
+      writeToLogFile('INFO', `[FAIRPLAY] requestData keys: ${keys.join(', ')}`);
+      console.log(`[FAIRPLAY] requestData keys: ${keys.join(', ')}`);
+    }
+    
+    writeToLogFile('INFO', '[FAIRPLAY] About to check requestData...');
+    console.log('[FAIRPLAY] About to check requestData...');
+    
+    if (!requestData) {
+      logError(`[FAIRPLAY] requestData is null after parsing!`);
+      res.writeHead(400, {
+        'Content-Type': 'text/plain',
+      });
+      res.end('Bad Request: Failed to parse plist');
+      return;
+    }
+    
+    logInfo(`[FAIRPLAY] SETUP request parsed requestData, keys: ${Object.keys(requestData).join(', ')}`);
 
     // Extract device info
     const deviceID = requestData.deviceID || 'unknown';
     const name = requestData.name || 'Unknown Device';
     const model = requestData.model || 'Unknown Model';
-    logInfo(`SETUP 1`);
-    logInfo(`Connection request from ${name} (${model}) with deviceID = ${deviceID}`);
+    
+    // Check if this is first SETUP (with ekey/eiv) or second SETUP (with streams only)
+    // Log ALL keys to see what's actually in the request
+    const allKeys = Object.keys(requestData);
+    writeToLogFile('INFO', `[FAIRPLAY] ALL requestData keys: ${allKeys.join(', ')}`);
+    console.log(`[FAIRPLAY] ALL requestData keys: ${allKeys.join(', ')}`);
+    
+    // Check for ekey/eiv with direct file writes
+    writeToLogFile('INFO', `[FAIRPLAY] requestData.ekey exists: ${!!requestData.ekey}, type: ${typeof requestData.ekey}`);
+    console.log(`[FAIRPLAY] requestData.ekey exists: ${!!requestData.ekey}, type: ${typeof requestData.ekey}`);
+    
+    writeToLogFile('INFO', `[FAIRPLAY] requestData.eiv exists: ${!!requestData.eiv}, type: ${typeof requestData.eiv}`);
+    console.log(`[FAIRPLAY] requestData.eiv exists: ${!!requestData.eiv}, type: ${typeof requestData.eiv}`);
+    
+    writeToLogFile('INFO', `[FAIRPLAY] requestData.streams exists: ${!!requestData.streams}, type: ${typeof requestData.streams}`);
+    console.log(`[FAIRPLAY] requestData.streams exists: ${!!requestData.streams}, type: ${typeof requestData.streams}`);
+    
+    logInfo(`[FAIRPLAY] SETUP requestData.ekey exists: ${!!requestData.ekey}, type: ${typeof requestData.ekey}`);
+    logInfo(`[FAIRPLAY] SETUP requestData.eiv exists: ${!!requestData.eiv}, type: ${typeof requestData.eiv}`);
+    logInfo(`[FAIRPLAY] SETUP requestData.streams exists: ${!!requestData.streams}, type: ${typeof requestData.streams}`);
+    
+    const hasEkeyEiv = requestData.ekey && requestData.eiv;
+    const hasStreams = requestData.streams && Array.isArray(requestData.streams);
+    
+    writeToLogFile('INFO', `[FAIRPLAY] hasEkeyEiv: ${hasEkeyEiv}, hasStreams: ${hasStreams}`);
+    console.log(`[FAIRPLAY] hasEkeyEiv: ${hasEkeyEiv}, hasStreams: ${hasStreams}`);
+    
+    logInfo(`[FAIRPLAY] hasEkeyEiv: ${hasEkeyEiv}, hasStreams: ${hasStreams}`);
+    
+    if (hasEkeyEiv) {
+      logInfo(`SETUP 1 (initial setup with ekey/eiv)`);
+      logInfo(`Connection request from ${name} (${model}) with deviceID = ${deviceID}`);
+    } else if (hasStreams) {
+      logInfo(`SETUP 2 (stream setup - processing streams array)`);
+    } else {
+      logError(`SETUP request missing both ekey/eiv and streams`);
+      res.writeHead(400, {
+        'Content-Type': 'text/plain',
+      });
+      res.end('Bad Request: Missing ekey/eiv or streams');
+      return;
+    }
+    logInfo(`[FAIRPLAY] TEST`);
 
-    // Extract ekey and eiv (FairPlay encrypted keys)
+    // Extract ekey and eiv (FairPlay encrypted keys) - only for first SETUP
     let aeskey: Buffer | null = null;
     let aesiv: Buffer | null = null;
     
-    if (requestData.ekey && requestData.eiv) {
+    if (hasEkeyEiv) {
+      logInfo(`[FAIRPLAY] SETUP request has ekey/eiv - extracting keys`);
       const ekey = Buffer.isBuffer(requestData.ekey) ? requestData.ekey : Buffer.from(requestData.ekey, 'base64');
       const eiv = Buffer.isBuffer(requestData.eiv) ? requestData.eiv : Buffer.from(requestData.eiv, 'base64');
       
-      logInfo(`eiv_len = ${eiv.length}`);
+      logInfo(`[FAIRPLAY] eiv_len = ${eiv.length}`);
       logDebug(`16 byte aesiv (needed for AES-CBC audio decryption iv): ${eiv.toString('hex')}`);
       
-      logInfo(`ekey_len = ${ekey.length}`);
+      logInfo(`[FAIRPLAY] ekey_len = ${ekey.length}`);
       logDebug(`ekey: ${ekey.toString('hex').substring(0, 100)}...`);
       
-      // Decrypt ekey using FairPlay (stub for now)
-      // In production, this should call fairplay_decrypt()
-      // For now, we'll generate a stub key
+      // Decrypt ekey using FairPlay
+      // UxPlay: fairplay_decrypt(conn->fairplay, (unsigned char*) eaeskey, aeskey)
+      // Requires the FairPlay key message (164 bytes) stored from /fp-setup handshake
+      logInfo(`[FAIRPLAY] Checking if ekey length is 72: ${ekey.length === 72}`);
       if (ekey.length === 72) {
-        // FairPlay decrypt - stub implementation
-        // TODO: Implement proper FairPlay decryption using fairplay library
-        aeskey = crypto.randomBytes(16); // Stub: should decrypt from ekey
-        logDebug(`Generated stub aeskey (should be FairPlay-decrypted from ekey): ${aeskey.toString('hex')}`);
-        logInfo(`fairplay_decrypt ret = 0 (stub)`);
+        // Get FairPlay key message from connection state
+        const socketId = `${req.socket.remoteAddress}:${req.socket.remotePort}`;
+        const connState = this.connections.get(socketId);
+        const fairplayKeyMsg = (connState as any)?.fairplayKeyMsg;
+        
+        logInfo(`[FAIRPLAY] Checking for fairplayKeyMsg in connection state for socket ${socketId}`);
+        logInfo(`[FAIRPLAY] Connection state exists: ${!!connState}`);
+        logInfo(`[FAIRPLAY] fairplayKeyMsg exists: ${!!fairplayKeyMsg}`);
+        logInfo(`[FAIRPLAY] fairplayKeyMsg length: ${fairplayKeyMsg?.length || 0}`);
+        
+        if (!fairplayKeyMsg || fairplayKeyMsg.length !== 164) {
+          logError(`[FAIRPLAY] Cannot decrypt ekey - FairPlay key message not found or invalid (length: ${fairplayKeyMsg?.length || 0}, expected 164)`);
+          logError(`[FAIRPLAY] FairPlay key message must be stored from /fp-setup handshake (164 bytes)`);
+          logError(`[FAIRPLAY] Connection state keys: ${connState ? Object.keys(connState).join(', ') : 'N/A'}`);
+          // Fall back to stub for now (will fail decryption)
+          aeskey = crypto.randomBytes(16);
+          logError(`[FAIRPLAY] Using random stub aeskey - decryption will fail!`);
+        } else {
+          // Decrypt ekey using FairPlay decryption
+          // UxPlay: playfair_decrypt(fp->keymsg, ekey, aeskey)
+          // Where fp->keymsg is the 164-byte buffer from fp-setup
+          // ekey is the 72-byte encrypted key from SETUP
+          // aeskey is the 16-byte decrypted key
+          aeskey = Buffer.alloc(16);
+          try {
+            logInfo(`[FAIRPLAY] Calling playfairDecrypt with fairplayKeyMsg (${fairplayKeyMsg.length} bytes), ekey (${ekey.length} bytes)`);
+            logInfo(`[FAIRPLAY] fairplayKeyMsg (first 32 bytes): ${fairplayKeyMsg.slice(0, 32).toString('hex')}`);
+            logInfo(`[FAIRPLAY] ekey (first 32 bytes): ${ekey.slice(0, 32).toString('hex')}`);
+            logInfo(`[FAIRPLAY] ekey (last 16 bytes): ${ekey.slice(56, 72).toString('hex')}`);
+            playfairDecrypt(fairplayKeyMsg, ekey, aeskey);
+            logInfo(`[FAIRPLAY] Decryption successful! aeskey: ${aeskey.toString('hex')}`);
+            logInfo(`[FAIRPLAY] aeskey (first 8 bytes): ${aeskey.slice(0, 8).toString('hex')}`);
+          } catch (err) {
+            logError(`[FAIRPLAY] Decryption failed:`, err);
+            logError(`[FAIRPLAY] Error details:`, err instanceof Error ? err.stack : String(err));
+            // Fall back to stub for now (will fail decryption)
+            aeskey = crypto.randomBytes(16);
+            logError(`[FAIRPLAY] Using random stub aeskey - decryption will fail!`);
+          }
+        }
+        
+        logDebug(`ekey length: ${ekey.length}, aeskey: ${aeskey.toString('hex')}`);
       } else {
         logError(`Invalid ekey length: ${ekey.length} (expected 72)`);
         res.writeHead(400, {
@@ -1705,40 +2027,185 @@ class AirPlayServer {
         res.end('Bad Request: Invalid eiv length');
         return;
       }
-    } else {
-      logError(`Missing ekey or eiv in SETUP request`);
-      res.writeHead(400, {
-        'Content-Type': 'text/plain',
-      });
-      res.end('Bad Request: Missing ekey or eiv');
-      return;
+      
+      // Extract timing port from request (only in first SETUP)
+      const timingRPort = requestData.timingPort || 0;
+      logInfo(`timing_rport = ${timingRPort}`);
+      
+      // Generate local timing port (UDP port for NTP)
+      // In production, this should bind to a UDP socket
+      // For now, generate a random port in the ephemeral range
+      const timingLPort = Math.floor(Math.random() * (65535 - 49152 + 1)) + 49152;
+      logInfo(`timing_lport = ${timingLPort} (stub - should bind to UDP socket)`);
+      
+      // TODO: Start NTP timing synchronization
+      // TODO: Initialize RTP audio handler with aeskey and aesiv
+      // TODO: Initialize RTP mirror handler for video
+      
+      // Store aeskey/aesiv for this connection (needed for stream setup)
+      const socketId = `${req.socket.remoteAddress}:${req.socket.remotePort}`;
+      const connState = this.connections.get(socketId);
+      if (connState) {
+        (connState as any).aeskey = aeskey;
+        (connState as any).aesiv = aesiv;
+        (connState as any).timingLPort = timingLPort;
+      }
     }
-
-    // Extract timing port from request
-    const timingRPort = requestData.timingPort || 0;
-    logInfo(`timing_rport = ${timingRPort}`);
-    
-    // Generate local timing port (UDP port for NTP)
-    // In production, this should bind to a UDP socket
-    // For now, generate a random port in the ephemeral range
-    const timingLPort = Math.floor(Math.random() * (65535 - 49152 + 1)) + 49152;
-    logInfo(`timing_lport = ${timingLPort} (stub - should bind to UDP socket)`);
-    
-    // TODO: Start NTP timing synchronization
-    // TODO: Initialize RTP audio handler with aeskey and aesiv
-    // TODO: Initialize RTP mirror handler for video
     
     // Build response plist
-    const responseData: Record<string, any> = {
-      timingPort: timingLPort,
-      eventPort: 0, // Not used in mirror mode
-    };
+    const responseData: Record<string, any> = {};
     
-    // Check for streams array (for video mirroring)
-    if (requestData.streams && Array.isArray(requestData.streams)) {
+    // For first SETUP, include timingPort and eventPort
+    if (hasEkeyEiv) {
+      const socketId = `${req.socket.remoteAddress}:${req.socket.remotePort}`;
+      const connState = this.connections.get(socketId);
+      const timingLPort = (connState as any)?.timingLPort || Math.floor(Math.random() * (65535 - 49152 + 1)) + 49152;
+      responseData.timingPort = timingLPort;
+      responseData.eventPort = 0; // Not used in mirror mode
+    }
+    
+    // Process streams array (for both first and second SETUP)
+    // UxPlay processes streams after initializing RTP handlers
+    const responseStreams: any[] = [];
+    
+    if (hasStreams) {
       logInfo(`SETUP request includes ${requestData.streams.length} stream(s)`);
-      // TODO: Process streams array and add stream responses
-      // For now, we'll just return timingPort and eventPort
+      
+      for (const reqStream of requestData.streams) {
+        const streamType = reqStream.type;
+        logDebug(`Processing stream type: ${streamType}`);
+        
+        if (streamType === 110) {
+          // Mirroring (video)
+          // UxPlay: raop_rtp_mirror_init_aes + raop_rtp_mirror_start
+          const streamConnectionID = reqStream.streamConnectionID || 0;
+          logDebug(`Stream type 110 (mirroring): streamConnectionID = ${streamConnectionID}`);
+          
+          // Get connection state to retrieve aeskey
+          const socketId = `${req.socket.remoteAddress}:${req.socket.remotePort}`;
+          const connState = this.connections.get(socketId);
+          const aeskey = (connState as any)?.aeskey;
+          
+          if (!aeskey) {
+            logError(`Cannot initialize mirror stream - aeskey not found in connection state`);
+            // Still return a port so client doesn't fail immediately
+            const mirrorDataPort = Math.floor(Math.random() * (65535 - 49152 + 1)) + 49152;
+            responseStreams.push({
+              type: 110,
+              dataPort: mirrorDataPort,
+            });
+          } else {
+            // Initialize RTP mirror handler
+            const mirrorHandler = new RTPMirrorHandler(aeskey, streamConnectionID, this);
+            try {
+              const mirrorDataPort = await mirrorHandler.start();
+              
+              if (mirrorDataPort > 0) {
+                // Store handler in connection state
+                if (connState) {
+                  (connState as any).rtpMirrorHandler = mirrorHandler;
+                }
+                
+                responseStreams.push({
+                  type: 110,
+                  dataPort: mirrorDataPort,
+                });
+                logInfo(`Mirror stream initialized: dataPort=${mirrorDataPort}, streamConnectionID=${streamConnectionID}`);
+              } else {
+                logError(`Failed to initialize mirror stream - invalid port`);
+                const mirrorDataPort = Math.floor(Math.random() * (65535 - 49152 + 1)) + 49152;
+                responseStreams.push({
+                  type: 110,
+                  dataPort: mirrorDataPort,
+                });
+              }
+            } catch (err) {
+              logError(`Failed to start mirror handler:`, err);
+              const mirrorDataPort = Math.floor(Math.random() * (65535 - 49152 + 1)) + 49152;
+              responseStreams.push({
+                type: 110,
+                dataPort: mirrorDataPort,
+              });
+            }
+          }
+          
+        } else if (streamType === 96) {
+          // Audio
+          // UxPlay: raop_rtp_start_audio
+          const controlPort = reqStream.controlPort || 0;
+          const ct = reqStream.ct || 0;
+          const spf = reqStream.spf || 0;
+          const audioFormat = reqStream.audioFormat || 0;
+          const isMedia = reqStream.isMedia || false;
+          const usingScreen = reqStream.usingScreen || false;
+          
+          logDebug(`Stream type 96 (audio): controlPort=${controlPort}, ct=${ct}, spf=${spf}, audioFormat=${audioFormat}`);
+          
+          // Get connection state to retrieve aeskey/aesiv
+          const socketId = `${req.socket.remoteAddress}:${req.socket.remotePort}`;
+          const connState = this.connections.get(socketId);
+          const aeskey = (connState as any)?.aeskey;
+          const aesiv = (connState as any)?.aesiv;
+          
+          if (!aeskey || !aesiv) {
+            logError(`Cannot initialize audio stream - aeskey/aesiv not found in connection state`);
+            // Still return ports so client doesn't fail immediately
+            const audioControlPort = Math.floor(Math.random() * (65535 - 49152 + 1)) + 49152;
+            const audioDataPort = Math.floor(Math.random() * (65535 - 49152 + 1)) + 49152;
+            responseStreams.push({
+              type: 96,
+              dataPort: audioDataPort,
+              controlPort: audioControlPort,
+            });
+          } else {
+            // Initialize RTP audio handler
+            const audioHandler = new RTPAudioHandler(aeskey, aesiv, controlPort, this);
+            try {
+              const ports = await audioHandler.start();
+              
+              if (ports.controlPort > 0 && ports.dataPort > 0) {
+                // Store handler in connection state
+                if (connState) {
+                  (connState as any).rtpAudioHandler = audioHandler;
+                }
+                
+                responseStreams.push({
+                  type: 96,
+                  dataPort: ports.dataPort,
+                  controlPort: ports.controlPort,
+                });
+                logInfo(`Audio stream initialized: controlPort=${ports.controlPort}, dataPort=${ports.dataPort}`);
+              } else {
+                logError(`Failed to initialize audio stream - invalid ports`);
+                const audioControlPort = Math.floor(Math.random() * (65535 - 49152 + 1)) + 49152;
+                const audioDataPort = Math.floor(Math.random() * (65535 - 49152 + 1)) + 49152;
+                responseStreams.push({
+                  type: 96,
+                  dataPort: audioDataPort,
+                  controlPort: audioControlPort,
+                });
+              }
+            } catch (err) {
+              logError(`Failed to start audio handler:`, err);
+              const audioControlPort = Math.floor(Math.random() * (65535 - 49152 + 1)) + 49152;
+              const audioDataPort = Math.floor(Math.random() * (65535 - 49152 + 1)) + 49152;
+              responseStreams.push({
+                type: 96,
+                dataPort: audioDataPort,
+                controlPort: audioControlPort,
+              });
+            }
+          }
+          
+        } else {
+          logError(`Unknown stream type: ${streamType}`);
+        }
+      }
+      
+      if (responseStreams.length > 0) {
+        responseData.streams = responseStreams;
+        logInfo(`SETUP response includes ${responseStreams.length} stream(s)`);
+      }
     }
 
     // Create binary plist response
@@ -1772,6 +2239,74 @@ class AirPlayServer {
     res.end(responseBody);
   }
 
+  private async handleRTSPRecord(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    corsHeaders: Record<string, string>,
+    isRTSP: boolean = false
+  ): Promise<void> {
+    logInfo(`=== HANDLING RTSP RECORD REQUEST ===`);
+    
+    // UxPlay's raop_handler_record:
+    // - Calculates audio latency: ad = (audio_delay_micros * AUDIO_SAMPLE_RATE / SECOND_IN_USECS)
+    // - Adds Audio-Latency header
+    // - Adds Audio-Jack-Status: "connected; type=analog"
+    // - No response body
+    
+    // Calculate audio latency (stub for now - UxPlay uses actual audio delay)
+    // UxPlay: ad = (audio_delay_micros * 44100 / 1000000)
+    // For now, use a reasonable default (e.g., 0 or small value)
+    const AUDIO_SAMPLE_RATE = 44100;
+    const SECOND_IN_USECS = 1000000;
+    const audioDelayMicros = 0; // TODO: Use actual audio delay from session
+    const audioLatency = Math.floor((audioDelayMicros * AUDIO_SAMPLE_RATE) / SECOND_IN_USECS);
+    
+    logDebug(`Audio latency: ${audioLatency} (calculated from ${audioDelayMicros} microseconds)`);
+    
+    // Build response headers
+    const cseqHeader = req.headers['cseq'] || req.headers['CSeq'];
+    const cseq = Array.isArray(cseqHeader) ? cseqHeader[0] : (cseqHeader || '0');
+    const responseHeaders: Record<string, string> = {
+      'Audio-Latency': audioLatency.toString(),
+      'Audio-Jack-Status': 'connected; type=analog', // UxPlay uses "analog" for RECORD
+      'Server': 'AirTunes/220.68',
+      'CSeq': cseq,
+    };
+    
+    logInfo(`RECORD response headers:`, responseHeaders);
+    
+    // RTSP RECORD response: 200 OK with no body
+    res.writeHead(200, responseHeaders);
+    res.end();
+  }
+
+  private async handleRTSPFeedback(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    corsHeaders: Record<string, string>,
+    isRTSP: boolean = false
+  ): Promise<void> {
+    logInfo(`=== HANDLING RTSP FEEDBACK REQUEST ===`);
+    
+    // UxPlay's raop_handler_feedback:
+    // - Just logs and calls callback (heartbeat/keepalive)
+    // - Returns 200 OK with no body
+    
+    logDebug(`RTSP feedback received (client heartbeat)`);
+    
+    // Build response headers
+    const cseqHeader = req.headers['cseq'] || req.headers['CSeq'];
+    const cseq = Array.isArray(cseqHeader) ? cseqHeader[0] : (cseqHeader || '0');
+    const responseHeaders: Record<string, string> = {
+      'Server': 'AirTunes/220.68',
+      'CSeq': cseq,
+    };
+    
+    // RTSP feedback response: 200 OK with no body
+    res.writeHead(200, responseHeaders);
+    res.end();
+  }
+
   private async handleFPSetup(
     req: http.IncomingMessage,
     res: http.ServerResponse,
@@ -1779,7 +2314,7 @@ class AirPlayServer {
     isRTSP: boolean = false,
     method?: string
   ): Promise<void> {
-    logInfo(`=== HANDLING FP-SETUP REQUEST ===`);
+    logInfo(`[FAIRPLAY] === HANDLING FP-SETUP REQUEST ===`);
     logInfo(`isRTSP: ${isRTSP}`);
     
     // Re-detect RTSP here since we have more context
@@ -1805,8 +2340,8 @@ class AirPlayServer {
       logError(`FP-setup request has no body (content-length: ${req.headers['content-length']})`);
       res.writeHead(400, {
         'Content-Type': 'text/plain',
-        ...corsHeaders,
-      });
+      ...corsHeaders,
+    });
       res.end('Bad Request: Missing body');
       return;
     }
@@ -1818,32 +2353,122 @@ class AirPlayServer {
     
     if (requestBody.length === 16) {
       logInfo(`FP-setup: Initial setup (16 bytes) -> returning 142 bytes`);
-      // FairPlay setup - return 142 bytes
-      // Without FairPlay library, we'll return a stub response
-      // In production, this should call fairplay_setup()
-      responseBody = Buffer.alloc(142);
-      // Fill with pattern that starts with FPLY (FairPlay magic)
-      responseBody.write('FPLY', 0); // Magic bytes
-      responseBody[4] = 0x03; // Version
-      responseBody[5] = 0x01; // Type
-      responseBody[6] = 0x02; // Response type
-      // Rest is FairPlay-specific data - for now, fill with zeros
-      // TODO: Implement proper FairPlay setup using fairplay library
-      logDebug(`Generated stub FP-setup response (142 bytes)`);
+      
+      // Check FairPlay version (must be 0x03)
+      if (requestBody[4] !== 0x03) {
+        logError(`Unsupported FairPlay version: 0x${requestBody[4].toString(16)} (expected 0x03)`);
+        res.writeHead(400, {
+          'Content-Type': 'text/plain',
+      ...corsHeaders,
+    });
+        res.end('Bad Request: Unsupported FairPlay version');
+        return;
+      }
+      
+      // Extract mode from request (byte 14)
+      const mode = requestBody[14];
+      logDebug(`FairPlay mode: ${mode}`);
+      
+      // UxPlay uses predefined reply messages based on mode (0-3)
+      // These are the actual FairPlay setup responses from UxPlay's fairplay_playfair.c
+      const replyMessages = [
+        // Mode 0
+        Buffer.from([
+          0x46, 0x50, 0x4c, 0x59, 0x03, 0x01, 0x02, 0x00, 0x00, 0x00, 0x00, 0x82, 0x02, 0x00, 0x0f, 0x9f,
+          0x3f, 0x9e, 0x0a, 0x25, 0x21, 0xdb, 0xdf, 0x31, 0x2a, 0xb2, 0xbf, 0xb2, 0x9e, 0x8d, 0x23, 0x2b,
+          0x63, 0x76, 0xa8, 0xc8, 0x18, 0x70, 0x1d, 0x22, 0xae, 0x93, 0xd8, 0x27, 0x37, 0xfe, 0xaf, 0x9d,
+          0xb4, 0xfd, 0xf4, 0x1c, 0x2d, 0xba, 0x9d, 0x1f, 0x49, 0xca, 0xaa, 0xbf, 0x65, 0x91, 0xac, 0x1f,
+          0x7b, 0xc6, 0xf7, 0xe0, 0x66, 0x3d, 0x21, 0xaf, 0xe0, 0x15, 0x65, 0x95, 0x3e, 0xab, 0x81, 0xf4,
+          0x18, 0xce, 0xed, 0x09, 0x5a, 0xdb, 0x7c, 0x3d, 0x0e, 0x25, 0x49, 0x09, 0xa7, 0x98, 0x31, 0xd4,
+          0x9c, 0x39, 0x82, 0x97, 0x34, 0x34, 0xfa, 0xcb, 0x42, 0xc6, 0x3a, 0x1c, 0xd9, 0x11, 0xa6, 0xfe,
+          0x94, 0x1a, 0x8a, 0x6d, 0x4a, 0x74, 0x3b, 0x46, 0xc3, 0xa7, 0x64, 0x9e, 0x44, 0xc7, 0x89, 0x55,
+          0xe4, 0x9d, 0x81, 0x55, 0x00, 0x95, 0x49, 0xc4, 0xe2, 0xf7, 0xa3, 0xf6, 0xd5, 0xba
+        ]),
+        // Mode 1
+        Buffer.from([
+          0x46, 0x50, 0x4c, 0x59, 0x03, 0x01, 0x02, 0x00, 0x00, 0x00, 0x00, 0x82, 0x02, 0x01, 0xcf, 0x32,
+          0xa2, 0x57, 0x14, 0xb2, 0x52, 0x4f, 0x8a, 0xa0, 0xad, 0x7a, 0xf1, 0x64, 0xe3, 0x7b, 0xcf, 0x44,
+          0x24, 0xe2, 0x00, 0x04, 0x7e, 0xfc, 0x0a, 0xd6, 0x7a, 0xfc, 0xd9, 0x5d, 0xed, 0x1c, 0x27, 0x30,
+          0xbb, 0x59, 0x1b, 0x96, 0x2e, 0xd6, 0x3a, 0x9c, 0x4d, 0xed, 0x88, 0xba, 0x8f, 0xc7, 0x8d, 0xe6,
+          0x4d, 0x91, 0xcc, 0xfd, 0x5c, 0x7b, 0x56, 0xda, 0x88, 0xe3, 0x1f, 0x5c, 0xce, 0xaf, 0xc7, 0x43,
+          0x19, 0x95, 0xa0, 0x16, 0x65, 0xa5, 0x4e, 0x19, 0x39, 0xd2, 0x5b, 0x94, 0xdb, 0x64, 0xb9, 0xe4,
+          0x5d, 0x8d, 0x06, 0x3e, 0x1e, 0x6a, 0xf0, 0x7e, 0x96, 0x56, 0x16, 0x2b, 0x0e, 0xfa, 0x40, 0x42,
+          0x75, 0xea, 0x5a, 0x44, 0xd9, 0x59, 0x1c, 0x72, 0x56, 0xb9, 0xfb, 0xe6, 0x51, 0x38, 0x98, 0xb8,
+          0x02, 0x27, 0x72, 0x19, 0x88, 0x57, 0x16, 0x50, 0x94, 0x2a, 0xd9, 0x46, 0x68, 0x8a
+        ]),
+        // Mode 2
+        Buffer.from([
+          0x46, 0x50, 0x4c, 0x59, 0x03, 0x01, 0x02, 0x00, 0x00, 0x00, 0x00, 0x82, 0x02, 0x02, 0xc1, 0x69,
+          0xa3, 0x52, 0xee, 0xed, 0x35, 0xb1, 0x8c, 0xdd, 0x9c, 0x58, 0xd6, 0x4f, 0x16, 0xc1, 0x51, 0x9a,
+          0x89, 0xeb, 0x53, 0x17, 0xbd, 0x0d, 0x43, 0x36, 0xcd, 0x68, 0xf6, 0x38, 0xff, 0x9d, 0x01, 0x6a,
+          0x5b, 0x52, 0xb7, 0xfa, 0x92, 0x16, 0xb2, 0xb6, 0x54, 0x82, 0xc7, 0x84, 0x44, 0x11, 0x81, 0x21,
+          0xa2, 0xc7, 0xfe, 0xd8, 0x3d, 0xb7, 0x11, 0x9e, 0x91, 0x82, 0xaa, 0xd7, 0xd1, 0x8c, 0x70, 0x63,
+          0xe2, 0xa4, 0x57, 0x55, 0x59, 0x10, 0xaf, 0x9e, 0x0e, 0xfc, 0x76, 0x34, 0x7d, 0x16, 0x40, 0x43,
+          0x80, 0x7f, 0x58, 0x1e, 0xe4, 0xfb, 0xe4, 0x2c, 0xa9, 0xde, 0xdc, 0x1b, 0x5e, 0xb2, 0xa3, 0xaa,
+          0x3d, 0x2e, 0xcd, 0x59, 0xe7, 0xee, 0xe7, 0x0b, 0x36, 0x29, 0xf2, 0x2a, 0xfd, 0x16, 0x1d, 0x87,
+          0x73, 0x53, 0xdd, 0xb9, 0x9a, 0xdc, 0x8e, 0x07, 0x00, 0x6e, 0x56, 0xf8, 0x50, 0xce
+        ]),
+        // Mode 3
+        Buffer.from([
+          0x46, 0x50, 0x4c, 0x59, 0x03, 0x01, 0x02, 0x00, 0x00, 0x00, 0x00, 0x82, 0x02, 0x03, 0x90, 0x01,
+          0xe1, 0x72, 0x7e, 0x0f, 0x57, 0xf9, 0xf5, 0x88, 0x0d, 0xb1, 0x04, 0xa6, 0x25, 0x7a, 0x23, 0xf5,
+          0xcf, 0xff, 0x1a, 0xbb, 0xe1, 0xe9, 0x30, 0x45, 0x25, 0x1a, 0xfb, 0x97, 0xeb, 0x9f, 0xc0, 0x01,
+          0x1e, 0xbe, 0x0f, 0x3a, 0x81, 0xdf, 0x5b, 0x69, 0x1d, 0x76, 0xac, 0xb2, 0xf7, 0xa5, 0xc7, 0x08,
+          0xe3, 0xd3, 0x28, 0xf5, 0x6b, 0xb3, 0x9d, 0xbd, 0xe5, 0xf2, 0x9c, 0x8a, 0x17, 0xf4, 0x81, 0x48,
+          0x7e, 0x3a, 0xe8, 0x63, 0xc6, 0x78, 0x32, 0x54, 0x22, 0xe6, 0xf7, 0x8e, 0x16, 0x6d, 0x18, 0xaa,
+          0x7f, 0xd6, 0x36, 0x25, 0x8b, 0xce, 0x28, 0x72, 0x6f, 0x66, 0x1f, 0x73, 0x88, 0x93, 0xce, 0x44,
+          0x31, 0x1e, 0x4b, 0xe6, 0xc0, 0x53, 0x51, 0x93, 0xe5, 0xef, 0x72, 0xe8, 0x68, 0x62, 0x33, 0x72,
+          0x9c, 0x22, 0x7d, 0x82, 0x0c, 0x99, 0x94, 0x45, 0xd8, 0x92, 0x46, 0xc8, 0xc3, 0x59
+        ]),
+      ];
+      
+      // Select response based on mode (default to mode 0 if invalid)
+      const selectedMode = mode >= 0 && mode < replyMessages.length ? mode : 0;
+      responseBody = replyMessages[selectedMode];
+      
+      logDebug(`Generated FP-setup response (142 bytes) for mode ${selectedMode}`);
     } else if (requestBody.length === 164) {
       logInfo(`FP-setup: Handshake (164 bytes) -> returning 32 bytes`);
-      // FairPlay handshake - return 32 bytes
-      // Without FairPlay library, we'll return a stub response
-      // In production, this should call fairplay_handshake()
-      responseBody = Buffer.alloc(32);
-      // Fill with pattern that starts with FPLY
-      responseBody.write('FPLY', 0); // Magic bytes
-      responseBody[4] = 0x03; // Version
-      responseBody[5] = 0x01; // Type
-      responseBody[6] = 0x04; // Response type (handshake complete)
-      // Rest is FairPlay-specific data - for now, fill with zeros
-      // TODO: Implement proper FairPlay handshake using fairplay library
-      logDebug(`Generated stub FP-handshake response (32 bytes)`);
+      
+      // Check FairPlay version (must be 0x03)
+      if (requestBody[4] !== 0x03) {
+        logError(`Unsupported FairPlay version: 0x${requestBody[4].toString(16)} (expected 0x03)`);
+        res.writeHead(400, {
+          'Content-Type': 'text/plain',
+          ...corsHeaders,
+        });
+        res.end('Bad Request: Unsupported FairPlay version');
+        return;
+      }
+      
+      // UxPlay stores the 164-byte key message for later use in fairplay_decrypt
+      // Store it in connection state (matching UxPlay's fp->keymsg)
+      const socketId = `${req.socket.remoteAddress}:${req.socket.remotePort}`;
+      logInfo(`[FAIRPLAY] Storing key message for socket ${socketId}`);
+      const connState = this.connections.get(socketId);
+      if (connState) {
+        // Store the key message (164 bytes) - needed to decrypt ekey later
+        (connState as any).fairplayKeyMsg = Buffer.from(requestBody);
+        logInfo(`[FAIRPLAY] Stored FairPlay key message (164 bytes) for connection ${socketId}`);
+        logInfo(`[FAIRPLAY] Key message (first 32 bytes): ${requestBody.slice(0, 32).toString('hex')}`);
+        logInfo(`[FAIRPLAY] Connection state now has keys: ${Object.keys(connState).join(', ')}`);
+      } else {
+        logError(`[FAIRPLAY] Cannot store FairPlay key message - connection state not found for ${socketId}`);
+        logError(`[FAIRPLAY] Available connections: ${Array.from(this.connections.keys()).join(', ')}`);
+      }
+      
+      // UxPlay handshake response: fp_header (12 bytes) + req[144:164] (20 bytes) = 32 bytes
+      // fp_header = {0x46, 0x50, 0x4c, 0x59, 0x03, 0x01, 0x04, 0x00, 0x00, 0x00, 0x00, 0x14}
+      const fpHeader = Buffer.from([
+        0x46, 0x50, 0x4c, 0x59, 0x03, 0x01, 0x04, 0x00, 0x00, 0x00, 0x00, 0x14
+      ]);
+      
+      // Copy last 20 bytes from request (bytes 144-164)
+      const requestSuffix = requestBody.slice(144, 164);
+      
+      responseBody = Buffer.concat([fpHeader, requestSuffix]);
+      
+      logDebug(`Generated FP-handshake response (32 bytes)`);
     } else {
       logError(`Invalid fp-setup data length: ${requestBody.length} (expected 16 or 164)`);
       res.writeHead(400, {
@@ -1918,6 +2543,64 @@ ${entries}
     };
 
     this.mainWindow.webContents.send('airplay:status-update', status);
+  }
+
+  /**
+   * Send video frame to renderer process for decoding and rendering
+   * Matching UxPlay's video_process callback
+   */
+  public sendVideoFrame(data: {
+    isH265: boolean;
+    nalCount: number;
+    data: Buffer;
+    ntpTimeLocal: bigint;
+    ntpTimeRemote: bigint;
+  }): void {
+    if (!this.mainWindow || this.mainWindow.isDestroyed()) {
+      logDebug(`[VIDEO_IPC] Cannot send video frame - mainWindow is null or destroyed`);
+      return;
+    }
+
+    // Send video data to renderer (as base64 for IPC)
+    // Renderer will decode H.264/H.265 and render frames
+    const base64Data = data.data.toString('base64');
+    logInfo(`[VIDEO_IPC] Sending video frame to renderer: ${data.nalCount} NAL units, ${data.data.length} bytes, isH265=${data.isH265}`);
+    
+    this.mainWindow.webContents.send('airplay:video-frame', {
+      isH265: data.isH265,
+      nalCount: data.nalCount,
+      data: base64Data,
+      ntpTimeLocal: data.ntpTimeLocal.toString(),
+      ntpTimeRemote: data.ntpTimeRemote.toString(),
+    });
+  }
+
+  /**
+   * Send audio frame to renderer process for decoding and playback
+   * Matching UxPlay's audio_process callback
+   */
+  public sendAudioFrame(data: {
+    data: Buffer;
+    ct: number;
+    syncStatus: number;
+    ntpTimeLocal: bigint;
+    ntpTimeRemote: bigint;
+    rtpTime: number;
+    seqnum: number;
+  }): void {
+    if (!this.mainWindow || this.mainWindow.isDestroyed()) return;
+
+    // Send audio data to renderer (as base64 for IPC)
+    // Renderer will decode AAC-ELD/ALAC and play via Web Audio API
+    this.mainWindow.webContents.send('airplay:audio-frame', {
+      data: data.data.toString('base64'),
+      ct: data.ct,
+      syncStatus: data.syncStatus,
+      ntpTimeLocal: data.ntpTimeLocal.toString(),
+      ntpTimeRemote: data.ntpTimeRemote.toString(),
+      rtpTime: data.rtpTime,
+      seqnum: data.seqnum,
+    });
   }
 
   /**
@@ -2119,6 +2802,12 @@ ${entries}
         return true;
       },
       end: (chunk?: Buffer | string) => {
+        // Prevent double writes - if response already sent, return early
+        if ((res as any)._responseSent) {
+          logDebug(`[RTSP_PARSER] Response already sent, ignoring duplicate end() call`);
+          return;
+        }
+        
         const statusCode = (res as any)._statusCode || 200;
         const responseHeaders = (res as any)._headers || {};
         const bodyChunks = (res as any)._bodyChunks || [];
@@ -2129,6 +2818,9 @@ ${entries}
         }
         
         const responseBody = Buffer.concat(bodyChunks);
+        
+        // Mark response as sent before writing
+        (res as any)._responseSent = true;
         
         // Ensure Server header is present (UxPlay always includes it for RTSP)
         if (!responseHeaders['Server'] && !responseHeaders['server']) {
@@ -2198,16 +2890,35 @@ ${entries}
         
         // Write response atomically (headers + body together)
         const fullResponse = Buffer.concat([headerBlock, responseBody]);
-        socket.write(fullResponse);
         
-        logInfo(`[RTSP_PARSER] Response sent: ${statusCode}, total ${fullResponse.length} bytes (headers: ${headerBlock.length}, body: ${responseBody.length})`);
+        // Check if socket is writable before writing
+        if (socket.destroyed) {
+          logError(`[RTSP_PARSER] Cannot write response - socket is destroyed`);
+          return;
+        }
+        if (!socket.writable) {
+          logError(`[RTSP_PARSER] Cannot write response - socket is not writable (writable: ${socket.writable}, readable: ${socket.readable}, destroyed: ${socket.destroyed})`);
+          return;
+        }
         
-        // Ensure socket stays open and readable for next request
-        if (!socket.destroyed && socket.readable) {
-          socket.resume();
-          logDebug(`[RTSP_PARSER] Socket resumed, ready for next request`);
-        } else {
-          logError(`[RTSP_PARSER] Socket is destroyed or not readable after response!`);
+        try {
+          socket.write(fullResponse, (err) => {
+            if (err) {
+              logError(`[RTSP_PARSER] Error writing response:`, err);
+            }
+          });
+          
+          logInfo(`[RTSP_PARSER] Response sent: ${statusCode}, total ${fullResponse.length} bytes (headers: ${headerBlock.length}, body: ${responseBody.length})`);
+          
+          // Ensure socket stays open and readable for next request
+          if (!socket.destroyed && socket.readable) {
+            socket.resume();
+            logDebug(`[RTSP_PARSER] Socket resumed, ready for next request`);
+          } else {
+            logError(`[RTSP_PARSER] Socket is destroyed or not readable after response!`);
+          }
+        } catch (err) {
+          logError(`[RTSP_PARSER] Exception writing response:`, err);
         }
         
         // Don't set up parser again - it's already set up and will handle the next request
@@ -2225,6 +2936,738 @@ ${entries}
     
     // Handle the request using existing handler
     this.handleRequest(req, res);
+  }
+}
+
+/**
+ * RTP Mirror Handler for video streaming (TCP)
+ * Matches UxPlay's raop_rtp_mirror implementation
+ */
+class RTPMirrorHandler {
+  private server: net.Server | null = null;
+  private clientSocket: net.Socket | null = null;
+  private aesKey: Buffer;
+  private aesIV: Buffer;
+  private streamConnectionID: number;
+  private dataPort: number = 0;
+  private running: boolean = false;
+  private nextDecryptCount: number = 0; // For handling partial blocks (matching UxPlay's mirror_buffer)
+  private overflowBuffer: Buffer = Buffer.alloc(16); // For partial block decryption
+  private spsPpsBuffer: Buffer | null = null; // Store SPS/PPS for prepending to IDR frames
+  private spsPpsLength: number = 0;
+  private lastNtpTimestamp: bigint = BigInt(0);
+  private ctrCounter: Buffer; // Track CTR counter state (increments for each block)
+  private ctrCipher: ReturnType<typeof crypto.createCipheriv> | null = null; // Maintain cipher state across packets
+  private airplayServer: AirPlayServer; // Reference to parent server for IPC
+  private isH265: boolean = false; // Track video codec (H.264 or H.265)
+
+  constructor(aeskey: Buffer, streamConnectionID: number, airplayServer: AirPlayServer) {
+    // Store original FairPlay-decrypted aeskey for logging
+    const originalAeskey = aeskey;
+    this.streamConnectionID = streamConnectionID;
+    
+    // Derive AES-CTR key and IV from streamConnectionID (matching UxPlay's mirror_buffer_init_aes)
+    // UxPlay: "AirPlayStreamKey{streamConnectionID}" + aeskey_audio -> SHA512 -> first 16 bytes
+    // UxPlay: "AirPlayStreamIV{streamConnectionID}" + aeskey_audio -> SHA512 -> first 16 bytes
+    const keyString = `AirPlayStreamKey${streamConnectionID}`;
+    const ivString = `AirPlayStreamIV${streamConnectionID}`;
+    
+    logInfo(`RTPMirrorHandler: Initializing with FairPlay aeskey: ${originalAeskey.toString('hex')}`);
+    logInfo(`RTPMirrorHandler: streamConnectionID: ${streamConnectionID}`);
+    
+    const keyHash = crypto.createHash('sha512').update(keyString).update(aeskey).digest();
+    const ivHash = crypto.createHash('sha512').update(ivString).update(aeskey).digest();
+    
+    this.aesKey = keyHash.slice(0, 16);
+    this.aesIV = ivHash.slice(0, 16);
+    this.ctrCounter = Buffer.from(this.aesIV); // Initialize counter from IV
+    
+    // Create persistent cipher for AES-CTR (maintains counter state)
+    // UxPlay: aes_ctr_init uses AES_ENCRYPT mode (encryption and decryption are the same in CTR)
+    // In Node.js, we use createCipheriv for CTR mode (not createDecipheriv)
+    // Note: CTR mode uses encryption for both encrypt and decrypt operations
+    // IMPORTANT: The cipher will be recreated for each connection, so counter starts from IV
+    const cipher = crypto.createCipheriv('aes-128-ctr', this.aesKey, this.ctrCounter);
+    cipher.setAutoPadding(false);
+    this.ctrCipher = cipher;
+    
+    // Initialize state (matching UxPlay's mirror_buffer_init)
+    this.nextDecryptCount = 0;
+    this.overflowBuffer.fill(0);
+    
+    this.airplayServer = airplayServer;
+    
+    logInfo(`RTPMirrorHandler: Derived AES-CTR key/IV from streamConnectionID ${streamConnectionID}`);
+    logInfo(`RTPMirrorHandler: Original FairPlay aeskey: ${originalAeskey.toString('hex')}`);
+    logInfo(`RTPMirrorHandler: Derived AES key: ${this.aesKey.toString('hex')}`);
+    logInfo(`RTPMirrorHandler: Derived AES IV: ${this.aesIV.toString('hex')}`);
+    logInfo(`RTPMirrorHandler: Initialized with nextDecryptCount=0`);
+  }
+
+  async start(): Promise<number> {
+    if (this.running) {
+      logError(`RTPMirrorHandler: Already running`);
+      return this.dataPort;
+    }
+
+    return new Promise((resolve, reject) => {
+      // Create TCP server (matching UxPlay's TCP socket for video)
+      this.server = net.createServer((socket) => {
+      logInfo(`RTPMirrorHandler: Client connected for video streaming`);
+      this.clientSocket = socket;
+      
+      // Reset state for new connection (matching UxPlay's behavior)
+      // Each new connection should start with fresh counter state
+      this.nextDecryptCount = 0;
+      this.overflowBuffer.fill(0);
+      // Recreate cipher with fresh counter state
+      const cipher = crypto.createCipheriv('aes-128-ctr', this.aesKey, this.ctrCounter);
+      cipher.setAutoPadding(false);
+      this.ctrCipher = cipher;
+      logDebug(`RTPMirrorHandler: Reset state for new connection: nextDecryptCount=0, cipher recreated`);
+      
+      // Set socket options (matching UxPlay)
+      socket.setKeepAlive(true, 60000); // 60 seconds
+      socket.setNoDelay(true);
+      
+      // Handle incoming data
+      let headerBuffer = Buffer.alloc(0);
+      let expectingHeader = true;
+      
+      socket.on('data', (data: Buffer) => {
+        logDebug(`RTPMirrorHandler: Received ${data.length} bytes on TCP socket`);
+        headerBuffer = Buffer.concat([headerBuffer, data]);
+        logDebug(`RTPMirrorHandler: Buffer now has ${headerBuffer.length} bytes, expectingHeader=${expectingHeader}`);
+        
+        // Process packets while we have enough data
+        while (true) {
+          // First 128 bytes are header (matching UxPlay)
+          if (headerBuffer.length < 128) {
+            logDebug(`RTPMirrorHandler: Not enough data for header (need 128, have ${headerBuffer.length})`);
+            break; // Need more data
+          }
+          
+          const header = headerBuffer.slice(0, 128);
+          // UxPlay: byteutils_get_int reads LITTLE-ENDIAN (not big-endian!)
+          const payloadSize = header.readUInt32LE(0); // packet[0:3] = payload size (little-endian)
+          const payloadType = header.readUInt16LE(4); // packet[4:5] = payload type (little-endian)
+          const payloadOption = header.readUInt16LE(6); // packet[6:7] = payload option (little-endian)
+          // UxPlay: byteutils_get_long reads LITTLE-ENDIAN 64-bit integer
+          const ntpTimestamp = header.readBigUInt64LE(8); // packet[8:15] = NTP timestamp (little-endian)
+          
+          logInfo(`RTPMirrorHandler: Header parsed - payloadSize=${payloadSize}, type=0x${payloadType.toString(16)}, option=0x${payloadOption.toString(16)}, bufferLength=${headerBuffer.length}`);
+          
+          // Validate payload size (should be reasonable - max ~10MB for video packets)
+          if (payloadSize > 10 * 1024 * 1024) {
+            logError(`RTPMirrorHandler: Invalid payload size ${payloadSize} (too large), resetting buffer`);
+            headerBuffer = Buffer.alloc(0);
+            expectingHeader = true;
+            break;
+          }
+          
+          // Check if we have the full packet (header + payload)
+          if (headerBuffer.length < 128 + payloadSize) {
+            logDebug(`RTPMirrorHandler: Waiting for more data - need ${128 + payloadSize} bytes, have ${headerBuffer.length}`);
+            expectingHeader = false; // Need more data for payload
+            break; // Wait for more data
+          }
+          
+          // We have a complete packet
+          const payload = headerBuffer.slice(128, 128 + payloadSize);
+          logInfo(`RTPMirrorHandler: Processing video packet - type=0x${payloadType.toString(16)}, size=${payload.length}, payloadSize=${payloadSize}`);
+          this.processVideoPacket(payload, payloadType, payloadOption, ntpTimestamp);
+          
+          // Remove processed packet from buffer
+          headerBuffer = headerBuffer.slice(128 + payloadSize);
+          expectingHeader = true; // Next packet starts with header
+          logDebug(`RTPMirrorHandler: Processed packet, buffer now has ${headerBuffer.length} bytes remaining`);
+        }
+      });
+      
+      socket.on('error', (err) => {
+        logError(`RTPMirrorHandler: Socket error:`, err);
+      });
+      
+      socket.on('close', () => {
+        logInfo(`RTPMirrorHandler: Client disconnected`);
+        this.clientSocket = null;
+      });
+      });
+
+      // Bind to a random port (UxPlay binds to requested port or finds available)
+      this.server.listen(0, () => {
+        const address = this.server?.address();
+        if (address && typeof address === 'object' && 'port' in address) {
+          this.dataPort = address.port;
+          this.running = true;
+          logInfo(`RTPMirrorHandler: TCP server listening on port ${this.dataPort}`);
+          resolve(this.dataPort);
+        } else {
+          reject(new Error('Failed to get server address'));
+        }
+      });
+
+      this.server.on('error', (err) => {
+        logError(`RTPMirrorHandler: Server error:`, err);
+        this.running = false;
+        reject(err);
+      });
+    });
+  }
+
+  private processVideoPacket(payload: Buffer, payloadType: number, payloadOption: number, ntpTimestamp: bigint): void {
+    // UxPlay packet types:
+    // 0x0000: encrypted non-IDR NAL unit
+    // 0x0010: encrypted IDR NAL unit  
+    // 0x0100: unencrypted SPS+PPS NAL unit
+    // 0x0200: unencrypted (old protocol)
+    // 0x0500: unencrypted streaming report
+    
+    if (payloadType === 0x0000 || payloadType === 0x0010) {
+      // Encrypted packet - decrypt with AES-CTR
+      logDebug(`RTPMirrorHandler: Processing encrypted video packet (type=0x${payloadType.toString(16)}, size=${payload.length})`);
+      
+      // Decrypt with AES-CTR (matching UxPlay's mirror_buffer_decrypt)
+      const decrypted = this.decryptVideoPacket(payload);
+      
+      // Debug: log first few bytes of encrypted and decrypted data to verify decryption
+      // IMPORTANT: When nextDecryptCount > 0, the first bytes are XORed (continuation of previous packet)
+      // So we should check NAL size starting from nextDecryptCount, not offset 0
+      if (payload.length >= 16 && decrypted.length >= 16) {
+        // Note: nextDecryptCount is checked BEFORE decryption, so we need to check it before calling decryptVideoPacket
+        // Actually, we check it after, so it might have changed. Let's check the decrypted data directly.
+        logDebug(`RTPMirrorHandler: Packet - First 16 bytes encrypted: ${payload.slice(0, 16).toString('hex')}`);
+        logDebug(`RTPMirrorHandler: Packet - First 16 bytes decrypted: ${decrypted.slice(0, 16).toString('hex')}`);
+        
+        // Check NAL size at offset 0 first (for first packet or if decryption is correct)
+        const nalOffset = 0; // Always check offset 0 first
+        if (decrypted.length >= nalOffset + 4) {
+          const nalSize = decrypted.readUInt32BE(nalOffset);
+          logDebug(`RTPMirrorHandler: NAL size at offset ${nalOffset}: ${nalSize}, nextDecryptCount: ${this.nextDecryptCount}, payloadSize: ${payload.length}`);
+          
+          // For first packet, also log the key/IV to verify derivation
+          // Note: We check nextDecryptCount after decryption, so we can't reliably detect first packet here
+          // Instead, we'll log key/IV once when cipher is initialized
+          if (nalSize > 0 && nalSize < 10 * 1024 * 1024) {
+            logDebug(`RTPMirrorHandler: Found valid NAL size ${nalSize} at offset ${nalOffset}`);
+          }
+        }
+      }
+      
+      // Replace NAL size prefixes with start codes (0x00000001)
+      // UxPlay: AirPlay prepends NALs with their size, we replace with 4-byte start code
+      const nalUnits = this.replaceNalSizeWithStartCode(decrypted);
+      
+      if (nalUnits.length === 0) {
+        logError(`RTPMirrorHandler: Failed to parse NAL units from decrypted data (${decrypted.length} bytes)`);
+        return; // Skip this packet
+      }
+      
+      // Check if we need to prepend SPS/PPS
+      let finalPayload: Buffer;
+      if (payloadType === 0x0010 && this.spsPpsBuffer && this.spsPpsLength > 0) {
+        // IDR frame - prepend SPS/PPS if available and timestamp matches
+        if (ntpTimestamp === this.lastNtpTimestamp) {
+          finalPayload = Buffer.concat([this.spsPpsBuffer, nalUnits]);
+          logDebug(`RTPMirrorHandler: Prepended SPS/PPS to IDR frame`);
+          this.spsPpsBuffer = null;
+          this.spsPpsLength = 0;
+        } else {
+          logDebug(`RTPMirrorHandler: SPS/PPS timestamp mismatch, discarding`);
+          this.spsPpsBuffer = null;
+          this.spsPpsLength = 0;
+          finalPayload = nalUnits;
+        }
+      } else {
+        finalPayload = nalUnits;
+      }
+      
+      // Count NAL units (matching UxPlay's nalus_count)
+      let nalCount = 0;
+      let offset = 0;
+      while (offset < finalPayload.length) {
+        if (offset + 4 <= finalPayload.length && 
+            finalPayload[offset] === 0x00 && finalPayload[offset + 1] === 0x00 && 
+            finalPayload[offset + 2] === 0x00 && finalPayload[offset + 3] === 0x01) {
+          nalCount++;
+          offset += 4;
+          // Find next start code or end of buffer
+          while (offset < finalPayload.length) {
+            if (offset + 4 <= finalPayload.length &&
+                finalPayload[offset] === 0x00 && finalPayload[offset + 1] === 0x00 &&
+                finalPayload[offset + 2] === 0x00 && finalPayload[offset + 3] === 0x01) {
+              break; // Found next NAL unit
+            }
+            offset++;
+          }
+        } else {
+          offset++;
+        }
+      }
+      
+      // Send video frame to renderer for decoding and rendering
+      // UxPlay: calls video_process callback with video_decode_struct
+      const ntpTimeLocal = BigInt(Date.now() * 1000000); // Convert to nanoseconds (stub - should use NTP)
+      const ntpTimeRemote = ntpTimestamp;
+      
+      this.airplayServer.sendVideoFrame({
+        isH265: this.isH265,
+        nalCount: nalCount,
+        data: finalPayload,
+        ntpTimeLocal: ntpTimeLocal,
+        ntpTimeRemote: ntpTimeRemote,
+      });
+      
+      logDebug(`RTPMirrorHandler: Sent ${nalCount} NAL unit(s) to renderer (${finalPayload.length} bytes)`);
+      
+    } else if (payloadType === 0x0100) {
+      // Unencrypted SPS+PPS packet
+      logDebug(`RTPMirrorHandler: Processing unencrypted SPS/PPS packet (size=${payload.length})`);
+      
+      // Detect codec type from payload option (matching UxPlay)
+      // 0x1601: H.264 SPS+PPS
+      // 0x1e01: H.265/HEVC SPS+PPS
+      // 0x5601: H.264 (stream stopping)
+      // 0x5e01: H.265 (stream stopping)
+      if (payloadOption === 0x1e01 || payloadOption === 0x5e01) {
+        this.isH265 = true;
+        logInfo(`RTPMirrorHandler: Detected H.265/HEVC codec`);
+      } else {
+        this.isH265 = false;
+        logInfo(`RTPMirrorHandler: Detected H.264 codec`);
+      }
+      
+      // Store SPS/PPS for prepending to next IDR frame
+      this.spsPpsBuffer = Buffer.from(payload);
+      this.spsPpsLength = payload.length;
+      this.lastNtpTimestamp = ntpTimestamp;
+      
+      // Notify renderer about codec change
+      const mainWindow = (this.airplayServer as any).mainWindow;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('airplay:video-codec', {
+          isH265: this.isH265,
+          spsPps: payload.toString('base64'),
+        });
+      }
+      
+    } else if (payloadType === 0x05 || payloadType === 0x0500) {
+      // Streaming report (heartbeat) - UxPlay: packet[4] = 0x05, no timestamp
+      // This is a binary plist with video info from client
+      logDebug(`RTPMirrorHandler: Streaming report received (type=0x${payloadType.toString(16)}, size=${payload.length})`);
+      // No action needed - just acknowledge receipt
+      
+    } else {
+      logDebug(`RTPMirrorHandler: Unknown packet type 0x${payloadType.toString(16)}, option=0x${payloadOption.toString(16)}`);
+    }
+  }
+
+  /**
+   * Decrypt video packet using AES-CTR (matching UxPlay's mirror_buffer_decrypt)
+   * UxPlay: aes_ctr_start_fresh_block aligns to block boundary, then decrypts IN-PLACE
+   * Note: Node.js crypto maintains counter state internally, but we need to handle partial blocks manually
+   */
+  private decryptVideoPacket(input: Buffer): Buffer {
+    if (!this.ctrCipher) {
+      logError(`RTPMirrorHandler: Cipher not initialized`);
+      return input; // Return unmodified if cipher not ready
+    }
+    
+    // Store nextDecryptCount BEFORE processing (it will be modified during processing)
+    const savedNextDecryptCount = this.nextDecryptCount;
+    const isFirstPacket = savedNextDecryptCount === 0;
+    
+    if (isFirstPacket) {
+      logInfo(`RTPMirrorHandler: ===== FIRST PACKET ===== nextDecryptCount=0, inputLen=${input.length}`);
+    }
+    
+    // UxPlay decrypts in-place, but we'll use a separate output buffer for clarity
+    const output = Buffer.from(input); // Start with copy of input
+    
+    // Handle partial block from previous packet (nextDecryptCount > 0)
+    // UxPlay: XOR with overflow buffer from previous decrypt
+    if (savedNextDecryptCount > 0) {
+      logDebug(`RTPMirrorHandler: Handling partial block: nextDecryptCount=${savedNextDecryptCount}, inputLen=${input.length}`);
+      for (let i = 0; i < savedNextDecryptCount; i++) {
+        output[i] = input[i] ^ this.overflowBuffer[(16 - savedNextDecryptCount) + i];
+      }
+    }
+    
+    // UxPlay: aes_ctr_start_fresh_block is called BEFORE every decrypt (line 94)
+    // It checks block_offset and advances if needed to align to block boundary
+    // Since Node.js crypto doesn't expose block_offset, we need to track it ourselves
+    // If nextDecryptCount > 0, we need to advance by (16 - nextDecryptCount) bytes
+    // If nextDecryptCount == 0, we might still need to advance if block_offset != 0
+    // But we can't check block_offset, so we'll assume it's 0 when nextDecryptCount == 0
+    if (savedNextDecryptCount > 0) {
+      // UxPlay: aes_ctr_start_fresh_block advances counter to align to block boundary
+      // This encrypts waste bytes (zeros) to advance the counter by (16 - block_offset) bytes
+      // In Node.js CTR mode, we decrypt zeros to advance the counter (same effect)
+      const wasteBytes = 16 - savedNextDecryptCount;
+      const wasteBuffer = Buffer.alloc(wasteBytes);
+      this.ctrCipher.update(wasteBuffer); // Decrypt zeros to advance counter (discard result)
+      logDebug(`RTPMirrorHandler: Advanced counter by ${wasteBytes} bytes (waste block), nextDecryptCount=${savedNextDecryptCount}`);
+    } else {
+      logDebug(`RTPMirrorHandler: First packet or full block alignment: nextDecryptCount=0, inputLen=${input.length}`);
+    }
+    
+    // Decrypt full 16-byte blocks (UxPlay decrypts in-place)
+    // UxPlay: encryptlen = ((inputLen - nextDecryptCount) / 16) * 16
+    // After advancing counter with waste bytes, decrypt starting from nextDecryptCount
+    const encryptStart = savedNextDecryptCount;
+    const encryptLen = Math.floor((input.length - savedNextDecryptCount) / 16) * 16;
+    
+    if (encryptLen > 0) {
+      // UxPlay: aes_ctr_decrypt decrypts IN-PLACE: input+offset is both input and output
+      // This means the input buffer is modified directly
+      // We need to decrypt the encrypted block and write to output
+      // IMPORTANT: We decrypt from input buffer and write to output buffer at the same offset
+      const encryptedBlock = input.slice(encryptStart, encryptStart + encryptLen);
+      const decryptedBlock = this.ctrCipher.update(encryptedBlock);
+      if (decryptedBlock.length > 0) {
+        // Copy decrypted data to output at the correct offset
+        decryptedBlock.copy(output, encryptStart);
+        logDebug(`RTPMirrorHandler: Decrypted ${decryptedBlock.length} bytes starting at offset ${encryptStart}`);
+      } else {
+        logError(`RTPMirrorHandler: Cipher.update returned empty buffer for ${encryptLen} bytes`);
+      }
+    }
+    
+    // Handle remaining bytes (< 16 bytes)
+    // UxPlay: restlen = (inputLen - nextDecryptCount) % 16
+    const restLen = (input.length - savedNextDecryptCount) % 16;
+    if (restLen > 0) {
+      const restStart = input.length - restLen;
+      
+      // Copy remaining bytes to overflow buffer
+      this.overflowBuffer.fill(0);
+      input.copy(this.overflowBuffer, 0, restStart, restStart + restLen);
+      
+      // UxPlay: Reset nextDecryptCount to 0 BEFORE processing remaining bytes (line 103)
+      // Then if restlen > 0, it sets nextDecryptCount = 16 - restlen
+      // We'll do the same
+      this.nextDecryptCount = 0;
+      
+      // Decrypt a full 16-byte block (UxPlay decrypts overflowBuffer as 16 bytes in-place)
+      // Use the persistent cipher
+      const overflowDecrypted = this.ctrCipher.update(this.overflowBuffer);
+      overflowDecrypted.copy(this.overflowBuffer, 0);
+      
+      // Copy only the needed bytes to output
+      for (let j = 0; j < restLen; j++) {
+        output[restStart + j] = this.overflowBuffer[j];
+      }
+      
+      // Store remaining decrypted bytes for next packet (UxPlay line 112)
+      this.nextDecryptCount = 16 - restLen;
+      logDebug(`RTPMirrorHandler: Set nextDecryptCount=${this.nextDecryptCount} for next packet (restLen=${restLen})`);
+    } else {
+      // UxPlay: Reset nextDecryptCount to 0 if no remaining bytes (line 103)
+      this.nextDecryptCount = 0;
+    }
+    
+    return output;
+  }
+
+  /**
+   * Increment CTR counter (big-endian 128-bit counter)
+   * UxPlay: Counter increments for each 16-byte block
+   */
+  private incrementCounter(blocks: number): void {
+    // Increment counter as big-endian 128-bit integer
+    // For simplicity, we'll increment the last 8 bytes (64-bit counter)
+    // This matches typical CTR mode implementations
+    let carry = blocks;
+    for (let i = 15; i >= 8 && carry > 0; i--) {
+      const sum = this.ctrCounter[i] + carry;
+      this.ctrCounter[i] = sum & 0xff;
+      carry = sum >> 8;
+    }
+  }
+
+  /**
+   * Replace NAL size prefixes with start codes (0x00000001)
+   * UxPlay: AirPlay prepends NALs with their size (4 bytes BE), we replace with start code
+   * IMPORTANT: When nextDecryptCount > 0, the first bytes are XORed (continuation of previous packet)
+   * So we should start parsing from nextDecryptCount, not offset 0
+   */
+  private replaceNalSizeWithStartCode(payload: Buffer): Buffer {
+    const nalStartCode = Buffer.from([0x00, 0x00, 0x00, 0x01]);
+    const chunks: Buffer[] = [];
+    
+    // If nextDecryptCount > 0, the first bytes are XORed (continuation of previous packet's last NAL)
+    // We should start parsing NAL units from nextDecryptCount
+    // But actually, those XORed bytes are already part of a NAL unit, so we might need to handle them differently
+    // For now, let's try starting from 0 and see if we get valid NAL sizes
+    let offset = 0;
+    
+    // If we have a partial block from previous packet, try starting from nextDecryptCount
+    // But first, let's check if offset 0 has a valid NAL size
+    if (this.nextDecryptCount > 0) {
+      // Check if offset 0 has valid NAL size (might be wrong due to XOR)
+      const nalSizeAt0 = payload.readUInt32BE(0);
+      if (nalSizeAt0 > 0 && nalSizeAt0 < 10 * 1024 * 1024 && offset + 4 + nalSizeAt0 <= payload.length) {
+        // Offset 0 might be valid, but let's also check nextDecryptCount
+        logDebug(`RTPMirrorHandler: nextDecryptCount=${this.nextDecryptCount}, checking NAL size at offset 0: ${nalSizeAt0}`);
+      }
+      // Try starting from nextDecryptCount (after XORed bytes)
+      if (payload.length > this.nextDecryptCount + 4) {
+        const nalSizeAtOffset = payload.readUInt32BE(this.nextDecryptCount);
+        if (nalSizeAtOffset > 0 && nalSizeAtOffset < 10 * 1024 * 1024 && 
+            this.nextDecryptCount + 4 + nalSizeAtOffset <= payload.length) {
+          logDebug(`RTPMirrorHandler: Valid NAL size found at offset ${this.nextDecryptCount}: ${nalSizeAtOffset}`);
+          offset = this.nextDecryptCount; // Start from after XORed bytes
+        }
+      }
+    }
+    
+    while (offset < payload.length) {
+      if (offset + 4 > payload.length) {
+        // Not enough bytes for size prefix
+        logDebug(`RTPMirrorHandler: Trailing data at end of payload (${payload.length - offset} bytes)`);
+        break;
+      }
+      
+      // Read NAL size (4 bytes, big-endian)
+      const nalSize = payload.readUInt32BE(offset);
+      
+      // Validate NAL size (reasonable range: 1 byte to 10MB)
+      if (nalSize === 0 || nalSize > 10 * 1024 * 1024) {
+        logError(`RTPMirrorHandler: Invalid NAL size ${nalSize} at offset ${offset}, payload length=${payload.length}`);
+        // If we started from nextDecryptCount and it's invalid, try offset 0 once
+        if (offset === this.nextDecryptCount && this.nextDecryptCount > 0 && offset === this.nextDecryptCount) {
+          logDebug(`RTPMirrorHandler: Trying offset 0 instead of ${this.nextDecryptCount}`);
+          offset = 0;
+          continue; // Try once more at offset 0
+        }
+        // If offset 0 also fails, the decryption is wrong - don't loop forever
+        if (offset === 0 && this.nextDecryptCount > 0) {
+          logError(`RTPMirrorHandler: Both offset 0 and ${this.nextDecryptCount} failed - decryption is incorrect`);
+          break; // Stop trying - decryption is wrong
+        }
+        // Skip one byte and try again (but limit attempts to prevent infinite loop)
+        offset += 1;
+        if (offset > Math.min(payload.length - 4, 32)) {
+          logError(`RTPMirrorHandler: Exceeded search limit (tried ${offset} offsets) - decryption failed, skipping packet`);
+          return Buffer.alloc(0); // Return empty buffer to skip this packet
+        }
+        continue;
+      }
+      
+      if (offset + 4 + nalSize > payload.length) {
+        logError(`RTPMirrorHandler: NAL size ${nalSize} exceeds payload at offset ${offset} (payload length=${payload.length})`);
+        break;
+      }
+      
+      // Replace size prefix with start code
+      chunks.push(nalStartCode);
+      
+      // Copy NAL unit data
+      const nalData = payload.slice(offset + 4, offset + 4 + nalSize);
+      chunks.push(nalData);
+      
+      offset += 4 + nalSize;
+    }
+    
+    if (chunks.length === 0) {
+      logError(`RTPMirrorHandler: No valid NAL units found in payload of ${payload.length} bytes`);
+      return Buffer.alloc(0);
+    }
+    
+    return Buffer.concat(chunks);
+  }
+
+  stop(): void {
+    if (this.clientSocket) {
+      this.clientSocket.destroy();
+      this.clientSocket = null;
+    }
+    if (this.server) {
+      this.server.close();
+      this.server = null;
+    }
+    this.running = false;
+    logInfo(`RTPMirrorHandler: Stopped`);
+  }
+}
+
+/**
+ * RTP Audio Handler for audio streaming (UDP)
+ * Matches UxPlay's raop_rtp implementation
+ */
+class RTPAudioHandler {
+  private controlSocket: dgram.Socket | null = null;
+  private dataSocket: dgram.Socket | null = null;
+  private aesKey: Buffer;
+  private aesIV: Buffer;
+  private remoteControlPort: number;
+  private controlPort: number = 0;
+  private dataPort: number = 0;
+  private running: boolean = false;
+  private airplayServer: AirPlayServer; // Reference to parent server for IPC
+
+  constructor(aeskey: Buffer, aesiv: Buffer, remoteControlPort: number, airplayServer: AirPlayServer) {
+    this.aesKey = aeskey;
+    this.aesIV = aesiv;
+    this.remoteControlPort = remoteControlPort;
+    this.airplayServer = airplayServer;
+  }
+
+  async start(): Promise<{ controlPort: number; dataPort: number }> {
+    if (this.running) {
+      logError(`RTPAudioHandler: Already running`);
+      return { controlPort: this.controlPort, dataPort: this.dataPort };
+    }
+
+    return new Promise((resolve, reject) => {
+      let controlPortReady = false;
+      let dataPortReady = false;
+
+      const checkReady = () => {
+        if (controlPortReady && dataPortReady) {
+          this.running = true;
+          resolve({ controlPort: this.controlPort, dataPort: this.dataPort });
+        }
+      };
+
+      // Create UDP sockets (matching UxPlay's UDP sockets for audio)
+      // Control socket for resend requests
+      this.controlSocket = dgram.createSocket('udp6');
+      this.controlSocket.bind(0, () => {
+        const address = this.controlSocket?.address();
+        if (address && typeof address === 'object' && 'port' in address) {
+          this.controlPort = address.port;
+          logInfo(`RTPAudioHandler: Control socket bound to port ${this.controlPort}`);
+          controlPortReady = true;
+          checkReady();
+        }
+      });
+
+      // Data socket for audio RTP packets
+      this.dataSocket = dgram.createSocket('udp6');
+      this.dataSocket.bind(0, () => {
+        const address = this.dataSocket?.address();
+        if (address && typeof address === 'object' && 'port' in address) {
+          this.dataPort = address.port;
+          logInfo(`RTPAudioHandler: Data socket bound to port ${this.dataPort}`);
+          
+          // Start receiving RTP packets
+          this.setupDataSocket();
+          dataPortReady = true;
+          checkReady();
+        }
+      });
+
+      this.controlSocket.on('error', (err) => {
+        logError(`RTPAudioHandler: Control socket error:`, err);
+        if (!controlPortReady) reject(err);
+      });
+
+      this.dataSocket.on('error', (err) => {
+        logError(`RTPAudioHandler: Data socket error:`, err);
+        if (!dataPortReady) reject(err);
+      });
+    });
+  }
+
+  private setupDataSocket(): void {
+    if (!this.dataSocket) return;
+
+    this.dataSocket.on('message', (msg: Buffer, rinfo: dgram.RemoteInfo) => {
+      // Parse RTP packet
+      // RTP header is 12 bytes minimum (can be longer with CSRC/extension)
+      if (msg.length < 12) {
+        logDebug(`RTPAudioHandler: Packet too short (${msg.length} bytes)`);
+        return;
+      }
+
+      // Parse RTP header (matching UxPlay's RTP parsing)
+      const version = (msg[0] >> 6) & 0x03; // Bits 0-1
+      const padding = (msg[0] >> 5) & 0x01; // Bit 2
+      const extension = (msg[0] >> 4) & 0x01; // Bit 3
+      const csrcCount = msg[0] & 0x0f; // Bits 4-7
+      const marker = (msg[1] >> 7) & 0x01; // Bit 0
+      const payloadType = msg[1] & 0x7f; // Bits 1-7
+      const sequenceNumber = msg.readUInt16BE(2);
+      const timestamp = msg.readUInt32BE(4);
+      const ssrc = msg.readUInt32BE(8);
+
+      // RTP header length: 12 bytes + (csrcCount * 4) + extension header if present
+      let headerLength = 12 + (csrcCount * 4);
+      if (extension) {
+        const extensionLength = msg.readUInt16BE(headerLength + 2);
+        headerLength += 4 + (extensionLength * 4);
+      }
+
+      const payload = msg.slice(headerLength);
+      
+      logDebug(`RTPAudioHandler: RTP packet - seq=${sequenceNumber}, timestamp=${timestamp}, payloadType=${payloadType}, payloadSize=${payload.length}`);
+
+      // Decrypt audio payload with AES-CBC (matching UxPlay's raop_buffer_decrypt)
+      // UxPlay: First 12 bytes are unencrypted header, rest is encrypted payload
+      if (payload.length < 12) {
+        logDebug(`RTPAudioHandler: Payload too short (${payload.length} bytes)`);
+        return;
+      }
+
+      const encryptedPayload = payload.slice(12);
+      const decryptedPayload = this.decryptAudioPacket(encryptedPayload);
+      
+      // Combine header + decrypted payload
+      const audioFrame = Buffer.concat([payload.slice(0, 12), decryptedPayload]);
+      
+      logDebug(`RTPAudioHandler: Decrypted ${decryptedPayload.length} bytes of audio data`);
+      
+      // TODO: Parse audio format (AAC-ELD or ALAC based on payload[0])
+      // TODO: Decode audio
+      // TODO: Play audio via Web Audio API
+    });
+  }
+
+  /**
+   * Decrypt audio packet using AES-CBC (matching UxPlay's raop_buffer_decrypt)
+   * UxPlay: Decrypts in 16-byte blocks, copies remainder unencrypted
+   */
+  private decryptAudioPacket(encryptedData: Buffer): Buffer {
+    const output = Buffer.alloc(encryptedData.length);
+    
+    // Decrypt full 16-byte blocks
+    const encryptedLen = Math.floor(encryptedData.length / 16) * 16;
+    
+    if (encryptedLen > 0) {
+      // Create AES-CBC decipher
+      const decipher = crypto.createDecipheriv('aes-128-cbc', this.aesKey, this.aesIV);
+      decipher.setAutoPadding(false);
+      
+      // Decrypt encrypted blocks
+      const encryptedBlock = encryptedData.slice(0, encryptedLen);
+      const decryptedBlock = decipher.update(encryptedBlock);
+      decryptedBlock.copy(output, 0);
+      decipher.final();
+      
+      // Reset cipher for next packet (UxPlay calls aes_cbc_reset)
+      // Note: We create a new cipher each time, so no reset needed
+    }
+    
+    // Copy remaining bytes unencrypted (UxPlay: memcpy remainder)
+    if (encryptedData.length > encryptedLen) {
+      encryptedData.copy(output, encryptedLen, encryptedLen);
+    }
+    
+    return output;
+  }
+
+  stop(): void {
+    if (this.controlSocket) {
+      this.controlSocket.close();
+      this.controlSocket = null;
+    }
+    if (this.dataSocket) {
+      this.dataSocket.close();
+      this.dataSocket = null;
+    }
+    this.running = false;
+    logInfo(`RTPAudioHandler: Stopped`);
   }
 }
 

@@ -895,6 +895,32 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on(AIRPLAY_CHANNELS.STATUS_UPDATE, handler);
     return () => ipcRenderer.removeListener(AIRPLAY_CHANNELS.STATUS_UPDATE, handler);
   },
+  onAirPlayVideoFrame: (callback: (data: { isH265: boolean; nalCount: number; data: string; ntpTimeLocal: string; ntpTimeRemote: string }) => void) => {
+    const handler = (_event: IpcRendererEvent, data: { isH265: boolean; nalCount: number; data: string; ntpTimeLocal: string; ntpTimeRemote: string }) => {
+      if (data) {
+        window.dispatchEvent(new CustomEvent('airplay:video-frame', { detail: data }));
+        callback(data);
+      }
+    };
+    ipcRenderer.on(AIRPLAY_CHANNELS.VIDEO_FRAME, handler);
+    return () => ipcRenderer.removeListener(AIRPLAY_CHANNELS.VIDEO_FRAME, handler);
+  },
+  onAirPlayVideoCodec: (callback: (data: { isH265: boolean; spsPps: string }) => void) => {
+    const handler = (_event: IpcRendererEvent, data: { isH265: boolean; spsPps: string }) => {
+      window.dispatchEvent(new CustomEvent('airplay:video-codec', { detail: data }));
+      callback(data);
+    };
+    ipcRenderer.on(AIRPLAY_CHANNELS.VIDEO_CODEC, handler);
+    return () => ipcRenderer.removeListener(AIRPLAY_CHANNELS.VIDEO_CODEC, handler);
+  },
+  onAirPlayAudioFrame: (callback: (data: { data: string; ct: number; syncStatus: number; ntpTimeLocal: string; ntpTimeRemote: string; rtpTime: number; seqnum: number }) => void) => {
+    const handler = (_event: IpcRendererEvent, data: { data: string; ct: number; syncStatus: number; ntpTimeLocal: string; ntpTimeRemote: string; rtpTime: number; seqnum: number }) => {
+      window.dispatchEvent(new CustomEvent('airplay:audio-frame', { detail: data }));
+      callback(data);
+    };
+    ipcRenderer.on(AIRPLAY_CHANNELS.AUDIO_FRAME, handler);
+    return () => ipcRenderer.removeListener(AIRPLAY_CHANNELS.AUDIO_FRAME, handler);
+  },
 });
 
 // Type definitions for the exposed API
@@ -1079,6 +1105,9 @@ declare global {
       airplayStartServer: () => Promise<{ success: boolean; error?: string; pairingCode?: string }>;
       airplayStopServer: () => Promise<{ success: boolean }>;
       airplayGetStatus: () => Promise<{ status: string; pairingCode?: string; error?: string }>;
+      onAirPlayVideoFrame: (callback: (data: { isH265: boolean; nalCount: number; data: string; ntpTimeLocal: string; ntpTimeRemote: string }) => void) => () => void;
+      onAirPlayVideoCodec: (callback: (data: { isH265: boolean; spsPps: string }) => void) => () => void;
+      onAirPlayAudioFrame: (callback: (data: { data: string; ct: number; syncStatus: number; ntpTimeLocal: string; ntpTimeRemote: string; rtpTime: number; seqnum: number }) => void) => () => void;
       // Updates
       onUpdateAvailable: (callback: (data: { version: string; releaseNotes: string | null; releaseDate: string; releaseName?: string }) => void) => () => void;
       onUpdateNotAvailable: (callback: (data: { currentVersion: string }) => void) => () => void;
