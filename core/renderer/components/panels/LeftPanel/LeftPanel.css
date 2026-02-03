@@ -81,6 +81,14 @@
   color: var(--text-muted);
 }
 
+.left-panel__search-highlight {
+  background-color: var(--color-primary-alpha);
+  color: var(--color-primary);
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: 600;
+}
+
 .method-badge {
   font-family: var(--font-mono);
   font-size: var(--font-xs);

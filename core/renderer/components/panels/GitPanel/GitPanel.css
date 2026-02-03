@@ -274,6 +274,44 @@
   font-size: 13px;
 }
 
+.git-panel__commands-help {
+  margin-top: 24px;
+  text-align: left;
+  width: 100%;
+  max-width: 400px;
+}
+
+.git-panel__commands-help h4 {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.git-panel__command-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  font-size: 12px;
+}
+
+.git-panel__command-item code {
+  font-family: var(--font-mono);
+  background-color: var(--bg-secondary);
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: var(--color-primary);
+  font-size: 11px;
+  min-width: 100px;
+  flex-shrink: 0;
+}
+
+.git-panel__command-item span {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
 .git-panel__change-file {
   display: flex;
   align-items: center;

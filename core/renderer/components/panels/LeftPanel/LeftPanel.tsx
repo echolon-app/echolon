@@ -1136,11 +1136,46 @@ export const LeftPanel: React.FC = () => {
               autoFocus
             />
           ) : (
-            <span className={request.isDeprecated ? 'request-name--deprecated' : ''}>{request.name}</span>
+            <span className={request.isDeprecated ? 'request-name--deprecated' : ''}>
+              {searchQuery ? highlightMatches(request.name, searchQuery) : request.name}
+            </span>
           )}
         </CollapsibleListItem>
       </div>
     );
+  };
+
+  // Helper function to highlight matching text in search results
+  const highlightMatches = (text: string, query: string): React.ReactNode => {
+    if (!query.trim()) return text;
+    
+    const lowerQuery = query.toLowerCase();
+    const lowerText = text.toLowerCase();
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let index = lowerText.indexOf(lowerQuery, lastIndex);
+    
+    while (index !== -1) {
+      // Add text before match
+      if (index > lastIndex) {
+        parts.push(text.substring(lastIndex, index));
+      }
+      // Add highlighted match
+      parts.push(
+        <mark key={index} className="left-panel__search-highlight">
+          {text.substring(index, index + query.length)}
+        </mark>
+      );
+      lastIndex = index + query.length;
+      index = lowerText.indexOf(lowerQuery, lastIndex);
+    }
+    
+    // Add remaining text
+    if (lastIndex < text.length) {
+      parts.push(text.substring(lastIndex));
+    }
+    
+    return parts.length > 0 ? <>{parts}</> : text;
   };
 
   // Helper function to check if a request matches the search query
@@ -1223,7 +1258,7 @@ export const LeftPanel: React.FC = () => {
         }}
       >
         <CollapsibleList
-          title={folder.name}
+          title={searchQuery ? highlightMatches(folder.name, searchQuery) : folder.name}
           icon={<FolderIcon />}
           collapsed={searchQuery ? false : folder.collapsed}
           onCollapsedChange={(collapsed) => {
@@ -1477,7 +1512,9 @@ export const LeftPanel: React.FC = () => {
                           className={isDragging ? 'collapsible-list-item--dragging' : ''}
                         >
                           <div className="standalone-item">
-                            <span className="standalone-item__name">{request.name}</span>
+                            <span className="standalone-item__name">
+                              {searchQuery ? highlightMatches(request.name, searchQuery) : request.name}
+                            </span>
                           </div>
                         </CollapsibleListItem>
                       );
@@ -1495,7 +1532,9 @@ export const LeftPanel: React.FC = () => {
                           }}
                         >
                           <div className="standalone-item">
-                            <span className="standalone-item__name">{websocket.name}</span>
+                            <span className="standalone-item__name">
+                              {searchQuery ? highlightMatches(websocket.name, searchQuery) : websocket.name}
+                            </span>
                             <span className={`standalone-item__status standalone-item__status--${websocket.status}`} />
                           </div>
                         </CollapsibleListItem>
@@ -1570,7 +1609,7 @@ export const LeftPanel: React.FC = () => {
                       }}
                     >
                       <CollapsibleList
-                        title={collection.name}
+                        title={searchQuery ? highlightMatches(collection.name, searchQuery) : collection.name}
                         subtitle={collection.type || 'REST'}
                         badge={collection.specSource?.type === 'url' ? <RadarIcon /> : undefined}
                         badgeTooltip={collection.specSource?.type === 'url' ? 'Synced from URL' : undefined}
