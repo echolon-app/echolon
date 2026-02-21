@@ -13,7 +13,8 @@
     "build": "vite build",
     "build:lib": "BUILD_MODE=lib vite build",
     "preview": "vite preview",
-    "deploy": "npm run build:lib && set -a && source .env.production && set +a && ./scripts/deploy.sh",
+    "deploy": "npm run build && set -a && source .env.production && set +a && ./scripts/deploy.sh",
+    "deploy:lib": "npm run build:lib && npm run attach:release",
     "attach:release": "./scripts/attach-to-release.sh"
   },
   "keywords": [
