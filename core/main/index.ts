@@ -1,6 +1,7 @@
 import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron';
 import path from 'path';
 import crypto from 'crypto';
+import zlib from 'zlib';
 import { setupMenu } from './menu';
 import { setupUpdater } from './updater';
 import { makeHttpRequest, HttpRequestOptions, HttpResponseResult } from './httpRequest';
@@ -187,6 +188,55 @@ function setupIpcHandlers(): void {
     return makeHttpRequest(options);
   });
 
+  // Compute compression sizes (gzip, brotli, zstd) for a given body. Optional levels. If methods[] is set, only compute those.
+  type CompressionMethod = 'gzip' | 'brotli' | 'zstd';
+  ipcMain.handle(APP_CHANNELS.COMPUTE_COMPRESSION_SIZES, async (
+    _event,
+    payload: { body: string; levels?: { gzip?: number; brotli?: number; zstd?: number }; methods?: CompressionMethod[] }
+  ): Promise<{ gzip?: number; brotli?: number; zstd?: number; gzipMs?: number; brotliMs?: number; zstdMs?: number }> => {
+    const body = typeof payload === 'string' ? payload : payload.body;
+    const levels = typeof payload === 'object' && payload?.levels
+      ? payload.levels
+      : { gzip: 6, brotli: 11, zstd: 22 };
+    const methods: CompressionMethod[] = Array.isArray((payload as any)?.methods) && (payload as any).methods.length
+      ? (payload as any).methods
+      : ['gzip', 'brotli', 'zstd'];
+    const gzipL = Math.min(9, Math.max(1, levels.gzip ?? 6));
+    const brotliL = Math.min(11, Math.max(1, levels.brotli ?? 11));
+    const zstdL = Math.min(22, Math.max(1, levels.zstd ?? 22));
+    const result: { gzip?: number; brotli?: number; zstd?: number; gzipMs?: number; brotliMs?: number; zstdMs?: number } = {};
+    try {
+      const buf = Buffer.from(body, 'utf-8');
+      if (methods.includes('gzip')) {
+        const t0 = performance.now();
+        result.gzip = zlib.gzipSync(buf, { level: gzipL }).length;
+        result.gzipMs = Math.round(performance.now() - t0);
+      }
+      if (methods.includes('brotli')) {
+        const t0 = performance.now();
+        result.brotli = zlib.brotliCompressSync(buf, {
+          params: { [zlib.constants.BROTLI_PARAM_QUALITY]: brotliL },
+        }).length;
+        result.brotliMs = Math.round(performance.now() - t0);
+      }
+      if (methods.includes('zstd')) {
+        try {
+          const wasmZstd = await import('@foxglove/wasm-zstd');
+          await wasmZstd.isLoaded;
+          const t0 = performance.now();
+          const compressed = wasmZstd.compress(new Uint8Array(buf), zstdL);
+          result.zstd = compressed.length;
+          result.zstdMs = Math.round(performance.now() - t0);
+        } catch {
+          result.zstd = undefined;
+        }
+      }
+      return result;
+    } catch {
+      return result;
+    }
+  });
+
   // Compute Digest Auth header
   ipcMain.handle(APP_CHANNELS.COMPUTE_DIGEST_AUTH, async (_event, options: {
     wwwAuthHeader: string;
@@ -224,6 +274,24 @@ function setupIpcHandlers(): void {
   // Open external URL in default browser/app
   ipcMain.handle(APP_CHANNELS.OPEN_EXTERNAL, async (_event, url: string) => {
     await shell.openExternal(url);
+  });
+
+  // Launch at login (Login Items)
+  ipcMain.handle(APP_CHANNELS.GET_LOGIN_ITEM_SETTINGS, () => {
+    const settings = app.getLoginItemSettings();
+    return { openAtLogin: settings.openAtLogin };
+  });
+  ipcMain.handle(APP_CHANNELS.SET_LOGIN_ITEM_SETTINGS, (_event, openAtLogin: boolean) => {
+    app.setLoginItemSettings({ openAtLogin });
+  });
+  ipcMain.handle(APP_CHANNELS.OPEN_SYSTEM_LOGIN_ITEMS, async () => {
+    const platform = process.platform;
+    if (platform === 'darwin') {
+      await shell.openExternal('x-apple.systempreferences:com.apple.LoginItems-Settings.extension');
+    } else if (platform === 'win32') {
+      await shell.openExternal('ms-settings:startup');
+    }
+    // Linux: no standard system settings URL for startup apps
   });
 
   // Execute script - runs in main process to bypass CSP restrictions

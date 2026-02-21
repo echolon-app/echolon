@@ -10,7 +10,7 @@ import { exportToOpenAPIJson } from './OpenAPIExporter';
 import { generatePublicSpecHtml } from './PublicSpecHtmlGenerator';
 import { collectionToEchoFile } from './EchoFileConverter';
 
-// Declare window.electronAPI for TypeScript
+// Declare window.electronAPI for TypeScript (subset used across renderer)
 declare global {
   interface Window {
     electronAPI?: {
@@ -21,6 +21,15 @@ declare global {
       publicSpecsDeleteRootFiles: (subdomain: string) => Promise<boolean>;
       publicSpecsGetManifest: (subdomain: string) => Promise<SpecManifest | null>;
       publicSpecsUpdateManifest: (manifest: SpecManifest) => Promise<boolean>;
+      // App / shell (Electron-only)
+      openExternal?: (url: string) => Promise<void>;
+      getLaunchAtLogin?: () => Promise<{ openAtLogin: boolean }>;
+      setLaunchAtLogin?: (openAtLogin: boolean) => Promise<void>;
+      openSystemLoginItems?: () => Promise<void>;
+      wipeAllData?: () => Promise<{ success: boolean; error?: string }>;
+      restartApp?: () => Promise<void>;
+      setUpdateServer?: (url: string | null) => Promise<{ success: boolean; feedUrl?: string; error?: string }>;
+      computeCompressionSizes?: (payload: { body: string; levels?: { gzip?: number; brotli?: number; zstd?: number }; methods?: ('gzip' | 'brotli' | 'zstd')[] }) => Promise<{ gzip?: number; brotli?: number; zstd?: number }>;
     };
   }
 }

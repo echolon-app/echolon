@@ -178,6 +178,30 @@
   font-size: 0.85em;
 }
 
+.settings-modal__link-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: var(--font-sm);
+  font-weight: 500;
+  color: var(--color-primary);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.settings-modal__link-button:hover {
+  text-decoration: underline;
+}
+
+.settings-modal__link-button svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
 /* Subscription tab styles */
 .settings-modal__plan-card {
   padding: var(--spacing-lg);

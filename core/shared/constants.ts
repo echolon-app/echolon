@@ -21,6 +21,7 @@ export const STORAGE_KEYS = {
   SIDEBAR_VIEW: 'echolonSidebarView',
   CUSTOM_HTTP_METHODS: 'echolonCustomHttpMethods',
   PENDING_SPEC_CHANGES: 'echolonPendingSpecChanges',
+  SCRIPT_RUNTIME_VARS: 'echolonScriptRuntimeVars',
 } as const;
 
 export const WORKSPACE_COLORS = [

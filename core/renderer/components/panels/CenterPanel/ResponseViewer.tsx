@@ -8,11 +8,12 @@ import {
   GlobeIcon, CopyIcon, CheckIcon, DownloadIcon, FilterIcon, SearchIcon,
   HelpIcon, CloseIcon, HorizontalLayoutIcon, VerticalLayoutIcon, ErrorIcon, EyeIcon 
 } from '@/components/ui/icons';
-import { RequestExecution, ScriptOutput } from '@/types';
+import { RequestExecution, ScriptOutput, SizeBreakdown } from '@/types';
 import { ContextMenu, useContextMenu, Tooltip, Dropdown, Button } from '@/components/ui';
 import { cookieService } from '@/services';
 import { ResponseTimeTooltip } from './ResponseTimeTooltip';
 import { ResponseSizeTooltip } from './ResponseSizeTooltip';
+import { ResponseSizeModal } from './ResponseSizeModal';
 import { NetworkInfoTooltip } from './NetworkInfoTooltip';
 import { formatLogTime } from '@/utils';
 import './ResponseViewer.css';
@@ -391,6 +392,11 @@ const ScriptOutputSection: React.FC<{ title: string; output: ScriptOutput }> = (
 export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoading, height = 300, specResponseInfo, onClose, onExpandToggle, isExpanded }) => {
   const { resolvedTheme } = useTheme();
   const { openSettingsModal } = useApp();
+  const [sizeModalData, setSizeModalData] = useState<{
+    sizeBreakdown: SizeBreakdown;
+    headers: Array<{ key: string; value: string }>;
+    body: string;
+  } | null>(null);
   const [activeTab, setActiveTab] = useState<ResponseTab>('body');
   const editorRef = useRef<AceEditor>(null);
   const bodyContainerRef = useRef<HTMLDivElement>(null);
@@ -476,70 +482,42 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
     updateHeight();
   }, [height]);
 
-  // Resize editor when height prop changes (after resize completes)
-  // This is critical - when the panel resize ends, the height prop updates and we need to resize the editor
+  // Resize editor when height or tab changes: single 500ms timeout (ResizeObserver handles drag).
   useEffect(() => {
-    // Use double requestAnimationFrame to ensure DOM has fully updated after resize completes
-    const rafId = requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const editor = editorRef.current?.editor;
-        if (editor) {
-          editor.resize();
-        }
-      });
-    });
-
-    return () => cancelAnimationFrame(rafId);
+    const timeoutId = setTimeout(() => {
+      const editor = editorRef.current?.editor;
+      if (editor) editor.resize();
+    }, 500);
+    return () => clearTimeout(timeoutId);
   }, [height, activeTab]);
 
-  // Use ResizeObserver to watch the body container (where Ace editor is) and resize editor efficiently
-  // This ensures the editor resizes when the container size changes during drag
+  // ResizeObserver: resize editor when container size changes (e.g. drag). Throttled, no rAF.
   useEffect(() => {
-    // Watch the body container where the Ace editor actually lives
     const container = bodyContainerRef.current;
     if (!container) return;
 
-    // Throttle resize calls to avoid performance issues during drag (max ~60fps)
     let resizeTimeout: NodeJS.Timeout | null = null;
     const resizeEditor = () => {
-      if (resizeTimeout) return; // Skip if already scheduled
-      
+      if (resizeTimeout) return;
       resizeTimeout = setTimeout(() => {
         resizeTimeout = null;
-        // Use double requestAnimationFrame to ensure DOM has fully updated before resizing
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            const editor = editorRef.current?.editor;
-            if (editor) {
-              editor.resize();
-            }
-          });
-        });
-      }, 16); // ~60fps throttling
+        const editor = editorRef.current?.editor;
+        if (editor) editor.resize();
+      }, 16);
     };
 
     const resizeObserver = new ResizeObserver((entries) => {
-      // Only resize if the container actually changed size
       for (const entry of entries) {
-        if (entry.contentRect.height > 0) {
-          resizeEditor();
-        }
+        if (entry.contentRect.height > 0) resizeEditor();
       }
     });
-
     resizeObserver.observe(container);
 
-    // Also resize when tab or editorHeight changes (for initial setup)
-    // Delay slightly to ensure editor is mounted if it wasn't ready yet
-    const initialResizeTimeout = setTimeout(() => {
-      resizeEditor();
-    }, 100);
+    const initialResizeTimeout = setTimeout(resizeEditor, 500);
 
     return () => {
       resizeObserver.disconnect();
-      if (resizeTimeout) {
-        clearTimeout(resizeTimeout);
-      }
+      if (resizeTimeout) clearTimeout(resizeTimeout);
       clearTimeout(initialResizeTimeout);
     };
   }, [activeTab, editorHeight]);
@@ -1256,21 +1234,28 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
             <span className="response-viewer__time">{formatDuration(execution.duration)}</span>
           )}
           {response.sizeBreakdown ? (
-            <Tooltip 
-              content={
-                <ResponseSizeTooltip 
-                  responseSize={response.sizeBreakdown} 
-                  requestSize={response.requestSize}
-                />
-              }
-              position="bottom"
-              delay={100}
-              variant="rich"
-            >
-              <span className="response-viewer__size response-viewer__size--hoverable">
-                {formatBytes(response.size)}
-              </span>
-            </Tooltip>
+            <>
+              <Tooltip
+                content={
+                  <ResponseSizeTooltip
+                    responseSize={response.sizeBreakdown}
+                    requestSize={response.requestSize}
+                    headers={response.headers}
+                  />
+                }
+                position="bottom"
+                delay={100}
+                variant="rich"
+              >
+                <button
+                  type="button"
+                  className="response-viewer__size response-viewer__size--hoverable"
+                  onClick={() => response.sizeBreakdown && setSizeModalData({ sizeBreakdown: response.sizeBreakdown, headers: response.headers, body: response.body })}
+                >
+                  {formatBytes(response.sizeBreakdown.total)}
+                </button>
+              </Tooltip>
+            </>
           ) : (
             <span className="response-viewer__size">{formatBytes(response.size)}</span>
           )}
@@ -1755,6 +1740,16 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
           />
         )}
       </div>
+
+      {sizeModalData && (
+        <ResponseSizeModal
+          isOpen={true}
+          onClose={() => setSizeModalData(null)}
+          sizeBreakdown={sizeModalData.sizeBreakdown}
+          headers={sizeModalData.headers}
+          body={sizeModalData.body}
+        />
+      )}
 
       <ContextMenu
         items={contextMenuItems}

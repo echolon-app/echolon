@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { AppSettings, ConsoleEntry, Collection } from '@/types';
 import { storageManager } from '@/services';
+import { setEditorSearchMaxResults } from '@/aceSearchboxConfig';
 import { isElectron } from '@/utils';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -128,6 +129,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     storageManager.setSettings(settings);
   }, [settings]);
+
+  // Sync editor search max results to Ace searchbox patch (non-React code)
+  useEffect(() => {
+    setEditorSearchMaxResults(settings.editorSearchMaxResults ?? 9999);
+  }, [settings.editorSearchMaxResults]);
 
   // Apply font size setting to CSS custom properties
   useEffect(() => {

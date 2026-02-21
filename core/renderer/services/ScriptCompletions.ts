@@ -35,14 +35,14 @@ const echoCompletions: ScriptCompletion[] = [
     name: 'echo.getVar',
     value: 'echo.getVar(\'$1\')',
     meta: 'echo',
-    description: 'Get a runtime variable (request-scoped)',
+    description: 'Get a runtime variable (session-scoped, shared across requests/tabs)',
     score: 1000,
   },
   {
     name: 'echo.setVar',
     value: 'echo.setVar(\'$1\', $2)',
     meta: 'echo',
-    description: 'Set a runtime variable (request-scoped)',
+    description: 'Set a runtime variable (session-scoped, persisted across requests/tabs)',
     score: 1000,
   },
   {

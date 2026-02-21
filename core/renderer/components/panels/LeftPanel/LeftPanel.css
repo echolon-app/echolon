@@ -81,8 +81,9 @@
   color: var(--text-muted);
 }
 
+/* Match highlight in left-panel search results – primary color */
 .left-panel__search-highlight {
-  background-color: var(--color-primary-alpha);
+  background-color: color-mix(in srgb, var(--color-primary) 25%, transparent);
   color: var(--color-primary);
   padding: 0 2px;
   border-radius: 2px;

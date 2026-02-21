@@ -39,6 +39,7 @@ export default defineConfig({
               external: [
                 'electron',
                 'electron-updater',
+                '@foxglove/wasm-zstd',
                 ...builtinModules,
                 ...builtinModules.map(m => `node:${m}`),
               ],

@@ -165,6 +165,7 @@ class LocalStorageManager {
       validateSSL: true,
       proxyEnabled: false,
       debugMode: false,
+      editorSearchMaxResults: 9999,
       // CORS Proxy defaults
       proxyProfiles: DEFAULT_PROXY_PROFILES,
       activeProxyProfileId: null, // No proxy by default
@@ -179,6 +180,14 @@ class LocalStorageManager {
 
   setSettings(settings: AppSettings): void {
     this.set(STORAGE_KEYS.SETTINGS, settings);
+  }
+
+  getScriptRuntimeVars(): Record<string, string> {
+    return this.get<Record<string, string>>(STORAGE_KEYS.SCRIPT_RUNTIME_VARS, {});
+  }
+
+  setScriptRuntimeVars(vars: Record<string, string>): void {
+    this.set(STORAGE_KEYS.SCRIPT_RUNTIME_VARS, vars);
   }
 
   updateSettings(updates: Partial<AppSettings>): void {

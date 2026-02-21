@@ -96,7 +96,7 @@ export async function makeHttpRequest(options: HttpRequestOptions): Promise<Http
       // Mark end of prepare phase
       const prepareEnd = performance.now();
 
-      console.log('MAKE_REQ:', method+":"+parsedUrl.toString());
+      console.log('REQUEST:', method+":"+parsedUrl.toString());
 
       // Build headers, conditionally including User-Agent
       const requestHeaders: Record<string, string> = {
@@ -260,8 +260,9 @@ export async function makeHttpRequest(options: HttpRequestOptions): Promise<Http
             validUntil: networkData.validUntil,
           };
 
-          console.log('Response',res.statusCode, res.statusMessage);
+          console.log('RESPONSE:', method+":"+parsedUrl.toString(),res.statusCode, res.statusMessage);
 
+          
           resolve({
             success: true,
             status: res.statusCode,

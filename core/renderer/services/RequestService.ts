@@ -9,7 +9,7 @@ import {
   evaluateFunction,
   EvaluationContext,
 } from '@/services/DynamicFunctions';
-import { cookieService } from '@/services';
+import { cookieService, storageManager } from '@/services';
 
 interface HttpRequestOptions {
   method: string;
@@ -395,7 +395,8 @@ export class RequestService {
     // Create runtime stores for script-set variables
     // Build initial env vars from environments
     let envVars: Record<string, string> = {};
-    let runtimeVars: Record<string, string> = {};
+    // Session runtime vars: shared across requests/tabs, persisted to localStorage
+    let runtimeVars: Record<string, string> = { ...storageManager.getScriptRuntimeVars() };
     
     // Populate env vars from collection environment
     if (collectionEnvironment) {
@@ -496,6 +497,7 @@ export class RequestService {
       }
 
       if (!result.success) {
+        storageManager.setScriptRuntimeVars(runtimeVars);
         return {
           id: executionId,
           requestId: request.id,
@@ -553,7 +555,9 @@ export class RequestService {
           runtimeVars,
         });
         scriptsOutput.post = postResult.output;
-        
+        envVars = postResult.envVars;
+        runtimeVars = postResult.runtimeVars;
+
         // Apply modified response from post-request script
         if (postResult.modifiedResponse) {
           const modified = postResult.modifiedResponse;
@@ -569,6 +573,7 @@ export class RequestService {
         }
       }
 
+      storageManager.setScriptRuntimeVars(runtimeVars);
       return {
         id: executionId,
         requestId: request.id,
@@ -582,7 +587,7 @@ export class RequestService {
     } catch (error) {
       const duration = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
+      storageManager.setScriptRuntimeVars(runtimeVars);
       return {
         id: executionId,
         requestId: request.id,

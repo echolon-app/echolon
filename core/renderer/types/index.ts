@@ -416,6 +416,8 @@ export interface AppSettings {
   proxyUrl?: string;
   showLineNumbers?: boolean;
   highlightActiveLine?: boolean;
+  /** Max search results to show in editor find (default 9999). */
+  editorSearchMaxResults?: number;
   maxHistoryEntries?: number;
   autoCheckUpdates?: boolean;
   defaultSyncFrequencyMins?: number; // Default sync frequency for new URL imports

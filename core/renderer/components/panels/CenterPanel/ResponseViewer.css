@@ -212,6 +212,16 @@
   color: var(--text-tertiary);
 }
 
+button.response-viewer__size {
+  padding: 0;
+  margin: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
 .response-viewer__time--hoverable,
 .response-viewer__size--hoverable {
   cursor: help;
@@ -223,6 +233,10 @@
 .response-viewer__size--hoverable:hover {
   color: var(--text-primary);
   border-color: var(--text-primary);
+}
+
+.response-viewer__size--hoverable {
+  cursor: pointer;
 }
 
 .response-viewer__network {

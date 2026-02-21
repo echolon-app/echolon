@@ -357,6 +357,7 @@ export const SettingsModal: React.FC = () => {
   const [showToken, setShowToken] = useState(false);
   const [savedTokenExists, setSavedTokenExists] = useState(false);
   const [patError, setPatError] = useState<string | null>(null);
+  const [launchAtLogin, setLaunchAtLogin] = useState(false);
   
   // Update activeTab when modal opens with a specific tab
   useEffect(() => {
@@ -371,6 +372,13 @@ export const SettingsModal: React.FC = () => {
       setCustomUpdateUrl(settings.customUpdateServerUrl || '');
     }
   }, [settingsModalOpen, activeTab, settings.customUpdateServerUrl]);
+
+  // Load launch at login state when General tab is active (Electron only)
+  useEffect(() => {
+    if (settingsModalOpen && activeTab === 'general' && !isWebMode && window.electronAPI?.getLaunchAtLogin) {
+      window.electronAPI.getLaunchAtLogin().then(({ openAtLogin }) => setLaunchAtLogin(openAtLogin));
+    }
+  }, [settingsModalOpen, activeTab, isWebMode]);
 
   // Check if GitHub PAT is saved when GitHub tab is opened
   useEffect(() => {
@@ -749,8 +757,42 @@ export const SettingsModal: React.FC = () => {
                   </p>
                 </div>
               </div>
-             
 
+              {!isWebMode && typeof window.electronAPI?.getLaunchAtLogin === 'function' && (
+                <div className="settings-modal__section">
+                  <h3>Startup</h3>
+                  <div className="settings-modal__field settings-modal__field--checkbox">
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={launchAtLogin}
+                        onChange={async (e) => {
+                          const checked = e.target.checked;
+                          setLaunchAtLogin(checked);
+                          await window.electronAPI?.setLaunchAtLogin?.(checked);
+                        }}
+                      />
+                      <span>Launch at Login</span>
+                    </label>
+                    <p className="settings-modal__field-description">
+                      Start Echolon when you log in to your computer
+                    </p>
+                  </div>
+                  <div className="settings-modal__field">
+                    <button
+                      type="button"
+                      className="settings-modal__link-button"
+                      onClick={() => window.electronAPI?.openSystemLoginItems?.()}
+                    >
+                      Open Login Items in System Settings
+                      <ExternalLinkIcon />
+                    </button>
+                    <p className="settings-modal__field-description">
+                      Manage which apps start at login in your system settings
+                    </p>
+                  </div>
+                </div>
+              )}
              
             </div>
           )}
@@ -1315,6 +1357,20 @@ export const SettingsModal: React.FC = () => {
                   <p className="settings-modal__field-description">
                     Highlight the line where the cursor is positioned
                   </p>
+                </div>
+
+                <div className="settings-modal__field">
+                  <label>Search max results</label>
+                  <p className="settings-modal__field-description">
+                    Maximum number of find results to show in the editor (e.g. “1 of 500”). Higher values allow searching in larger documents.
+                  </p>
+                  <NumericInput
+                    value={settings.editorSearchMaxResults ?? 9999}
+                    onChange={(value: number) => updateSettings({ editorSearchMaxResults: value })}
+                    min={100}
+                    max={100000}
+                    defaultValue={9999}
+                  />
                 </div>
               </div>
             </div>

@@ -22,5 +22,6 @@ export * from './ProgressBar';
 export * from './TagInput';
 export * from './Badge';
 export * from './StorageBanner';
+export * from './CustomSelect';
 export * from './icons';
 
