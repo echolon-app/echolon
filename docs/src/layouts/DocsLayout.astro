@@ -93,8 +93,16 @@ const canonicalURL = new URL(Astro.url.pathname, siteUrl);
       .docs-content {
         flex: 1;
         max-width: var(--content-width);
-        padding: var(--spacing-8) var(--spacing-6);
+        padding: var(--spacing-6) var(--spacing-4);
         margin: 0 auto;
+        overflow-x: hidden;
+        word-wrap: break-word;
+      }
+      
+      @media (min-width: 768px) {
+        .docs-content {
+          padding: var(--spacing-8) var(--spacing-6);
+        }
       }
       
       @media (min-width: 1024px) {

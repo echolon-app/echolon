@@ -209,11 +209,11 @@ if (res.status >= 400) {
           </tr>
           <tr>
             <td><code>echo.getVar(name)</code></td>
-            <td>Get a runtime variable (request-scoped)</td>
+            <td>Get a runtime variable (session-scoped, shared across requests and tabs)</td>
           </tr>
           <tr>
             <td><code>echo.setVar(name, value)</code></td>
-            <td>Set a runtime variable (request-scoped)</td>
+            <td>Set a runtime variable (session-scoped, persisted across requests and tabs)</td>
           </tr>
           <tr>
             <td><code>echo.sleep(ms)</code></td>

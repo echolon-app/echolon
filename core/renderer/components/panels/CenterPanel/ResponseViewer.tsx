@@ -8,11 +8,12 @@ import {
   GlobeIcon, CopyIcon, CheckIcon, DownloadIcon, FilterIcon, SearchIcon,
   HelpIcon, CloseIcon, HorizontalLayoutIcon, VerticalLayoutIcon, ErrorIcon, EyeIcon 
 } from '@/components/ui/icons';
-import { RequestExecution, ScriptOutput } from '@/types';
+import { RequestExecution, ScriptOutput, SizeBreakdown } from '@/types';
 import { ContextMenu, useContextMenu, Tooltip, Dropdown, Button } from '@/components/ui';
 import { cookieService } from '@/services';
 import { ResponseTimeTooltip } from './ResponseTimeTooltip';
 import { ResponseSizeTooltip } from './ResponseSizeTooltip';
+import { ResponseSizeModal } from './ResponseSizeModal';
 import { NetworkInfoTooltip } from './NetworkInfoTooltip';
 import { formatLogTime } from '@/utils';
 import './ResponseViewer.css';
@@ -391,9 +392,15 @@ const ScriptOutputSection: React.FC<{ title: string; output: ScriptOutput }> = (
 export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoading, height = 300, specResponseInfo, onClose, onExpandToggle, isExpanded }) => {
   const { resolvedTheme } = useTheme();
   const { openSettingsModal } = useApp();
+  const [sizeModalData, setSizeModalData] = useState<{
+    sizeBreakdown: SizeBreakdown;
+    headers: Array<{ key: string; value: string }>;
+    body: string;
+  } | null>(null);
   const [activeTab, setActiveTab] = useState<ResponseTab>('body');
   const editorRef = useRef<AceEditor>(null);
   const bodyContainerRef = useRef<HTMLDivElement>(null);
+  const contentContainerRef = useRef<HTMLDivElement>(null);
   const { contextMenu, showContextMenu, hideContextMenu } = useContextMenu();
   const [selectedText, setSelectedText] = useState('');
   const [editorHeight, setEditorHeight] = useState(200);
@@ -475,11 +482,44 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
     updateHeight();
   }, [height]);
 
-  // Resize editor when tab changes
+  // Resize editor when height or tab changes: single 500ms timeout (ResizeObserver handles drag).
   useEffect(() => {
-    if (editorRef.current?.editor) {
-      editorRef.current.editor.resize();
-    }
+    const timeoutId = setTimeout(() => {
+      const editor = editorRef.current?.editor;
+      if (editor) editor.resize();
+    }, 500);
+    return () => clearTimeout(timeoutId);
+  }, [height, activeTab]);
+
+  // ResizeObserver: resize editor when container size changes (e.g. drag). Throttled, no rAF.
+  useEffect(() => {
+    const container = bodyContainerRef.current;
+    if (!container) return;
+
+    let resizeTimeout: NodeJS.Timeout | null = null;
+    const resizeEditor = () => {
+      if (resizeTimeout) return;
+      resizeTimeout = setTimeout(() => {
+        resizeTimeout = null;
+        const editor = editorRef.current?.editor;
+        if (editor) editor.resize();
+      }, 16);
+    };
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.height > 0) resizeEditor();
+      }
+    });
+    resizeObserver.observe(container);
+
+    const initialResizeTimeout = setTimeout(resizeEditor, 500);
+
+    return () => {
+      resizeObserver.disconnect();
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+      clearTimeout(initialResizeTimeout);
+    };
   }, [activeTab, editorHeight]);
 
   const response = execution?.response;
@@ -1194,21 +1234,28 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
             <span className="response-viewer__time">{formatDuration(execution.duration)}</span>
           )}
           {response.sizeBreakdown ? (
-            <Tooltip 
-              content={
-                <ResponseSizeTooltip 
-                  responseSize={response.sizeBreakdown} 
-                  requestSize={response.requestSize}
-                />
-              }
-              position="bottom"
-              delay={100}
-              variant="rich"
-            >
-              <span className="response-viewer__size response-viewer__size--hoverable">
-                {formatBytes(response.size)}
-              </span>
-            </Tooltip>
+            <>
+              <Tooltip
+                content={
+                  <ResponseSizeTooltip
+                    responseSize={response.sizeBreakdown}
+                    requestSize={response.requestSize}
+                    headers={response.headers}
+                  />
+                }
+                position="bottom"
+                delay={100}
+                variant="rich"
+              >
+                <button
+                  type="button"
+                  className="response-viewer__size response-viewer__size--hoverable"
+                  onClick={() => response.sizeBreakdown && setSizeModalData({ sizeBreakdown: response.sizeBreakdown, headers: response.headers, body: response.body })}
+                >
+                  {formatBytes(response.sizeBreakdown.total)}
+                </button>
+              </Tooltip>
+            </>
           ) : (
             <span className="response-viewer__size">{formatBytes(response.size)}</span>
           )}
@@ -1258,7 +1305,7 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
         </div>
       </div>
 
-      <div className="response-viewer__content">
+      <div className="response-viewer__content" ref={contentContainerRef}>
         {activeTab === 'body' && (
           <div 
             ref={bodyContainerRef}
@@ -1693,6 +1740,16 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
           />
         )}
       </div>
+
+      {sizeModalData && (
+        <ResponseSizeModal
+          isOpen={true}
+          onClose={() => setSizeModalData(null)}
+          sizeBreakdown={sizeModalData.sizeBreakdown}
+          headers={sizeModalData.headers}
+          body={sizeModalData.body}
+        />
+      )}
 
       <ContextMenu
         items={contextMenuItems}

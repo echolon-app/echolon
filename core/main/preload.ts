@@ -428,6 +428,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     modifiedResponse?: { status: number; statusText: string; headers: Record<string, string>; body: string; responseTime: number };
   }> => ipcRenderer.invoke(APP_CHANNELS.EXECUTE_SCRIPT, options),
 
+  // Compute compression sizes (gzip, brotli, zstd). Optional levels. If methods provided, only those are computed.
+  computeCompressionSizes: (payload: { body: string; levels?: { gzip?: number; brotli?: number; zstd?: number }; methods?: ('gzip' | 'brotli' | 'zstd')[] }): Promise<{ gzip?: number; brotli?: number; zstd?: number }> =>
+    ipcRenderer.invoke(APP_CHANNELS.COMPUTE_COMPRESSION_SIZES, payload),
+
   // Compute Digest Auth - computes MD5/SHA-256 hash for digest authentication
   computeDigestAuth: (options: {
     wwwAuthHeader: string;
@@ -459,6 +463,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Shell functions
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke(APP_CHANNELS.OPEN_EXTERNAL, url),
+  getLaunchAtLogin: (): Promise<{ openAtLogin: boolean }> =>
+    ipcRenderer.invoke(APP_CHANNELS.GET_LOGIN_ITEM_SETTINGS),
+  setLaunchAtLogin: (openAtLogin: boolean): Promise<void> =>
+    ipcRenderer.invoke(APP_CHANNELS.SET_LOGIN_ITEM_SETTINGS, openAtLogin),
+  openSystemLoginItems: (): Promise<void> =>
+    ipcRenderer.invoke(APP_CHANNELS.OPEN_SYSTEM_LOGIN_ITEMS),
 
   // App control
   restartApp: (): Promise<void> =>
@@ -963,6 +973,7 @@ declare global {
           opaque?: string;
         };
       }>;
+      computeCompressionSizes: (payload: { body: string; levels?: { gzip?: number; brotli?: number; zstd?: number }; methods?: ('gzip' | 'brotli' | 'zstd')[] }) => Promise<{ gzip?: number; brotli?: number; zstd?: number }>;
       checkForUpdates: () => Promise<{ updateAvailable: boolean; version?: string; releaseNotes?: string | null; releaseDate?: string }>;
       downloadUpdate: () => Promise<{ success: boolean }>;
       installUpdate: () => void;
@@ -970,6 +981,9 @@ declare global {
       setUpdateServer: (url: string | null) => Promise<{ success: boolean; feedUrl?: string; error?: string }>;
       // Shell
       openExternal: (url: string) => Promise<void>;
+      getLaunchAtLogin: () => Promise<{ openAtLogin: boolean }>;
+      setLaunchAtLogin: (openAtLogin: boolean) => Promise<void>;
+      openSystemLoginItems: () => Promise<void>;
       // App control
       restartApp: () => Promise<void>;
       wipeAllData: () => Promise<{ success: boolean; error?: string }>;

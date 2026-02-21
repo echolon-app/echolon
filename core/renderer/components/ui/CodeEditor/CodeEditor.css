@@ -9,3 +9,9 @@
   color: #0d9488 !important;
 }
 
+.ace_dark .ace_fold {
+  color: var(--color-primary) !important;
+  background-image: none !important;
+  background-color: transparent !important;
+  margin-top:-12px;
+}

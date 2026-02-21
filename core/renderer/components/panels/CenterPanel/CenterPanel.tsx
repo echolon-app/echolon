@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import ace from 'ace-builds';
 import 'ace-builds/src-noconflict/ext-searchbox';
 import { Button, Input, Dropdown, TabBar, EditableTable, Tooltip, CodeEditor, TagInput } from '@/components/ui';
-import { SendIcon, CodeIcon, HistoryIcon, CopyIcon, CheckIcon, SocketIcon, ShieldIcon } from '@/components/ui/icons';
+import { SendIcon, CodeIcon, HistoryIcon, CopyIcon, CheckIcon, SocketIcon, ShieldIcon, GitBranchIcon, GitCommitIcon } from '@/components/ui/icons';
 import { useRequest, useEnvironments, useTheme, useCollections, useApp, useWebModeOptional } from '@/contexts';
 import { storageManager } from '@/services';
 import { HTTP_METHODS, METHOD_COLORS, DEFAULT_HEADERS } from '../../../../shared/constants';
@@ -309,7 +309,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
   } = useRequest();
   const { activeEnvironment, environments } = useEnvironments();
   const { collections, updateRequest: updateCollectionRequest } = useCollections();
-  const { customHttpMethods, addCustomHttpMethod, settings, updateSettings, openSettingsModal, isWebMode } = useApp();
+  const { customHttpMethods, addCustomHttpMethod, settings, updateSettings, openSettingsModal, isWebMode, sidebarView } = useApp();
   const webMode = useWebModeOptional();
   const viewMode = webMode?.viewMode ?? 'tabs';
   const readonly = webMode?.readonly ?? false;
@@ -1161,6 +1161,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                             });
                           }}
                           supportVariables
+                          collectionEnvironment={selectedCollectionEnv}
                         />
                       </div>
                       <div className="center-panel__auth-field">
@@ -1174,6 +1175,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                             });
                           }}
                           supportVariables
+                          collectionEnvironment={selectedCollectionEnv}
                         />
                       </div>
                     </div>
@@ -1191,6 +1193,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                             });
                           }}
                           supportVariables
+                          collectionEnvironment={selectedCollectionEnv}
                         />
                       </div>
                     </div>
@@ -1213,6 +1216,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                             });
                           }}
                           supportVariables
+                          collectionEnvironment={selectedCollectionEnv}
                         />
                       </div>
                       <div className="center-panel__auth-field">
@@ -1230,6 +1234,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                             });
                           }}
                           supportVariables
+                          collectionEnvironment={selectedCollectionEnv}
                         />
                       </div>
                       <div className="center-panel__auth-field">
@@ -1297,6 +1302,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                           }}
                           placeholder="Enter access token or use token URL to fetch"
                           supportVariables
+                          collectionEnvironment={selectedCollectionEnv}
                         />
                       </div>
                       <div className="center-panel__auth-field">
@@ -1315,6 +1321,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                             });
                           }}
                           supportVariables
+                          collectionEnvironment={selectedCollectionEnv}
                         />
                       </div>
                       <div className="center-panel__auth-field">
@@ -1333,6 +1340,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                             });
                           }}
                           supportVariables
+                          collectionEnvironment={selectedCollectionEnv}
                         />
                       </div>
                       <div className="center-panel__auth-field">
@@ -1353,6 +1361,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                             });
                           }}
                           supportVariables
+                          collectionEnvironment={selectedCollectionEnv}
                         />
                       </div>
                       <div className="center-panel__auth-field">
@@ -1373,6 +1382,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                           }}
                           placeholder="https://oauth.example.com/token"
                           supportVariables
+                          collectionEnvironment={selectedCollectionEnv}
                         />
                       </div>
                       <div className="center-panel__auth-field">
@@ -1393,6 +1403,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                           }}
                           placeholder="read write profile"
                           supportVariables
+                          collectionEnvironment={selectedCollectionEnv}
                         />
                       </div>
                     </div>
@@ -1414,6 +1425,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                           }}
                           placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
                           supportVariables
+                          collectionEnvironment={selectedCollectionEnv}
                         />
                       </div>
                       <div className="center-panel__auth-field">
@@ -1431,6 +1443,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                           }}
                           placeholder="Bearer"
                           supportVariables
+                          collectionEnvironment={selectedCollectionEnv}
                         />
                       </div>
                       <div className="center-panel__auth-field">
@@ -1448,6 +1461,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                           }}
                           placeholder="Authorization"
                           supportVariables
+                          collectionEnvironment={selectedCollectionEnv}
                         />
                       </div>
                     </div>
@@ -1469,6 +1483,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                             });
                           }}
                           supportVariables
+                          collectionEnvironment={selectedCollectionEnv}
                         />
                       </div>
                       <div className="center-panel__auth-field">
@@ -1486,6 +1501,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                             });
                           }}
                           supportVariables
+                          collectionEnvironment={selectedCollectionEnv}
                         />
                       </div>
                       <div className="center-panel__auth-field">
@@ -1503,6 +1519,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                             });
                           }}
                           supportVariables
+                          collectionEnvironment={selectedCollectionEnv}
                         />
                       </div>
                       <div className="center-panel__auth-field">
@@ -1548,6 +1565,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                             });
                           }}
                           supportVariables
+                          collectionEnvironment={selectedCollectionEnv}
                         />
                       </div>
                       <div className="center-panel__auth-field">
@@ -1567,6 +1585,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                             });
                           }}
                           supportVariables
+                          collectionEnvironment={selectedCollectionEnv}
                         />
                       </div>
                       <div className="center-panel__auth-field">
@@ -1586,6 +1605,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                           }}
                           placeholder="us-east-1"
                           supportVariables
+                          collectionEnvironment={selectedCollectionEnv}
                         />
                       </div>
                       <div className="center-panel__auth-field">
@@ -1605,6 +1625,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                           }}
                           placeholder="s3, execute-api, etc."
                           supportVariables
+                          collectionEnvironment={selectedCollectionEnv}
                         />
                       </div>
                       <div className="center-panel__auth-field">
@@ -1624,6 +1645,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                             });
                           }}
                           supportVariables
+                          collectionEnvironment={selectedCollectionEnv}
                         />
                       </div>
                     </div>
@@ -1942,6 +1964,54 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                 onExpandToggle={() => setIsResponseExpanded(!isResponseExpanded)}
                 isExpanded={isResponseExpanded}
               />}
+            </div>
+          </div>
+        </div>
+      ) : sidebarView === 'git' && tabs.length === 0 ? (
+        <div className="center-panel__welcome">
+          <div className="center-panel__welcome-content">
+            {/* Logo */}
+            <div className="center-panel__welcome-logo">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="64" height="64">
+                <defs>
+                  <linearGradient id="welcome-gradient" x1="4" y1="6" x2="20" y2="18" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#77F08B"/>
+                    <stop offset="1" stopColor="#4FE06C"/>
+                  </linearGradient>
+                </defs>
+                <path d="M 4 7 L 10 12 L 4 17" stroke="url(#welcome-gradient)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                <line x1="13" y1="17" x2="20" y2="17" stroke="url(#welcome-gradient)" strokeWidth="2.5" strokeLinecap="round"/>
+              </svg>
+              <h1 className="center-panel__welcome-title">Echolon</h1>
+              <p className="center-panel__welcome-subtitle">Modern API Development Platform</p>
+            </div>
+            
+            <div className="center-panel__git-commands">
+              <h4>Useful Git Commands</h4>
+              <div className="center-panel__git-command-item">
+                <code>git status</code>
+                <span>Check repository status</span>
+              </div>
+              <div className="center-panel__git-command-item">
+                <code>git log</code>
+                <span>View commit history</span>
+              </div>
+              <div className="center-panel__git-command-item">
+                <code>git branch</code>
+                <span>List all branches</span>
+              </div>
+              <div className="center-panel__git-command-item">
+                <code>git diff</code>
+                <span>View changes between commits</span>
+              </div>
+              <div className="center-panel__git-command-item">
+                <code>git pull</code>
+                <span>Fetch and merge remote changes</span>
+              </div>
+              <div className="center-panel__git-command-item">
+                <code>git push</code>
+                <span>Push commits to remote</span>
+              </div>
             </div>
           </div>
         </div>

@@ -531,8 +531,12 @@ export const GitPanel: React.FC<GitPanelProps> = ({ onConnectClick, onOpenDiff }
               </div>
             )}
 
-            {/* No changes */}
-            {!hasChanges() && (
+            {/* No changes - show when there are no staged, unstaged, or untracked files */}
+            {!isLoading && 
+             (status === null || 
+              (status.staged.length === 0 && 
+               status.unstaged.length === 0 && 
+               status.untracked.length === 0)) && (
               <div className="git-panel__changes-empty">
                 <CheckIcon />
                 <p>No uncommitted changes</p>

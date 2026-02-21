@@ -217,6 +217,24 @@
 .input__variable-tooltip-value {
   font-family: var(--font-mono);
   font-size: var(--font-xs);
+  user-select: text;
+}
+
+.input__variable-tooltip-input {
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  background-color: var(--bg-primary);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  color: var(--text-primary);
+  width: 100%;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.input__variable-tooltip-input:focus {
+  box-shadow: 0 0 0 2px var(--color-primary-alpha);
   color: var(--text-primary);
 }
 

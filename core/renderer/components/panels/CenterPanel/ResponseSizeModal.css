@@ -1,0 +1,270 @@
+/* Modal width override: 100px wider than default md (520px) */
+.response-size-modal__modal {
+  width: 620px;
+}
+
+.response-size-modal__intro {
+  margin: 0 0 var(--spacing-md);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.response-size-modal__chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.response-size-modal__row {
+  display: grid;
+  grid-template-columns: minmax(160px, auto) 1fr 88px;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) 0;
+  border-radius: var(--radius-md);
+  transition: background-color var(--transition-fast);
+}
+
+.response-size-modal__row--used {
+  background-color: var(--bg-tertiary);
+  padding: var(--spacing-sm) var(--spacing-sm);
+  margin: 0 calc(-1 * var(--spacing-sm));
+  border: 1px solid var(--border-secondary);
+}
+
+.response-size-modal__legend {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.response-size-modal__legend-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.response-size-modal__method {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.response-size-modal__level-input {
+  width: 54px;
+  padding: 2px 4px;
+  font-size: var(--font-xs);
+  font-variant-numeric: tabular-nums;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+}
+
+.response-size-modal__level-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.response-size-modal__level-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.response-size-modal__row--used .response-size-modal__level-hint {
+  color: var(--text-tertiary);
+}
+
+.response-size-modal__savings {
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+}
+
+.response-size-modal__time {
+  font-variant-numeric: tabular-nums;
+}
+
+.response-size-modal__row--used .response-size-modal__savings {
+  color: var(--text-secondary);
+}
+
+.response-size-modal__bar-wrap {
+  position: relative;
+  width: 100%;
+  min-width: 140px;
+  height: 24px;
+  background-color: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.response-size-modal__bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  min-width: 6px;
+  height: 24px;
+  background: var(--color-primary);
+  border-radius: var(--radius-sm);
+  transition: width 0.2s ease;
+  pointer-events: none;
+}
+
+.response-size-modal__bar--full {
+  background: var(--color-primary);
+  min-width: 0;
+}
+
+.response-size-modal__row--used .response-size-modal__bar {
+  background: var(--color-primary);
+  opacity: 1;
+}
+
+.response-size-modal__bar--loader {
+  width: 35% !important;
+  min-width: 100px;
+  max-width: 200px;
+  height: 24px;
+  background: linear-gradient(
+    90deg,
+    var(--bg-tertiary) 0%,
+    var(--border-secondary) 50%,
+    var(--bg-tertiary) 100%
+  );
+  background-size: 200% 100%;
+  animation: response-size-modal__shimmer 1.2s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+@keyframes response-size-modal__shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.response-size-modal__value {
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.response-size-modal__loading {
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+}
+
+.response-size-modal__note {
+  margin: var(--spacing-lg) 0 0;
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-primary);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.response-size-modal__note strong {
+  color: var(--text-primary);
+}
+
+.response-size-modal__note--muted {
+  margin-top: var(--spacing-sm);
+  padding-top: 0;
+  border-top: none;
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+}
+
+/* Savings Calculator */
+.response-size-modal__calculator {
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-primary);
+}
+
+.response-size-modal__calculator-title {
+  margin: 0 0 var(--spacing-xs);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.response-size-modal__calculator-intro {
+  margin: 0 0 var(--spacing-md);
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+}
+
+.response-size-modal__calculator-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.response-size-modal__calculator-label {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.response-size-modal__calculator-label-text {
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+}
+
+.response-size-modal__calculator-input {
+  width: 102px;
+  padding: 4px 6px;
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+}
+
+.response-size-modal__calculator-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.response-size-modal__calculator-duration {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-md);
+  width: 100%;
+}
+
+.response-size-modal__calculator-chart {
+  margin-top: 0;
+}
+
+/* Calculator chart: 2 columns so bar area uses full width; value overlays inside bar */
+.response-size-modal__calculator-chart .response-size-modal__row {
+  grid-template-columns: minmax(160px, auto) 1fr;
+}
+
+.response-size-modal__bar-wrap--value-inside {
+  overflow: visible;
+}
+
+.response-size-modal__value--inside {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 6px;
+  min-width: 0;
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  text-align: right;
+  pointer-events: none;
+  text-shadow: 0 0 4px var(--bg-primary), 0 0 6px var(--bg-primary);
+}

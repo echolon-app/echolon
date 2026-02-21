@@ -1273,3 +1273,42 @@
   margin: 0;
   font-size: var(--font-md);
 }
+
+/* Git Commands Empty State */
+.center-panel__git-commands {
+  margin-top: 24px;
+  text-align: left;
+  width: 100%;
+  max-width: 500px;
+}
+
+.center-panel__git-commands h4 {
+  margin: 0 0 16px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.center-panel__git-command-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 0;
+  font-size: 13px;
+}
+
+.center-panel__git-command-item code {
+  font-family: var(--font-mono);
+  background-color: var(--bg-secondary);
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: var(--color-primary);
+  font-size: 12px;
+  min-width: 120px;
+  flex-shrink: 0;
+}
+
+.center-panel__git-command-item span {
+  color: var(--text-secondary);
+  font-size: 13px;
+}

@@ -329,9 +329,35 @@ export const CodeEditor = forwardRef<AceEditor, CodeEditorProps>(({
   
   const editorRef = useRef<any>(null);
 
+  // Update fold placeholders for JSON arrays and objects
+  const updateFoldPlaceholders = (session: any) => {
+    //console.log("changeFold");
+    session.getAllFolds().forEach((fold: any) => {
+      const text = session.getTextRange(fold.range);
+      try {
+        const parsedAsArray = JSON.parse('['+text+']');
+        //console.log("parsed", parsedAsArray);
+        if (Array.isArray(parsedAsArray)) {
+          fold.placeholder = `${parsedAsArray.length} items`;
+        } 
+      } catch (e) { // ignore non-JSON fold regions
+        //console.log('error', e);
+      }
+      try {
+        const parsedAsObject = JSON.parse('{'+text+'}');
+        if (typeof parsedAsObject === 'object' && parsedAsObject !== null) {
+          fold.placeholder = `${Object.keys(parsedAsObject).length} keys`;
+        }
+      }
+      catch (e) { // ignore non-JSON fold regions
+        //console.log('error', e);
+      }
+    });
+  }
+
   const handleLoad = useCallback((editor: any) => {
     editorRef.current = editor;
-    
+    const session = editor.session;
     // Trigger autocomplete based on context
     if (supportVariables || scriptContext) {
       editor.commands.on('afterExec', (e: any) => {
@@ -356,6 +382,10 @@ export const CodeEditor = forwardRef<AceEditor, CodeEditorProps>(({
         }
       });
     }
+
+    session.on("changeFold", function() {
+      updateFoldPlaceholders(session);
+    });
     
     onLoad?.(editor);
   }, [onLoad, supportVariables, scriptContext]);

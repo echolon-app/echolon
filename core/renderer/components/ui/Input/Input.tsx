@@ -1,6 +1,8 @@
 import React, { forwardRef, useState, useCallback, useRef, useEffect, useMemo, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import EnvironmentsContext from '@/contexts/EnvironmentsContext';
+import WorkspaceContext from '@/contexts/WorkspaceContext';
+import { useWorkspace } from '@/contexts';
 import { CollectionEnvironment } from '@/types';
 import {
   getFunctionSuggestions,
@@ -77,7 +79,18 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
   const [suggestionPosition, setSuggestionPosition] = useState({ top: 0, left: 0, width: 0 });
-  const [variableTooltip, setVariableTooltip] = useState<{ text: string; source: string; x: number; y: number } | null>(null);
+  const [variableTooltip, setVariableTooltip] = useState<{ 
+    text: string; 
+    source: string; 
+    x: number; 
+    y: number;
+    varName?: string;
+    sourceType?: 'global' | 'collection' | 'workspace';
+    sourceId?: string;
+  } | null>(null);
+  const [isEditingTooltip, setIsEditingTooltip] = useState(false);
+  const [editingTooltipValue, setEditingTooltipValue] = useState('');
+  const tooltipInputRef = useRef<HTMLInputElement>(null);
   const [isTypingVariable, setIsTypingVariable] = useState(false);
   const [variableFilter, setVariableFilter] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -97,6 +110,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
   const activeEnvironment = supportVariables ? envContext?.activeEnvironment : null;
   const getVariableWithSource = supportVariables ? envContext?.getVariableWithSource : null;
   const getMergedVariables = supportVariables ? envContext?.getMergedVariables : null;
+  const updateVariable = supportVariables ? envContext?.updateVariable : null;
+  const workspaceContext = useContext(WorkspaceContext);
+  const updateWorkspaceVariable = supportVariables ? workspaceContext?.updateWorkspaceVariable : null;
+  const { activeWorkspaceId } = useWorkspace();
   
   // Get merged variable names (collection vars override global)
   const variableNames = useMemo(() => {
@@ -949,13 +966,19 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
     const varName = target.getAttribute('data-variable');
     if (varName) {
       const varInfo = getVariableInfo(varName);
+      const sourceDetails = getVariableSourceDetails(varName);
       const rect = target.getBoundingClientRect();
       setVariableTooltip({
         text: varInfo !== null ? varInfo.value : 'Variable not found',
         source: varInfo !== null ? varInfo.source : '',
         x: rect.left + rect.width / 2,
         y: rect.top - 8,
+        varName: varName,
+        sourceType: sourceDetails?.source || undefined,
+        sourceId: sourceDetails?.sourceId || undefined,
       });
+      setIsEditingTooltip(false);
+      setEditingTooltipValue('');
       return;
     }
     
@@ -970,12 +993,67 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
         x: rect.left + rect.width / 2,
         y: rect.top - 8,
       });
+      setIsEditingTooltip(false);
+      setEditingTooltipValue('');
     }
-  }, [getVariableInfo, getPathParamValue]);
+  }, [getVariableInfo, getPathParamValue, getVariableSourceDetails]);
 
   const handleVariableMouseLeave = useCallback(() => {
+    if (!isEditingTooltip) {
+      setVariableTooltip(null);
+      setIsEditingTooltip(false);
+      setEditingTooltipValue('');
+    }
+  }, [isEditingTooltip]);
+
+  // Handle saving edited tooltip value
+  const handleSaveTooltipValue = useCallback(() => {
+    if (!variableTooltip?.varName || !variableTooltip.sourceType || !variableTooltip.sourceId) return;
+    
+    const newValue = editingTooltipValue.trim();
+    const varName = variableTooltip.varName;
+    
+    // Find the variable ID
+    if (variableTooltip.sourceType === 'global' && activeEnvironment && updateVariable) {
+      const variable = activeEnvironment.variables.find(v => v.key === varName);
+      if (variable) {
+        updateVariable(variableTooltip.sourceId, variable.id, { value: newValue });
+      }
+    } else if (variableTooltip.sourceType === 'workspace' && activeWorkspaceId && updateWorkspaceVariable && workspaceContext) {
+      // For workspace variables, we need to find the environment and variable
+      const workspace = workspaceContext.workspaces.find(w => w.id === activeWorkspaceId);
+      if (workspace?.environments) {
+        for (const env of workspace.environments) {
+          const variable = env.variables.find(v => v.key === varName);
+          if (variable) {
+            updateWorkspaceVariable(activeWorkspaceId, env.id, variable.id, { value: newValue });
+            break;
+          }
+        }
+      }
+    } else if (variableTooltip.sourceType === 'collection' && collectionEnvironment) {
+      // Collection variables are managed through CollectionsContext
+      // We'll need to navigate to the collection environment editor for this
+      // For now, just show a message that collection vars need to be edited in the editor
+      if (onNavigateToVariable) {
+        onNavigateToVariable(varName, 'collection', collectionEnvironment.id);
+      }
+    }
+    
+    setIsEditingTooltip(false);
+    setEditingTooltipValue('');
     setVariableTooltip(null);
-  }, []);
+  }, [variableTooltip, editingTooltipValue, activeEnvironment, updateVariable, activeWorkspaceId, updateWorkspaceVariable, workspaceContext, collectionEnvironment, onNavigateToVariable]);
+
+  // Handle clicking on tooltip value to edit
+  const handleTooltipValueClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (variableTooltip && variableTooltip.varName && variableTooltip.sourceType !== 'Path Variable') {
+      setIsEditingTooltip(true);
+      setEditingTooltipValue(variableTooltip.text);
+      setTimeout(() => tooltipInputRef.current?.focus(), 0);
+    }
+  }, [variableTooltip]);
 
   // Handle click on variable to open function modal (single click for functions)
   const handleVariableClick = useCallback((e: React.MouseEvent) => {
@@ -1239,10 +1317,50 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
               top: variableTooltip.y,
               transform: 'translate(-50%, -100%)',
             }}
+            onMouseEnter={() => {}} // Keep tooltip open when hovering over it
+            onMouseLeave={handleVariableMouseLeave}
           >
-            <span className="input__variable-tooltip-value">{variableTooltip.text}</span>
-            {variableTooltip.source && (
-              <span className="input__variable-tooltip-source">{variableTooltip.source}</span>
+            {isEditingTooltip && variableTooltip.varName ? (
+              <>
+                <input
+                  ref={tooltipInputRef}
+                  type="text"
+                  className="input__variable-tooltip-input"
+                  value={editingTooltipValue}
+                  onChange={(e) => setEditingTooltipValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleSaveTooltipValue();
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      setIsEditingTooltip(false);
+                      setEditingTooltipValue('');
+                      setVariableTooltip(null);
+                    }
+                  }}
+                  onBlur={handleSaveTooltipValue}
+                  onClick={(e) => e.stopPropagation()}
+                  autoFocus
+                />
+                {variableTooltip.source && (
+                  <span className="input__variable-tooltip-source">{variableTooltip.source}</span>
+                )}
+              </>
+            ) : (
+              <>
+                <span 
+                  className="input__variable-tooltip-value"
+                  onClick={handleTooltipValueClick}
+                  style={{ cursor: variableTooltip.varName ? 'pointer' : 'default' }}
+                  title={variableTooltip.varName ? 'Click to edit' : undefined}
+                >
+                  {variableTooltip.text}
+                </span>
+                {variableTooltip.source && (
+                  <span className="input__variable-tooltip-source">{variableTooltip.source}</span>
+                )}
+              </>
             )}
           </div>,
           document.body

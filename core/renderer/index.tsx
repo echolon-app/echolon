@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import '@/aceSearchboxPatch';
 import App from './App';
 import {
   ThemeProvider,
@@ -22,6 +23,15 @@ import { ToastContainer } from '@/components/ui';
 
 const root = ReactDOM.createRoot(document.getElementById('root')!);
 
+const AppWithToasts = React.memo(function AppWithToasts() {
+  return (
+    <>
+      <App />
+      <ToastContainer />
+    </>
+  );
+});
+
 root.render(
     <Reference2Provider>
     <ThemeProvider>
@@ -38,8 +48,7 @@ root.render(
                         <EnvironmentsProvider>
                           <MockingProvider>
                             <RequestProvider>
-                              <App />
-                              <ToastContainer />
+                              <AppWithToasts />
                             </RequestProvider>
                           </MockingProvider>
                         </EnvironmentsProvider>

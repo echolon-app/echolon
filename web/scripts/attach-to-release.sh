@@ -2,6 +2,7 @@
 # Usage: cd web
 
 # Attach to release: attaches the build to the release
+# With this the web version will be available on jsDelivr CDN
 # npm run attach:release -- --tag v1.0.9
 # Skip build: uses existing dist/ folder
 # npm run attach:release -- --tag v1.0.9 --skip-build
@@ -20,6 +21,7 @@ NC='\033[0m' # No Color
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WEB_DIR="$(dirname "$SCRIPT_DIR")"
 REPO_ROOT="$(cd "$WEB_DIR/../.." && pwd)"
+RELEASE_TAG=""
 
 cd "$WEB_DIR"
 
@@ -30,7 +32,6 @@ echo ""
 
 # Parse arguments
 SKIP_BUILD=false
-RELEASE_TAG=""
 DRY_RUN=false
 SKIP_RELEASE_ASSETS=false
 
@@ -38,7 +39,7 @@ print_usage() {
   echo "Usage: $0 [options]"
   echo ""
   echo "Options:"
-  echo "  --tag <tag>            GitHub release tag (e.g., v1.0.9)"
+  echo "  --tag <tag>            GitHub release tag (default: version from core/package.json with 'v' prefix)"
   echo "  --skip-build           Skip the build step (use existing dist/)"
   echo "  --skip-release-assets  Skip uploading as release assets (only commit to git)"
   echo "  --dry-run              Show what would be uploaded without uploading"
@@ -81,9 +82,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Validate release tag
+# Default release tag from core package.json if not provided
 if [[ -z "$RELEASE_TAG" ]]; then
-  echo -e "${RED}❌ Error: --tag is required${NC}"
+  RELEASE_TAG=$(node -p "require('../core/package.json').version")
+  [[ "$RELEASE_TAG" != v* ]] && RELEASE_TAG="v$RELEASE_TAG"
+fi
+if [[ -z "$RELEASE_TAG" ]]; then
+  echo -e "${RED}❌ Error: Could not determine release tag. Use --tag or ensure core/package.json has a version.${NC}"
   print_usage
   exit 1
 fi

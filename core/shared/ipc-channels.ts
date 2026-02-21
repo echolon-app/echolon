@@ -25,6 +25,9 @@ export const APP_CHANNELS = {
   MAKE_HTTP_REQUEST: 'make-http-request',
   EXECUTE_SCRIPT: 'execute-script',
   OPEN_EXTERNAL: 'open-external',
+  GET_LOGIN_ITEM_SETTINGS: 'get-login-item-settings',
+  SET_LOGIN_ITEM_SETTINGS: 'set-login-item-settings',
+  OPEN_SYSTEM_LOGIN_ITEMS: 'open-system-login-items',
   FETCH_URL_CONTENT: 'fetch-url-content',
   DEEP_LINK: 'app:deep-link',
   RESTART_APP: 'restart-app',
@@ -32,6 +35,7 @@ export const APP_CHANNELS = {
   TOGGLE_DEV_TOOLS: 'toggle-dev-tools',
   COMPUTE_DIGEST_AUTH: 'compute-digest-auth',
   CAPTURE_PAGE: 'capture-page',
+  COMPUTE_COMPRESSION_SIZES: 'compute-compression-sizes',
 } as const;
 
 // ==================== Mock Server Channels ====================

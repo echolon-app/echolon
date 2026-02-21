@@ -742,13 +742,13 @@ export const LeftPanel: React.FC = () => {
       }
       
       return [
-        { id: 'open', label: 'Open', icon: <OpenIcon />, onClick: () => {
+       /* { id: 'open', label: 'Open', icon: <OpenIcon />, onClick: () => {
           handleOpenRequest(contextTarget.item as Request);
         }},
         { id: 'open-new-tab', label: 'Open in New Tab', icon: <NewTabIcon />, onClick: () => {
           handleOpenRequest(contextTarget.item as Request);
         }},
-        { id: 'divider1', label: '', divider: true },
+        { id: 'divider1', label: '', divider: true },*/
         { id: 'duplicate', label: 'Duplicate', icon: <CopyIcon />, onClick: () => {
           const originalRequest = contextTarget.item as Request;
           const collectionId = contextTarget.collectionId || originalRequest.collectionId;
@@ -1090,7 +1090,7 @@ export const LeftPanel: React.FC = () => {
         className={isReferenceActive ? 'reference-active-request' : undefined}
       >
         <CollapsibleListItem
-          icon={<span className="method-badge" style={{ color: getMethodColor(request.method) }}>{request.method}</span>}
+          icon={<span className="method-badge" style={{ color: getMethodColor(request.method) }}>{searchQuery && request.method.toLowerCase().includes(searchQuery.toLowerCase()) ? highlightMatches(request.method, searchQuery) : request.method}</span>}
           active={isActive || isReferenceActive}
           onClick={() => !isEditing && handleOpenRequest(request, collectionId, folderId)}
           onContextMenu={(e) => handleRequestContextMenu(e, request, collectionId, folderId)}
@@ -1136,11 +1136,46 @@ export const LeftPanel: React.FC = () => {
               autoFocus
             />
           ) : (
-            <span className={request.isDeprecated ? 'request-name--deprecated' : ''}>{request.name}</span>
+            <span className={request.isDeprecated ? 'request-name--deprecated' : ''}>
+              {searchQuery ? highlightMatches(request.name, searchQuery) : request.name}
+            </span>
           )}
         </CollapsibleListItem>
       </div>
     );
+  };
+
+  // Helper function to highlight matching text in search results
+  const highlightMatches = (text: string, query: string): React.ReactNode => {
+    if (!query.trim()) return text;
+    
+    const lowerQuery = query.toLowerCase();
+    const lowerText = text.toLowerCase();
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let index = lowerText.indexOf(lowerQuery, lastIndex);
+    
+    while (index !== -1) {
+      // Add text before match
+      if (index > lastIndex) {
+        parts.push(text.substring(lastIndex, index));
+      }
+      // Add highlighted match
+      parts.push(
+        <mark key={index} className="left-panel__search-highlight">
+          {text.substring(index, index + query.length)}
+        </mark>
+      );
+      lastIndex = index + query.length;
+      index = lowerText.indexOf(lowerQuery, lastIndex);
+    }
+    
+    // Add remaining text
+    if (lastIndex < text.length) {
+      parts.push(text.substring(lastIndex));
+    }
+    
+    return parts.length > 0 ? <>{parts}</> : text;
   };
 
   // Helper function to check if a request matches the search query
@@ -1154,33 +1189,59 @@ export const LeftPanel: React.FC = () => {
     );
   };
 
+  // Score for search ordering: 2 = match at start of a word, 1 = match elsewhere, 0 = no match
+  const scoreSearchMatch = (text: string, query: string): number => {
+    if (!query.trim()) return 0;
+    const lowerQuery = query.toLowerCase();
+    const lowerText = text.toLowerCase();
+    if (!lowerText.includes(lowerQuery)) return 0;
+    let index = lowerText.indexOf(lowerQuery);
+    while (index !== -1) {
+      const atWordStart = index === 0 || /\s/.test(text[index - 1]);
+      if (atWordStart) return 2;
+      index = lowerText.indexOf(lowerQuery, index + 1);
+    }
+    return 1;
+  };
+
+  const requestSearchScore = (request: Request, query: string): number => {
+    const scores = [
+      scoreSearchMatch(request.name, query),
+      scoreSearchMatch(request.method, query),
+      scoreSearchMatch(request.url, query),
+      ...(request.tags ?? []).map(tag => scoreSearchMatch(tag, query)),
+    ];
+    return Math.max(0, ...scores);
+  };
+
   // Helper function to filter requests in a folder based on search
   const filterFolderRequests = (folder: Folder, query: string): { folder: Folder; hasMatches: boolean } => {
     const lowerQuery = query.toLowerCase();
     const folderNameMatches = folder.name.toLowerCase().includes(lowerQuery);
     
-    // Filter requests
-    const matchingRequests = folder.requests.filter(r => requestMatchesSearch(r, query));
+    // Filter requests and sort by word-start match first
+    const matchingRequests = folder.requests
+      .filter(r => requestMatchesSearch(r, query))
+      .sort((a, b) => requestSearchScore(b, query) - requestSearchScore(a, query));
     
-    // Recursively filter subfolders
-    const filteredSubfolders: Folder[] = [];
-    let hasSubfolderMatches = false;
-    
+    // Recursively filter subfolders, then sort by folder name word-start match first
+    const filteredSubfolders: { folder: Folder; hasMatches: boolean }[] = [];
     folder.folders.forEach(f => {
-      const { folder: filteredFolder, hasMatches } = filterFolderRequests(f, query);
-      if (hasMatches || folderNameMatches) {
-        filteredSubfolders.push(filteredFolder);
-        if (hasMatches) hasSubfolderMatches = true;
+      const result = filterFolderRequests(f, query);
+      if (result.hasMatches || folderNameMatches) {
+        filteredSubfolders.push(result);
       }
     });
+    filteredSubfolders.sort((a, b) => scoreSearchMatch(b.folder.name, query) - scoreSearchMatch(a.folder.name, query));
     
+    const hasSubfolderMatches = filteredSubfolders.some(r => r.hasMatches);
     const hasMatches = folderNameMatches || matchingRequests.length > 0 || hasSubfolderMatches;
     
     return {
       folder: {
         ...folder,
         requests: folderNameMatches ? folder.requests : matchingRequests,
-        folders: filteredSubfolders,
+        folders: filteredSubfolders.map(r => r.folder),
         // Auto-expand folders with search results
         collapsed: hasMatches ? false : folder.collapsed,
       },
@@ -1223,7 +1284,7 @@ export const LeftPanel: React.FC = () => {
         }}
       >
         <CollapsibleList
-          title={folder.name}
+          title={searchQuery ? highlightMatches(folder.name, searchQuery) : folder.name}
           icon={<FolderIcon />}
           collapsed={searchQuery ? false : folder.collapsed}
           onCollapsedChange={(collapsed) => {
@@ -1250,30 +1311,32 @@ export const LeftPanel: React.FC = () => {
     );
   };
 
-  // Enhanced search: filter collections and their contents
+  // Enhanced search: filter collections and their contents, order by word-start match first
   const getFilteredCollections = () => {
     if (!searchQuery) return collections;
     
     const lowerQuery = searchQuery.toLowerCase();
     
-    return collections
+    const mapped = collections
       .map(collection => {
         const collectionNameMatches = collection.name.toLowerCase().includes(lowerQuery);
         
-        // Filter top-level requests
-        const matchingRequests = collection.requests.filter(r => requestMatchesSearch(r, searchQuery));
+        // Filter top-level requests and sort by word-start match first
+        const matchingRequests = collection.requests
+          .filter(r => requestMatchesSearch(r, searchQuery))
+          .sort((a, b) => requestSearchScore(b, searchQuery) - requestSearchScore(a, searchQuery));
         
-        // Filter folders recursively
-        const filteredFolders: Folder[] = [];
-        let hasFolderMatches = false;
-        
+        // Filter folders recursively, then sort by folder name word-start match first
+        const filteredFoldersWithScore: { folder: Folder; hasMatches: boolean }[] = [];
         collection.folders.forEach(folder => {
-          const { folder: filteredFolder, hasMatches } = filterFolderRequests(folder, searchQuery);
-          if (hasMatches || collectionNameMatches) {
-            filteredFolders.push(filteredFolder);
-            if (hasMatches) hasFolderMatches = true;
+          const result = filterFolderRequests(folder, searchQuery);
+          if (result.hasMatches || collectionNameMatches) {
+            filteredFoldersWithScore.push(result);
           }
         });
+        filteredFoldersWithScore.sort((a, b) => scoreSearchMatch(b.folder.name, searchQuery) - scoreSearchMatch(a.folder.name, searchQuery));
+        const filteredFolders = filteredFoldersWithScore.map(r => r.folder);
+        const hasFolderMatches = filteredFoldersWithScore.some(r => r.hasMatches);
         
         // Include collection if its name matches, or if it has matching requests/folders
         const hasAnyMatches = collectionNameMatches || matchingRequests.length > 0 || hasFolderMatches;
@@ -1289,6 +1352,9 @@ export const LeftPanel: React.FC = () => {
         } as Collection;
       })
       .filter((c): c is Collection => c !== null);
+    
+    // Sort collections by collection name word-start match first
+    return mapped.sort((a, b) => scoreSearchMatch(b.name, searchQuery) - scoreSearchMatch(a.name, searchQuery));
   };
 
   const filteredCollections = getFilteredCollections();
@@ -1306,12 +1372,12 @@ export const LeftPanel: React.FC = () => {
     return [...standaloneRequests, ...websocketConnections];
   }, [tabs]);
 
-  // Filter standalone items by search query
+  // Filter standalone items by search query, order by word-start match first
   const filteredStandaloneItems = useMemo(() => {
     if (!searchQuery) return standaloneItems;
     
     const lowerQuery = searchQuery.toLowerCase();
-    return standaloneItems.filter(item => {
+    const filtered = standaloneItems.filter(item => {
       if (item.type === 'request') {
         return (
           item.item.name.toLowerCase().includes(lowerQuery) ||
@@ -1325,6 +1391,20 @@ export const LeftPanel: React.FC = () => {
         );
       }
     });
+    const standaloneScore = (item: (typeof standaloneItems)[0]) => {
+      if (item.type === 'request') {
+        return Math.max(
+          scoreSearchMatch(item.item.name, searchQuery),
+          scoreSearchMatch(item.item.method, searchQuery),
+          scoreSearchMatch(item.item.url, searchQuery)
+        );
+      }
+      return Math.max(
+        scoreSearchMatch(item.item.name, searchQuery),
+        scoreSearchMatch(item.item.url, searchQuery)
+      );
+    };
+    return filtered.sort((a, b) => standaloneScore(b) - standaloneScore(a));
   }, [standaloneItems, searchQuery]);
 
   // Calculate total and filtered request counts for the search indicator
@@ -1477,7 +1557,9 @@ export const LeftPanel: React.FC = () => {
                           className={isDragging ? 'collapsible-list-item--dragging' : ''}
                         >
                           <div className="standalone-item">
-                            <span className="standalone-item__name">{request.name}</span>
+                            <span className="standalone-item__name">
+                              {searchQuery ? highlightMatches(request.name, searchQuery) : request.name}
+                            </span>
                           </div>
                         </CollapsibleListItem>
                       );
@@ -1495,7 +1577,9 @@ export const LeftPanel: React.FC = () => {
                           }}
                         >
                           <div className="standalone-item">
-                            <span className="standalone-item__name">{websocket.name}</span>
+                            <span className="standalone-item__name">
+                              {searchQuery ? highlightMatches(websocket.name, searchQuery) : websocket.name}
+                            </span>
                             <span className={`standalone-item__status standalone-item__status--${websocket.status}`} />
                           </div>
                         </CollapsibleListItem>
@@ -1570,7 +1654,7 @@ export const LeftPanel: React.FC = () => {
                       }}
                     >
                       <CollapsibleList
-                        title={collection.name}
+                        title={searchQuery ? highlightMatches(collection.name, searchQuery) : collection.name}
                         subtitle={collection.type || 'REST'}
                         badge={collection.specSource?.type === 'url' ? <RadarIcon /> : undefined}
                         badgeTooltip={collection.specSource?.type === 'url' ? 'Synced from URL' : undefined}

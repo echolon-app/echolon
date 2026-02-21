@@ -20,43 +20,12 @@ const headings = [
     
     <h2 id="download-and-install">Download and Install</h2>
     
-    <div class="download-tabs">
-      <div class="tabs-header">
-        <button class="tab-btn active" data-tab="macos">macOS</button>
-        <button class="tab-btn" data-tab="windows">Windows</button>
-        <button class="tab-btn" data-tab="linux">Linux</button>
-        <button class="tab-btn" data-tab="web">Web</button>
-      </div>
-      <div class="tabs-content">
-        <div class="tab-panel active" id="macos">
-          <p>Download the latest version for macOS:</p>
-          <ul class="list">
-            <li><strong>Apple Silicon</strong> — For M1/M2/M3 Macs</li>
-            <li><strong>Intel</strong> — For older Intel-based Macs</li>
-          </ul>
-          <p>Unzip and drag Echolon to your Applications folder.</p>
-        </div>
-        <div class="tab-panel" id="windows">
-          <p>Download the latest version for Windows:</p>
-          <ul class="list">
-            <li><strong>64-bit</strong> — For modern Windows 10/11</li>
-          </ul>
-          <p>Run the installer and follow the on-screen instructions.</p>
-        </div>
-        <div class="tab-panel" id="linux">
-          <p>Download the latest version for Linux:</p>
-          <ul class="list">
-            <li><strong>.deb</strong> — For Ubuntu/Debian</li>
-            <li><strong>.rpm</strong> — For Fedora/RHEL</li>
-            <li><strong>AppImage</strong> — Universal format</li>
-          </ul>
-        </div>
-        <div class="tab-panel" id="web">
-          <p>Use Echolon directly in your browser — no installation required!</p>
-          <p><a href="https://app.echolon.app" class="btn">Open Web App →</a></p>
-        </div>
-      </div>
-    </div>
+    <p>
+      Download Echolon for your platform from our download page:
+    </p>
+    <p>
+      <a href="https://echolon.app/download" class="btn">Download Echolon →</a>
+    </p>
     
     <h2 id="create-your-first-request">Create Your First Request</h2>
     
@@ -68,7 +37,7 @@ const headings = [
       <li>
         <strong>Enter a URL</strong>
         <p>Type or paste an API endpoint URL in the address bar:</p>
-        <pre><code>https://api.github.com/users/octocat</code></pre>
+        <pre><code>https://sample-api.echolon.app/tasks</code></pre>
       </li>
       <li>
         <strong>Send the request</strong>
@@ -118,7 +87,6 @@ userId = 12345</code></pre>
       <li><a href="/features/collections">Learn more about Collections</a></li>
       <li><a href="/features/environments">Configure Environments</a></li>
       <li><a href="/features/variables">Use Variables</a></li>
-      <li><a href="/protocols/graphql">Try GraphQL requests</a></li>
     </ul>
   </div>
 </DocsLayout>
@@ -213,60 +181,6 @@ userId = 12345</code></pre>
     text-decoration-color: var(--color-primary);
   }
   
-  /* Tabs */
-  .download-tabs {
-    margin: var(--spacing-6) 0;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
-    overflow: hidden;
-  }
-  
-  .tabs-header {
-    display: flex;
-    background: var(--color-bg-tertiary);
-    border-bottom: 1px solid var(--color-border);
-  }
-  
-  .tab-btn {
-    flex: 1;
-    padding: var(--spacing-3) var(--spacing-4);
-    background: none;
-    border: none;
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-sm);
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-    border-bottom: 2px solid transparent;
-  }
-  
-  .tab-btn:hover {
-    color: var(--color-text);
-    background: var(--color-bg-secondary);
-  }
-  
-  .tab-btn.active {
-    color: var(--color-primary);
-    border-bottom-color: var(--color-primary);
-    background: var(--color-bg-secondary);
-  }
-  
-  .tabs-content {
-    padding: var(--spacing-4);
-  }
-  
-  .tab-panel {
-    display: none;
-  }
-  
-  .tab-panel.active {
-    display: block;
-  }
-  
-  .tab-panel p:last-child {
-    margin-bottom: 0;
-  }
-  
   .btn {
     display: inline-block;
     padding: var(--spacing-2) var(--spacing-4);
@@ -336,21 +250,4 @@ userId = 12345</code></pre>
   }
 </style>
 
-<script>
-  // Tabs functionality
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const tabId = btn.dataset.tab;
-      const container = btn.closest('.download-tabs');
-      
-      // Update buttons
-      container?.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      
-      // Update panels
-      container?.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-      container?.querySelector(`#${tabId}`)?.classList.add('active');
-    });
-  });
-</script>
 

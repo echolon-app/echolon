@@ -1,5 +1,13 @@
 ## Highlights
-- Echolon is now open source
+- Response size breakdown and savings calculator
+
+### ✨ Added
+- Response size modal: compare Uncompressed, Currently used, gzip, brotli, and zstd with bar chart
+- Savings calculator: total download over a duration at a given request rate (per sec/min/hour/day/week/month)
+- Launch at login support
 
 ### 🚀 Improved
-- Fix for auto-update
+- Search is now highlighted in matches in the UI
+- #1 Fix for https://github.com/echolon-app/echolon/issues/1
+- Editor: Number of results is now configurable in Settings
+- Fix for not detected variable in request auth tab

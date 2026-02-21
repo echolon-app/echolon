@@ -5,7 +5,7 @@ import './CollapsibleList.css';
 export type DropPosition = 'before' | 'after' | 'inside';
 
 export interface CollapsibleListProps {
-  title: string;
+  title: string | React.ReactNode;
   subtitle?: string;
   icon?: React.ReactNode;
   badge?: React.ReactNode;
@@ -149,7 +149,7 @@ export const CollapsibleList: React.FC<CollapsibleListProps> = ({
             className={`collapsible-list__title ${onTitleClick ? 'collapsible-list__title--clickable' : ''}`}
             onClick={handleTitleClick}
             onDoubleClick={handleTitleDoubleClick}
-            title={title}
+            title={typeof title === 'string' ? title : undefined}
           >
             {title}
           </span>
