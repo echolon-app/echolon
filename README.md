@@ -86,11 +86,18 @@ npm run package:win
 npm run package:linux
 ```
 
-### Release
+### Release Electron for (Mac, Windows and Linux)
 
 ```bash
 cd core
 npm run release:all 
+```
+
+### Release for web
+```bash
+cd web
+npm run deploy 
+npm run deploy:lib
 ```
 
 ### Code Signing (Optional)
