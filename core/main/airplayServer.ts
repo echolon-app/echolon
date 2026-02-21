@@ -1802,7 +1802,7 @@ class AirPlayServer {
       console.error('[DIRECT_WRITE] Failed:', directErr?.message, directErr?.code);
     }
     
-    writeToLogFile('INFO', '=== HANDLING RTSP SETUP REQUEST ===');
+    writeToLogFile('INFO', '=== HANDLING RTSP SETUP REQUEST ===!');
     console.log('=== HANDLING RTSP SETUP REQUEST ===');
     logInfo(`=== HANDLING RTSP SETUP REQUEST ===`);
     
@@ -1968,13 +1968,34 @@ class AirPlayServer {
       if (ekey.length === 72) {
         // Get FairPlay key message from connection state
         const socketId = `${req.socket.remoteAddress}:${req.socket.remotePort}`;
+        writeToLogFile('INFO', `[FAIRPLAY] Checking for fairplayKeyMsg in connection state for socket ${socketId}`);
+        console.log(`[FAIRPLAY] Checking for fairplayKeyMsg in connection state for socket ${socketId}`);
+        logInfo(`[FAIRPLAY] Checking for fairplayKeyMsg in connection state for socket ${socketId}`);
+        
+        writeToLogFile('INFO', `[FAIRPLAY] Total connections: ${this.connections.size}, all socket IDs: ${Array.from(this.connections.keys()).join(', ')}`);
+        console.log(`[FAIRPLAY] Total connections: ${this.connections.size}, all socket IDs: ${Array.from(this.connections.keys()).join(', ')}`);
+        logInfo(`[FAIRPLAY] Total connections: ${this.connections.size}, all socket IDs: ${Array.from(this.connections.keys()).join(', ')}`);
+        
         const connState = this.connections.get(socketId);
         const fairplayKeyMsg = (connState as any)?.fairplayKeyMsg;
         
-        logInfo(`[FAIRPLAY] Checking for fairplayKeyMsg in connection state for socket ${socketId}`);
+        writeToLogFile('INFO', `[FAIRPLAY] Connection state exists: ${!!connState}`);
+        console.log(`[FAIRPLAY] Connection state exists: ${!!connState}`);
         logInfo(`[FAIRPLAY] Connection state exists: ${!!connState}`);
+        
+        writeToLogFile('INFO', `[FAIRPLAY] fairplayKeyMsg exists: ${!!fairplayKeyMsg}`);
+        console.log(`[FAIRPLAY] fairplayKeyMsg exists: ${!!fairplayKeyMsg}`);
         logInfo(`[FAIRPLAY] fairplayKeyMsg exists: ${!!fairplayKeyMsg}`);
+        
+        writeToLogFile('INFO', `[FAIRPLAY] fairplayKeyMsg length: ${fairplayKeyMsg?.length || 0}`);
+        console.log(`[FAIRPLAY] fairplayKeyMsg length: ${fairplayKeyMsg?.length || 0}`);
         logInfo(`[FAIRPLAY] fairplayKeyMsg length: ${fairplayKeyMsg?.length || 0}`);
+        
+        if (connState) {
+          writeToLogFile('INFO', `[FAIRPLAY] Connection state keys: ${Object.keys(connState).join(', ')}`);
+          console.log(`[FAIRPLAY] Connection state keys: ${Object.keys(connState).join(', ')}`);
+          logInfo(`[FAIRPLAY] Connection state keys: ${Object.keys(connState).join(', ')}`);
+        }
         
         if (!fairplayKeyMsg || fairplayKeyMsg.length !== 164) {
           logError(`[FAIRPLAY] Cannot decrypt ekey - FairPlay key message not found or invalid (length: ${fairplayKeyMsg?.length || 0}, expected 164)`);
@@ -2096,6 +2117,11 @@ class AirPlayServer {
             });
           } else {
             // Initialize RTP mirror handler
+            logInfo(`[FAIRPLAY] Creating RTPMirrorHandler with aeskey: ${aeskey.toString('hex')}`);
+            logInfo(`[FAIRPLAY] aeskey length: ${aeskey.length}, streamConnectionID: ${streamConnectionID}`);
+            writeToLogFile('INFO', `[FAIRPLAY] Creating RTPMirrorHandler with aeskey: ${aeskey.toString('hex')}`);
+            console.log(`[FAIRPLAY] Creating RTPMirrorHandler with aeskey: ${aeskey.toString('hex')}`);
+            
             const mirrorHandler = new RTPMirrorHandler(aeskey, streamConnectionID, this);
             try {
               const mirrorDataPort = await mirrorHandler.start();
@@ -2444,18 +2470,44 @@ class AirPlayServer {
       // UxPlay stores the 164-byte key message for later use in fairplay_decrypt
       // Store it in connection state (matching UxPlay's fp->keymsg)
       const socketId = `${req.socket.remoteAddress}:${req.socket.remotePort}`;
+      writeToLogFile('INFO', `[FAIRPLAY] Storing key message for socket ${socketId}`);
+      console.log(`[FAIRPLAY] Storing key message for socket ${socketId}`);
       logInfo(`[FAIRPLAY] Storing key message for socket ${socketId}`);
-      const connState = this.connections.get(socketId);
-      if (connState) {
-        // Store the key message (164 bytes) - needed to decrypt ekey later
-        (connState as any).fairplayKeyMsg = Buffer.from(requestBody);
-        logInfo(`[FAIRPLAY] Stored FairPlay key message (164 bytes) for connection ${socketId}`);
-        logInfo(`[FAIRPLAY] Key message (first 32 bytes): ${requestBody.slice(0, 32).toString('hex')}`);
-        logInfo(`[FAIRPLAY] Connection state now has keys: ${Object.keys(connState).join(', ')}`);
-      } else {
-        logError(`[FAIRPLAY] Cannot store FairPlay key message - connection state not found for ${socketId}`);
-        logError(`[FAIRPLAY] Available connections: ${Array.from(this.connections.keys()).join(', ')}`);
+      
+      // Get or create connection state
+      let connState = this.connections.get(socketId);
+      if (!connState) {
+        // Create connection state if it doesn't exist
+        writeToLogFile('INFO', `[FAIRPLAY] Creating new connection state for socket ${socketId}`);
+        console.log(`[FAIRPLAY] Creating new connection state for socket ${socketId}`);
+        logInfo(`[FAIRPLAY] Creating new connection state for socket ${socketId}`);
+        connState = {
+          type: 'UNKNOWN',
+          socket: req.socket,
+          remoteAddress: req.socket.remoteAddress,
+          remotePort: req.socket.remotePort,
+          createdAt: Date.now(),
+        };
+        this.connections.set(socketId, connState);
       }
+      
+      // Store the key message (164 bytes) - needed to decrypt ekey later
+      (connState as any).fairplayKeyMsg = Buffer.from(requestBody);
+      writeToLogFile('INFO', `[FAIRPLAY] Stored FairPlay key message (164 bytes) for connection ${socketId}`);
+      console.log(`[FAIRPLAY] Stored FairPlay key message (164 bytes) for connection ${socketId}`);
+      logInfo(`[FAIRPLAY] Stored FairPlay key message (164 bytes) for connection ${socketId}`);
+      
+      writeToLogFile('INFO', `[FAIRPLAY] Key message (first 32 bytes): ${requestBody.slice(0, 32).toString('hex')}`);
+      console.log(`[FAIRPLAY] Key message (first 32 bytes): ${requestBody.slice(0, 32).toString('hex')}`);
+      logInfo(`[FAIRPLAY] Key message (first 32 bytes): ${requestBody.slice(0, 32).toString('hex')}`);
+      
+      writeToLogFile('INFO', `[FAIRPLAY] Connection state now has keys: ${Object.keys(connState).join(', ')}`);
+      console.log(`[FAIRPLAY] Connection state now has keys: ${Object.keys(connState).join(', ')}`);
+      logInfo(`[FAIRPLAY] Connection state now has keys: ${Object.keys(connState).join(', ')}`);
+      
+      writeToLogFile('INFO', `[FAIRPLAY] Total connections: ${this.connections.size}, all socket IDs: ${Array.from(this.connections.keys()).join(', ')}`);
+      console.log(`[FAIRPLAY] Total connections: ${this.connections.size}, all socket IDs: ${Array.from(this.connections.keys()).join(', ')}`);
+      logInfo(`[FAIRPLAY] Total connections: ${this.connections.size}, all socket IDs: ${Array.from(this.connections.keys()).join(', ')}`);
       
       // UxPlay handshake response: fp_header (12 bytes) + req[144:164] (20 bytes) = 32 bytes
       // fp_header = {0x46, 0x50, 0x4c, 0x59, 0x03, 0x01, 0x04, 0x00, 0x00, 0x00, 0x00, 0x14}
@@ -2969,27 +3021,124 @@ class RTPMirrorHandler {
     // Derive AES-CTR key and IV from streamConnectionID (matching UxPlay's mirror_buffer_init_aes)
     // UxPlay: "AirPlayStreamKey{streamConnectionID}" + aeskey_audio -> SHA512 -> first 16 bytes
     // UxPlay: "AirPlayStreamIV{streamConnectionID}" + aeskey_audio -> SHA512 -> first 16 bytes
-    const keyString = `AirPlayStreamKey${streamConnectionID}`;
-    const ivString = `AirPlayStreamIV${streamConnectionID}`;
+    // CRITICAL: UxPlay uses PRIu64 (unsigned 64-bit), so convert negative values to unsigned
+    // Convert to unsigned 64-bit to match UxPlay's behavior
+    // JavaScript numbers are 64-bit floats, but we need to handle negative 32-bit ints as unsigned 64-bit
+    // For negative numbers, convert to unsigned 64-bit: (value >>> 0) gives unsigned 32-bit, but we need 64-bit
+    // Actually, for string formatting, we can use BigInt to get proper 64-bit unsigned representation
+    let unsignedStreamConnectionID: string;
+    if (streamConnectionID < 0) {
+      // Convert negative 32-bit int to unsigned 64-bit: add 2^32
+      const unsigned64 = BigInt(streamConnectionID) + BigInt(0x100000000);
+      unsignedStreamConnectionID = unsigned64.toString();
+    } else {
+      unsignedStreamConnectionID = streamConnectionID.toString();
+    }
+    const keyString = `AirPlayStreamKey${unsignedStreamConnectionID}`;
+    const ivString = `AirPlayStreamIV${unsignedStreamConnectionID}`;
     
-    logInfo(`RTPMirrorHandler: Initializing with FairPlay aeskey: ${originalAeskey.toString('hex')}`);
+    writeToLogFile('INFO', `RTPMirrorHandler: streamConnectionID (signed): ${streamConnectionID}, (unsigned64): ${unsignedStreamConnectionID}`);
+    console.log(`RTPMirrorHandler: streamConnectionID (signed): ${streamConnectionID}, (unsigned64): ${unsignedStreamConnectionID}`);
+    logInfo(`RTPMirrorHandler: streamConnectionID (signed): ${streamConnectionID}, (unsigned64): ${unsignedStreamConnectionID}`);
+    
+    writeToLogFile('INFO', `RTPMirrorHandler: keyString: ${keyString}`);
+    console.log(`RTPMirrorHandler: keyString: ${keyString}`);
+    logInfo(`RTPMirrorHandler: keyString: ${keyString}`);
+    
+    // CRITICAL: Log to file immediately
+    const logMsg = `RTPMirrorHandler: Initializing with FairPlay aeskey: ${originalAeskey.toString('hex')}`;
+    writeToLogFile('INFO', logMsg);
+    console.log(logMsg);
+    logInfo(logMsg);
+    
+    writeToLogFile('INFO', `RTPMirrorHandler: streamConnectionID: ${streamConnectionID}`);
+    console.log(`RTPMirrorHandler: streamConnectionID: ${streamConnectionID}`);
     logInfo(`RTPMirrorHandler: streamConnectionID: ${streamConnectionID}`);
     
-    const keyHash = crypto.createHash('sha512').update(keyString).update(aeskey).digest();
-    const ivHash = crypto.createHash('sha512').update(ivString).update(aeskey).digest();
+    // Verify aeskey is valid (not random stub)
+    if (originalAeskey.length !== 16) {
+      const errMsg = `[CRITICAL] Invalid aeskey length: ${originalAeskey.length} (expected 16)`;
+      writeToLogFile('ERROR', errMsg);
+      console.error(errMsg);
+      logError(errMsg);
+    }
+    
+    // Check if aeskey is all zeros or random-looking (stub key)
+    const isStubKey = originalAeskey.every(b => b === 0) || 
+                      originalAeskey.toString('hex').match(/^[0-9a-f]{32}$/i) === null;
+    if (isStubKey) {
+      const warnMsg = `[CRITICAL] aeskey appears to be stub/random: ${originalAeskey.toString('hex')}`;
+      writeToLogFile('ERROR', warnMsg);
+      console.error(warnMsg);
+      logError(warnMsg);
+    }
+    
+    // CRITICAL: UxPlay uses strlen() to get the string length, then hashes:
+    // sha_update(ctx, aeskey_video, strlen((char*) aeskey_video));  // String only
+    // sha_update(ctx, mirror_buffer->aeskey_audio, RAOP_AESKEY_LEN);  // Then the 16-byte key
+    // In Node.js, update() with a string will UTF-8 encode it (which matches ASCII for these strings)
+    // But we need to make sure we're using the string bytes, not the full buffer
+    const keyStringBytes = Buffer.from(keyString, 'utf8'); // Explicitly convert to bytes
+    const ivStringBytes = Buffer.from(ivString, 'utf8');   // Explicitly convert to bytes
+    
+    writeToLogFile('INFO', `RTPMirrorHandler: keyString: "${keyString}" (${keyString.length} chars, ${keyStringBytes.length} bytes)`);
+    console.log(`RTPMirrorHandler: keyString: "${keyString}" (${keyString.length} chars, ${keyStringBytes.length} bytes)`);
+    logInfo(`RTPMirrorHandler: keyString: "${keyString}" (${keyString.length} chars, ${keyStringBytes.length} bytes)`);
+    
+    writeToLogFile('INFO', `RTPMirrorHandler: ivString: "${ivString}" (${ivString.length} chars, ${ivStringBytes.length} bytes)`);
+    console.log(`RTPMirrorHandler: ivString: "${ivString}" (${ivString.length} chars, ${ivStringBytes.length} bytes)`);
+    logInfo(`RTPMirrorHandler: ivString: "${ivString}" (${ivString.length} chars, ${ivStringBytes.length} bytes)`);
+    
+    writeToLogFile('INFO', `RTPMirrorHandler: aeskey being hashed: ${aeskey.toString('hex')}`);
+    console.log(`RTPMirrorHandler: aeskey being hashed: ${aeskey.toString('hex')}`);
+    logInfo(`RTPMirrorHandler: aeskey being hashed: ${aeskey.toString('hex')}`);
+    
+    // Hash: string bytes + aeskey (matching UxPlay's sha_update calls)
+    const keyHash = crypto.createHash('sha512').update(keyStringBytes).update(aeskey).digest();
+    const ivHash = crypto.createHash('sha512').update(ivStringBytes).update(aeskey).digest();
     
     this.aesKey = keyHash.slice(0, 16);
     this.aesIV = ivHash.slice(0, 16);
     this.ctrCounter = Buffer.from(this.aesIV); // Initialize counter from IV
+    
+    writeToLogFile('INFO', `RTPMirrorHandler: Derived keyHash (first 32 bytes): ${keyHash.slice(0, 32).toString('hex')}`);
+    console.log(`RTPMirrorHandler: Derived keyHash (first 32 bytes): ${keyHash.slice(0, 32).toString('hex')}`);
+    logInfo(`RTPMirrorHandler: Derived keyHash (first 32 bytes): ${keyHash.slice(0, 32).toString('hex')}`);
+    
+    writeToLogFile('INFO', `RTPMirrorHandler: Derived ivHash (first 32 bytes): ${ivHash.slice(0, 32).toString('hex')}`);
+    console.log(`RTPMirrorHandler: Derived ivHash (first 32 bytes): ${ivHash.slice(0, 32).toString('hex')}`);
+    logInfo(`RTPMirrorHandler: Derived ivHash (first 32 bytes): ${ivHash.slice(0, 32).toString('hex')}`);
     
     // Create persistent cipher for AES-CTR (maintains counter state)
     // UxPlay: aes_ctr_init uses AES_ENCRYPT mode (encryption and decryption are the same in CTR)
     // In Node.js, we use createCipheriv for CTR mode (not createDecipheriv)
     // Note: CTR mode uses encryption for both encrypt and decrypt operations
     // IMPORTANT: The cipher will be recreated for each connection, so counter starts from IV
+    // CRITICAL: In OpenSSL CTR mode, the IV is used as the initial counter value
+    // Node.js crypto should handle this the same way, but let's verify the IV format
+    // The IV should be exactly 16 bytes (128 bits) for AES-128-CTR
+    if (this.aesIV.length !== 16) {
+      const errMsg = `[CRITICAL] Invalid AES IV length: ${this.aesIV.length} (expected 16)`;
+      writeToLogFile('ERROR', errMsg);
+      console.error(errMsg);
+      logError(errMsg);
+    }
+    
+    writeToLogFile('INFO', `RTPMirrorHandler: Creating cipher with key (${this.aesKey.length} bytes): ${this.aesKey.toString('hex')}`);
+    console.log(`RTPMirrorHandler: Creating cipher with key (${this.aesKey.length} bytes): ${this.aesKey.toString('hex')}`);
+    logInfo(`RTPMirrorHandler: Creating cipher with key (${this.aesKey.length} bytes): ${this.aesKey.toString('hex')}`);
+    
+    writeToLogFile('INFO', `RTPMirrorHandler: Creating cipher with IV (${this.ctrCounter.length} bytes): ${this.ctrCounter.toString('hex')}`);
+    console.log(`RTPMirrorHandler: Creating cipher with IV (${this.ctrCounter.length} bytes): ${this.ctrCounter.toString('hex')}`);
+    logInfo(`RTPMirrorHandler: Creating cipher with IV (${this.ctrCounter.length} bytes): ${this.ctrCounter.toString('hex')}`);
+    
     const cipher = crypto.createCipheriv('aes-128-ctr', this.aesKey, this.ctrCounter);
     cipher.setAutoPadding(false);
     this.ctrCipher = cipher;
+    
+    writeToLogFile('INFO', `RTPMirrorHandler: Cipher created successfully`);
+    console.log(`RTPMirrorHandler: Cipher created successfully`);
+    logInfo(`RTPMirrorHandler: Cipher created successfully`);
     
     // Initialize state (matching UxPlay's mirror_buffer_init)
     this.nextDecryptCount = 0;
@@ -2997,10 +3146,25 @@ class RTPMirrorHandler {
     
     this.airplayServer = airplayServer;
     
-    logInfo(`RTPMirrorHandler: Derived AES-CTR key/IV from streamConnectionID ${streamConnectionID}`);
+    const derivedMsg = `RTPMirrorHandler: Derived AES-CTR key/IV from streamConnectionID ${streamConnectionID}`;
+    writeToLogFile('INFO', derivedMsg);
+    console.log(derivedMsg);
+    logInfo(derivedMsg);
+    
+    writeToLogFile('INFO', `RTPMirrorHandler: Original FairPlay aeskey: ${originalAeskey.toString('hex')}`);
+    console.log(`RTPMirrorHandler: Original FairPlay aeskey: ${originalAeskey.toString('hex')}`);
     logInfo(`RTPMirrorHandler: Original FairPlay aeskey: ${originalAeskey.toString('hex')}`);
+    
+    writeToLogFile('INFO', `RTPMirrorHandler: Derived AES key: ${this.aesKey.toString('hex')}`);
+    console.log(`RTPMirrorHandler: Derived AES key: ${this.aesKey.toString('hex')}`);
     logInfo(`RTPMirrorHandler: Derived AES key: ${this.aesKey.toString('hex')}`);
+    
+    writeToLogFile('INFO', `RTPMirrorHandler: Derived AES IV: ${this.aesIV.toString('hex')}`);
+    console.log(`RTPMirrorHandler: Derived AES IV: ${this.aesIV.toString('hex')}`);
     logInfo(`RTPMirrorHandler: Derived AES IV: ${this.aesIV.toString('hex')}`);
+    
+    writeToLogFile('INFO', `RTPMirrorHandler: Initialized with nextDecryptCount=0`);
+    console.log(`RTPMirrorHandler: Initialized with nextDecryptCount=0`);
     logInfo(`RTPMirrorHandler: Initialized with nextDecryptCount=0`);
   }
 
@@ -3277,8 +3441,45 @@ class RTPMirrorHandler {
     const savedNextDecryptCount = this.nextDecryptCount;
     const isFirstPacket = savedNextDecryptCount === 0;
     
+    // Log every packet to track state
+    writeToLogFile('INFO', `RTPMirrorHandler: decryptVideoPacket - nextDecryptCount=${savedNextDecryptCount}, inputLen=${input.length}, isFirstPacket=${isFirstPacket}`);
+    console.log(`RTPMirrorHandler: decryptVideoPacket - nextDecryptCount=${savedNextDecryptCount}, inputLen=${input.length}, isFirstPacket=${isFirstPacket}`);
+    logInfo(`RTPMirrorHandler: decryptVideoPacket - nextDecryptCount=${savedNextDecryptCount}, inputLen=${input.length}, isFirstPacket=${isFirstPacket}`);
+    
     if (isFirstPacket) {
-      logInfo(`RTPMirrorHandler: ===== FIRST PACKET ===== nextDecryptCount=0, inputLen=${input.length}`);
+      const firstPacketMsg = `RTPMirrorHandler: ===== FIRST PACKET ===== nextDecryptCount=0, inputLen=${input.length}`;
+      writeToLogFile('INFO', firstPacketMsg);
+      console.log(firstPacketMsg);
+      logInfo(firstPacketMsg);
+      
+      writeToLogFile('INFO', `RTPMirrorHandler: AES key: ${this.aesKey.toString('hex')}`);
+      console.log(`RTPMirrorHandler: AES key: ${this.aesKey.toString('hex')}`);
+      logInfo(`RTPMirrorHandler: AES key: ${this.aesKey.toString('hex')}`);
+      
+      writeToLogFile('INFO', `RTPMirrorHandler: AES IV: ${this.aesIV.toString('hex')}`);
+      console.log(`RTPMirrorHandler: AES IV: ${this.aesIV.toString('hex')}`);
+      logInfo(`RTPMirrorHandler: AES IV: ${this.aesIV.toString('hex')}`);
+      
+      writeToLogFile('INFO', `RTPMirrorHandler: First 32 bytes encrypted: ${input.slice(0, 32).toString('hex')}`);
+      console.log(`RTPMirrorHandler: First 32 bytes encrypted: ${input.slice(0, 32).toString('hex')}`);
+      logInfo(`RTPMirrorHandler: First 32 bytes encrypted: ${input.slice(0, 32).toString('hex')}`);
+      
+      // CRITICAL: Verify cipher is initialized correctly
+      if (!this.ctrCipher) {
+        const errorMsg = `[CRITICAL] FIRST PACKET - Cipher is null!`;
+        writeToLogFile('ERROR', errorMsg);
+        console.error(errorMsg);
+        logError(errorMsg);
+      } else {
+        writeToLogFile('INFO', `RTPMirrorHandler: Cipher is initialized`);
+        console.log(`RTPMirrorHandler: Cipher is initialized`);
+        logInfo(`RTPMirrorHandler: Cipher is initialized`);
+      }
+    } else {
+      // Not first packet - log why
+      writeToLogFile('INFO', `RTPMirrorHandler: Not first packet - nextDecryptCount=${savedNextDecryptCount} (previous packet had partial block)`);
+      console.log(`RTPMirrorHandler: Not first packet - nextDecryptCount=${savedNextDecryptCount} (previous packet had partial block)`);
+      logInfo(`RTPMirrorHandler: Not first packet - nextDecryptCount=${savedNextDecryptCount} (previous packet had partial block)`);
     }
     
     // UxPlay decrypts in-place, but we'll use a separate output buffer for clarity
@@ -3317,17 +3518,148 @@ class RTPMirrorHandler {
     const encryptStart = savedNextDecryptCount;
     const encryptLen = Math.floor((input.length - savedNextDecryptCount) / 16) * 16;
     
+    // Log for first packet regardless of encryptLen
+    if (isFirstPacket) {
+      writeToLogFile('INFO', `RTPMirrorHandler: FIRST PACKET - encryptStart=${encryptStart}, encryptLen=${encryptLen}, input.length=${input.length}`);
+      console.log(`RTPMirrorHandler: FIRST PACKET - encryptStart=${encryptStart}, encryptLen=${encryptLen}, input.length=${input.length}`);
+      logInfo(`RTPMirrorHandler: FIRST PACKET - encryptStart=${encryptStart}, encryptLen=${encryptLen}, input.length=${input.length}`);
+    }
+    
     if (encryptLen > 0) {
       // UxPlay: aes_ctr_decrypt decrypts IN-PLACE: input+offset is both input and output
       // This means the input buffer is modified directly
       // We need to decrypt the encrypted block and write to output
       // IMPORTANT: We decrypt from input buffer and write to output buffer at the same offset
       const encryptedBlock = input.slice(encryptStart, encryptStart + encryptLen);
+      
+      // For first packet, log what we're about to decrypt
+      if (isFirstPacket && encryptStart === 0) {
+        writeToLogFile('INFO', `RTPMirrorHandler: FIRST PACKET - About to decrypt ${encryptLen} bytes starting at offset ${encryptStart}`);
+        console.log(`RTPMirrorHandler: FIRST PACKET - About to decrypt ${encryptLen} bytes starting at offset ${encryptStart}`);
+        logInfo(`RTPMirrorHandler: FIRST PACKET - About to decrypt ${encryptLen} bytes starting at offset ${encryptStart}`);
+        
+        writeToLogFile('INFO', `RTPMirrorHandler: FIRST PACKET - Encrypted block (first 32 bytes): ${encryptedBlock.slice(0, 32).toString('hex')}`);
+        console.log(`RTPMirrorHandler: FIRST PACKET - Encrypted block (first 32 bytes): ${encryptedBlock.slice(0, 32).toString('hex')}`);
+        logInfo(`RTPMirrorHandler: FIRST PACKET - Encrypted block (first 32 bytes): ${encryptedBlock.slice(0, 32).toString('hex')}`);
+      }
+      
       const decryptedBlock = this.ctrCipher.update(encryptedBlock);
+      
+      // Log for first packet
+      if (isFirstPacket) {
+        writeToLogFile('INFO', `RTPMirrorHandler: FIRST PACKET - cipher.update returned ${decryptedBlock.length} bytes`);
+        console.log(`RTPMirrorHandler: FIRST PACKET - cipher.update returned ${decryptedBlock.length} bytes`);
+        logInfo(`RTPMirrorHandler: FIRST PACKET - cipher.update returned ${decryptedBlock.length} bytes`);
+      }
       if (decryptedBlock.length > 0) {
         // Copy decrypted data to output at the correct offset
         decryptedBlock.copy(output, encryptStart);
         logDebug(`RTPMirrorHandler: Decrypted ${decryptedBlock.length} bytes starting at offset ${encryptStart}`);
+        
+        // Log first packet decryption details
+        if (isFirstPacket && encryptStart === 0 && decryptedBlock.length >= 16) {
+          const firstDecryptedMsg = `RTPMirrorHandler: FIRST PACKET - First 16 bytes decrypted: ${decryptedBlock.slice(0, 16).toString('hex')}`;
+          writeToLogFile('INFO', firstDecryptedMsg);
+          console.log(firstDecryptedMsg);
+          logInfo(firstDecryptedMsg);
+          
+          // Check NAL size immediately
+          if (decryptedBlock.length >= 4) {
+            const nalSizeBE = decryptedBlock.readUInt32BE(0);
+            const nalSizeLE = decryptedBlock.readUInt32LE(0);
+            
+            // Check if there's a start code (0x00000001) in the first few bytes
+            let startCodeOffset = -1;
+            for (let i = 0; i < Math.min(decryptedBlock.length - 3, 32); i++) {
+              if (decryptedBlock[i] === 0x00 && decryptedBlock[i + 1] === 0x00 && 
+                  decryptedBlock[i + 2] === 0x00 && decryptedBlock[i + 3] === 0x01) {
+                startCodeOffset = i;
+                break;
+              }
+            }
+            
+            const nalSizeMsg = `RTPMirrorHandler: FIRST PACKET - NAL size BE: ${nalSizeBE} (0x${nalSizeBE.toString(16)}), LE: ${nalSizeLE} (0x${nalSizeLE.toString(16)}), start code at offset: ${startCodeOffset}`;
+            writeToLogFile('INFO', nalSizeMsg);
+            console.log(nalSizeMsg);
+            logInfo(nalSizeMsg);
+            
+            // Log first 64 bytes to see the pattern
+            writeToLogFile('INFO', `RTPMirrorHandler: FIRST PACKET - First 64 bytes: ${decryptedBlock.slice(0, Math.min(64, decryptedBlock.length)).toString('hex')}`);
+            console.log(`RTPMirrorHandler: FIRST PACKET - First 64 bytes: ${decryptedBlock.slice(0, Math.min(64, decryptedBlock.length)).toString('hex')}`);
+            logInfo(`RTPMirrorHandler: FIRST PACKET - First 64 bytes: ${decryptedBlock.slice(0, Math.min(64, decryptedBlock.length)).toString('hex')}`);
+            
+            const nalSize = nalSizeBE; // Use BE for now
+            
+            // Verify decryption by checking if encrypted XOR decrypted gives us the keystream
+            // In CTR mode: ciphertext = plaintext XOR keystream
+            // So: keystream = ciphertext XOR plaintext
+            // We can verify by XORing encrypted and decrypted to get the keystream
+            // Then encrypt zeros with a fresh cipher to get the expected keystream
+            try {
+              const originalEncrypted = encryptedBlock.slice(0, 16);
+              const decrypted = decryptedBlock.slice(0, 16);
+              
+              // Calculate keystream from actual data: keystream = encrypted XOR decrypted
+              const actualKeystream = Buffer.alloc(16);
+              for (let i = 0; i < 16; i++) {
+                actualKeystream[i] = originalEncrypted[i] ^ decrypted[i];
+              }
+              
+              // Get expected keystream by encrypting zeros with fresh cipher (starts at IV)
+              const testCipher = crypto.createCipheriv('aes-128-ctr', this.aesKey, this.aesIV);
+              testCipher.setAutoPadding(false);
+              const zeros = Buffer.alloc(16, 0);
+              const expectedKeystream = testCipher.update(zeros);
+              
+              writeToLogFile('INFO', `RTPMirrorHandler: FIRST PACKET - Actual keystream (from data): ${actualKeystream.toString('hex')}`);
+              console.log(`RTPMirrorHandler: FIRST PACKET - Actual keystream (from data): ${actualKeystream.toString('hex')}`);
+              logInfo(`RTPMirrorHandler: FIRST PACKET - Actual keystream (from data): ${actualKeystream.toString('hex')}`);
+              
+              writeToLogFile('INFO', `RTPMirrorHandler: FIRST PACKET - Expected keystream (from cipher): ${expectedKeystream.toString('hex')}`);
+              console.log(`RTPMirrorHandler: FIRST PACKET - Expected keystream (from cipher): ${expectedKeystream.toString('hex')}`);
+              logInfo(`RTPMirrorHandler: FIRST PACKET - Expected keystream (from cipher): ${expectedKeystream.toString('hex')}`);
+              
+              if (actualKeystream.equals(expectedKeystream)) {
+                writeToLogFile('INFO', `RTPMirrorHandler: FIRST PACKET - Keystream MATCHES: Decryption is correct!`);
+                console.log(`RTPMirrorHandler: FIRST PACKET - Keystream MATCHES: Decryption is correct!`);
+                logInfo(`RTPMirrorHandler: FIRST PACKET - Keystream MATCHES: Decryption is correct!`);
+              } else {
+                writeToLogFile('ERROR', `RTPMirrorHandler: FIRST PACKET - Keystream MISMATCH: Decryption is WRONG!`);
+                console.error(`RTPMirrorHandler: FIRST PACKET - Keystream MISMATCH: Decryption is WRONG!`);
+                logError(`RTPMirrorHandler: FIRST PACKET - Keystream MISMATCH: Decryption is WRONG!`);
+                
+                // Calculate difference
+                const diff = Buffer.alloc(16);
+                for (let i = 0; i < 16; i++) {
+                  diff[i] = actualKeystream[i] ^ expectedKeystream[i];
+                }
+                writeToLogFile('ERROR', `RTPMirrorHandler: FIRST PACKET - Keystream difference: ${diff.toString('hex')}`);
+                console.error(`RTPMirrorHandler: FIRST PACKET - Keystream difference: ${diff.toString('hex')}`);
+                logError(`RTPMirrorHandler: FIRST PACKET - Keystream difference: ${diff.toString('hex')}`);
+              }
+            } catch (err) {
+              writeToLogFile('ERROR', `RTPMirrorHandler: FIRST PACKET - Verification error: ${err instanceof Error ? err.message : String(err)}`);
+              console.error(`RTPMirrorHandler: FIRST PACKET - Verification error:`, err);
+              logError(`RTPMirrorHandler: FIRST PACKET - Verification error:`, err);
+            }
+            
+            if (nalSize > 10 * 1024 * 1024) {
+              const errorMsg = `[CRITICAL] FIRST PACKET - Invalid NAL size ${nalSize} - decryption is WRONG!`;
+              writeToLogFile('ERROR', errorMsg);
+              console.error(errorMsg);
+              logError(errorMsg);
+              
+              // Also log the key/IV used for debugging
+              writeToLogFile('ERROR', `[CRITICAL] AES key used: ${this.aesKey.toString('hex')}`);
+              console.error(`[CRITICAL] AES key used: ${this.aesKey.toString('hex')}`);
+              logError(`[CRITICAL] AES key used: ${this.aesKey.toString('hex')}`);
+              
+              writeToLogFile('ERROR', `[CRITICAL] AES IV used: ${this.aesIV.toString('hex')}`);
+              console.error(`[CRITICAL] AES IV used: ${this.aesIV.toString('hex')}`);
+              logError(`[CRITICAL] AES IV used: ${this.aesIV.toString('hex')}`);
+            }
+          }
+        }
       } else {
         logError(`RTPMirrorHandler: Cipher.update returned empty buffer for ${encryptLen} bytes`);
       }
@@ -3364,6 +3696,14 @@ class RTPMirrorHandler {
     } else {
       // UxPlay: Reset nextDecryptCount to 0 if no remaining bytes (line 103)
       this.nextDecryptCount = 0;
+    }
+    
+    // Log final decrypted output for first packet
+    if (isFirstPacket && output.length >= 16) {
+      const finalOutputMsg = `RTPMirrorHandler: FIRST PACKET - Final output first 16 bytes: ${output.slice(0, 16).toString('hex')}`;
+      writeToLogFile('INFO', finalOutputMsg);
+      console.log(finalOutputMsg);
+      logInfo(finalOutputMsg);
     }
     
     return output;
@@ -3428,11 +3768,12 @@ class RTPMirrorHandler {
         break;
       }
       
-      // Read NAL size (4 bytes, big-endian)
-      const nalSize = payload.readUInt32BE(offset);
+      // Read NAL size (4 bytes, big-endian) - matching UxPlay's byteutils_get_int_be
+      const nalSize = payload.readInt32BE(offset); // Use readInt32BE to match UxPlay's check for < 0
       
-      // Validate NAL size (reasonable range: 1 byte to 10MB)
-      if (nalSize === 0 || nalSize > 10 * 1024 * 1024) {
+      // Validate NAL size (matching UxPlay's validation)
+      // UxPlay checks: nc_len < 0 || nalu_size + 4 > payload_size
+      if (nalSize < 0 || offset + 4 > payload.length) {
         logError(`RTPMirrorHandler: Invalid NAL size ${nalSize} at offset ${offset}, payload length=${payload.length}`);
         // If we started from nextDecryptCount and it's invalid, try offset 0 once
         if (offset === this.nextDecryptCount && this.nextDecryptCount > 0 && offset === this.nextDecryptCount) {
@@ -3440,16 +3781,54 @@ class RTPMirrorHandler {
           offset = 0;
           continue; // Try once more at offset 0
         }
-        // If offset 0 also fails, the decryption is wrong - don't loop forever
-        if (offset === 0 && this.nextDecryptCount > 0) {
-          logError(`RTPMirrorHandler: Both offset 0 and ${this.nextDecryptCount} failed - decryption is incorrect`);
-          break; // Stop trying - decryption is wrong
+        // If offset 0 also fails, try searching for a valid NAL size or start code
+        if (offset === 0) {
+          // Try to find a valid NAL size by checking multiple offsets
+          let foundValid = false;
+          for (let searchOffset = 0; searchOffset < Math.min(payload.length - 4, 64); searchOffset++) {
+            const testNalSize = payload.readInt32BE(searchOffset);
+            if (testNalSize > 0 && testNalSize < 10 * 1024 * 1024 && searchOffset + 4 + testNalSize <= payload.length) {
+              // Check if the NAL unit starts with valid header (forbidden_zero_bit must be 0)
+              const nalHeader = payload[searchOffset + 4];
+              if ((nalHeader & 0x80) === 0) { // First bit must be 0
+                logInfo(`RTPMirrorHandler: Found valid NAL size ${testNalSize} at offset ${searchOffset} (skipped ${searchOffset} bytes)`);
+                offset = searchOffset;
+                foundValid = true;
+                break;
+              }
+            }
+          }
+          if (!foundValid && this.nextDecryptCount > 0) {
+            logError(`RTPMirrorHandler: Both offset 0 and ${this.nextDecryptCount} failed - no valid NAL found`);
+            break; // Stop trying
+          }
+          if (!foundValid) {
+            // Skip one byte and try again (but limit attempts to prevent infinite loop)
+            offset += 1;
+            if (offset > Math.min(payload.length - 4, 64)) {
+              logError(`RTPMirrorHandler: Exceeded search limit (tried ${offset} offsets) - no valid NAL found, skipping packet`);
+              return Buffer.alloc(0); // Return empty buffer to skip this packet
+            }
+            continue;
+          }
+        } else {
+          // Skip one byte and try again
+          offset += 1;
+          if (offset > Math.min(payload.length - 4, 64)) {
+            logError(`RTPMirrorHandler: Exceeded search limit (tried ${offset} offsets) - no valid NAL found, skipping packet`);
+            return Buffer.alloc(0);
+          }
+          continue;
         }
-        // Skip one byte and try again (but limit attempts to prevent infinite loop)
+      }
+      
+      // Additional validation: NAL size must be reasonable (1 byte to 10MB)
+      if (nalSize === 0 || nalSize > 10 * 1024 * 1024) {
+        logError(`RTPMirrorHandler: Invalid NAL size ${nalSize} at offset ${offset} (out of range)`);
         offset += 1;
-        if (offset > Math.min(payload.length - 4, 32)) {
-          logError(`RTPMirrorHandler: Exceeded search limit (tried ${offset} offsets) - decryption failed, skipping packet`);
-          return Buffer.alloc(0); // Return empty buffer to skip this packet
+        if (offset > Math.min(payload.length - 4, 64)) {
+          logError(`RTPMirrorHandler: Exceeded search limit - skipping packet`);
+          return Buffer.alloc(0);
         }
         continue;
       }
@@ -3459,12 +3838,29 @@ class RTPMirrorHandler {
         break;
       }
       
+      // UxPlay checks: "first bit of h264 nalu MUST be 0 ("forbidden_zero_bit")"
+      const nalHeader = payload[offset + 4];
+      if (nalHeader & 0x80) {
+        logError(`RTPMirrorHandler: Invalid NAL header at offset ${offset + 4}: forbidden_zero_bit is set (0x${nalHeader.toString(16)})`);
+        // Try next offset
+        offset += 1;
+        if (offset > Math.min(payload.length - 4, 64)) {
+          logError(`RTPMirrorHandler: Exceeded search limit - skipping packet`);
+          return Buffer.alloc(0);
+        }
+        continue;
+      }
+      
       // Replace size prefix with start code
       chunks.push(nalStartCode);
       
       // Copy NAL unit data
       const nalData = payload.slice(offset + 4, offset + 4 + nalSize);
       chunks.push(nalData);
+      
+      // Log NAL type for debugging
+      const nalType = nalHeader & 0x1f; // Lower 5 bits for H.264
+      logDebug(`RTPMirrorHandler: Found NAL unit type ${nalType}, size ${nalSize} at offset ${offset}`);
       
       offset += 4 + nalSize;
     }
