@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ChevronRightIcon as ChevronIcon } from '@/components/ui/icons';
 import './CollapsibleList.css';
 
@@ -63,12 +63,46 @@ export const CollapsibleList: React.FC<CollapsibleListProps> = ({
   const isControlled = collapsed !== undefined;
   const [internalCollapsed, setInternalCollapsed] = useState(defaultCollapsed);
   const isCollapsed = isControlled ? collapsed : internalCollapsed;
+  const listRootRef = useRef<HTMLDivElement>(null);
+  const [dragDisabledForGesture, setDragDisabledForGesture] = useState(false);
+  const mousedownOnEditableRef = useRef(false);
 
   useEffect(() => {
     if (!isControlled && defaultCollapsed !== undefined) {
       setInternalCollapsed(defaultCollapsed);
     }
   }, [defaultCollapsed, isControlled]);
+
+  const handleListMouseDownCapture = useCallback((e: React.MouseEvent) => {
+    const onEditable = isEditableElement(e.target) || isInsideEditable(e.target, listRootRef.current);
+    mousedownOnEditableRef.current = onEditable;
+    if (onEditable && listRootRef.current && draggable && !isEditingTitle) {
+      listRootRef.current.draggable = false;
+      setDragDisabledForGesture(true);
+    }
+  }, [draggable, isEditingTitle]);
+
+  const handleListMouseUpCapture = useCallback(() => {
+    mousedownOnEditableRef.current = false;
+    setDragDisabledForGesture(false);
+    if (listRootRef.current) {
+      listRootRef.current.draggable = draggable && !isEditingTitle;
+    }
+  }, [draggable, isEditingTitle]);
+
+  const handleListDragStart = useCallback(
+    (e: React.DragEvent) => {
+      const root = listRootRef.current;
+      const activeIsEditable = root && isEditableElement(document.activeElement) && root.contains(document.activeElement);
+      if (mousedownOnEditableRef.current || activeIsEditable) {
+        e.preventDefault();
+        e.dataTransfer.effectAllowed = 'none';
+        return;
+      }
+      onDragStart?.(e);
+    },
+    [onDragStart]
+  );
 
   const handleHeaderClick = () => {
     const newCollapsed = !isCollapsed;
@@ -112,15 +146,18 @@ export const CollapsibleList: React.FC<CollapsibleListProps> = ({
     return classes.join(' ');
   };
 
-  // Disable dragging when editing title to allow text selection
-  const isDraggable = draggable && !isEditingTitle;
+  // Disable dragging when editing title or when pointer is on an input (allows text selection)
+  const isDraggable = draggable && !isEditingTitle && !dragDisabledForGesture;
 
   return (
-    <div 
+    <div
+      ref={listRootRef}
       className={getClassName()}
       draggable={isDraggable}
-      onDragStart={isDraggable ? onDragStart : undefined}
-      onDragEnd={isDraggable ? onDragEnd : undefined}
+      onMouseDownCapture={handleListMouseDownCapture}
+      onMouseUpCapture={handleListMouseUpCapture}
+      onDragStart={draggable && !isEditingTitle ? handleListDragStart : undefined}
+      onDragEnd={draggable && !isEditingTitle ? onDragEnd : undefined}
       data-list-id={listId}
     >
       {dropIndicator === 'before' && <div className="collapsible-list__drop-line collapsible-list__drop-line--before" />}
@@ -201,6 +238,20 @@ export interface CollapsibleListItemProps {
   dropIndicator?: 'before' | 'after' | 'inside' | null;
   // Unique identifier
   itemId?: string;
+}
+
+function isEditableElement(el: EventTarget | null): el is HTMLInputElement | HTMLTextAreaElement | HTMLElement {
+  if (!el || !(el instanceof HTMLElement)) return false;
+  const tag = el.tagName?.toLowerCase();
+  if (tag === 'input' || tag === 'textarea') return true;
+  if (el.isContentEditable) return true;
+  return false;
+}
+
+function isInsideEditable(target: EventTarget | null, root: HTMLElement | null): boolean {
+  if (!target || !(target instanceof Node) || !root) return false;
+  const editable = root.querySelector('input, textarea, [contenteditable="true"]');
+  return editable ? editable.contains(target) || isEditableElement(target) : isEditableElement(target);
 }
 
 export const CollapsibleListItem: React.FC<CollapsibleListItemProps> = ({

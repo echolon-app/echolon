@@ -755,11 +755,32 @@ export const LeftPanel: React.FC = () => {
           const folderId = contextTarget.folderId || originalRequest.folderId;
           const duplicated = requestService.duplicateRequest(originalRequest);
           
-          // If the original request belongs to a collection, add the duplicate to the same collection/folder
+          // If the original request belongs to a collection, add the duplicate right under the source
+          let insertIndex: number | undefined;
           if (collectionId) {
+            const collection = collections.find(c => c.id === collectionId);
+            if (collection) {
+              const requests = folderId
+                ? (() => {
+                    const findFolder = (folders: Folder[]): Request[] | null => {
+                      for (const f of folders) {
+                        if (f.id === folderId) return f.requests;
+                        const inChild = findFolder(f.folders);
+                        if (inChild) return inChild;
+                      }
+                      return null;
+                    };
+                    return findFolder(collection.folders);
+                  })()
+                : collection.requests;
+              if (requests) {
+                const idx = requests.findIndex(r => r.id === originalRequest.id);
+                if (idx !== -1) insertIndex = idx + 1;
+              }
+            }
             duplicated.collectionId = collectionId;
             duplicated.folderId = folderId;
-            addRequest(collectionId, duplicated, folderId);
+            addRequest(collectionId, duplicated, folderId, insertIndex);
           }
           
           addTab(duplicated);
@@ -856,7 +877,7 @@ export const LeftPanel: React.FC = () => {
         { id: 'divider1', label: '', divider: true },
         { id: 'duplicate', label: 'Duplicate', icon: <CopyIcon />, onClick: () => {
           const duplicated = requestService.duplicateRequest(tab.request!);
-          addTab(duplicated);
+          addTab(duplicated, { insertAfterTabId: tab.id });
         }},
         { id: 'divider2', label: '', divider: true },
         { id: 'close', label: 'Close', icon: <TrashIcon />, danger: true, onClick: () => {

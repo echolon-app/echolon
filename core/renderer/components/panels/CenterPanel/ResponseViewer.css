@@ -463,6 +463,7 @@ button.response-viewer__size {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+  z-index:2;
 }
 
 .response-viewer__display-mode-dropdown .dropdown__trigger {

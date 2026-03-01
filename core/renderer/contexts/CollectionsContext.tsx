@@ -19,7 +19,7 @@ interface CollectionsContextValue {
   // Web mode only - add collection directly to state without file storage
   addWebModeCollection: (collection: Collection) => void;
   moveCollection: (collectionId: string, targetWorkspaceId: string) => Promise<void>;
-  addRequest: (collectionId: string, request: Request, folderId?: string) => void;
+  addRequest: (collectionId: string, request: Request, folderId?: string, insertIndex?: number) => void;
   updateRequest: (collectionId: string, requestId: string, updates: Partial<Request>) => void;
   deleteRequest: (collectionId: string, requestId: string, folderId?: string) => void;
   moveRequestToCollection: (request: Request, fromCollectionId: string | null, toCollectionId: string, folderId?: string, insertIndex?: number) => void;
@@ -491,7 +491,7 @@ export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     );
   }, [allCollections, getWorkspaceNameById, shouldSkipFileOps, getStorageManager]);
 
-  const addRequest = useCallback((collectionId: string, request: Request, folderId?: string) => {
+  const addRequest = useCallback((collectionId: string, request: Request, folderId?: string, insertIndex?: number) => {
     setAllCollections(prev => {
       const newCollections = prev.map(c => {
         if (c.id !== collectionId) return c;
@@ -500,7 +500,9 @@ export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
           const updateFolders = (folders: Folder[]): Folder[] =>
             folders.map(f => {
               if (f.id === folderId) {
-                return { ...f, requests: [...f.requests, request] };
+                const idx = insertIndex ?? f.requests.length;
+                const requests = [...f.requests.slice(0, idx), request, ...f.requests.slice(idx)];
+                return { ...f, requests };
               }
               return { ...f, folders: updateFolders(f.folders) };
             });
@@ -514,9 +516,11 @@ export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
           return updated;
         }
 
+        const idx = insertIndex ?? c.requests.length;
+        const requests = [...c.requests.slice(0, idx), request, ...c.requests.slice(idx)];
         const updated = {
           ...c,
-          requests: [...c.requests, request],
+          requests,
           updatedAt: Date.now(),
         };
         saveCollectionToFile(updated);

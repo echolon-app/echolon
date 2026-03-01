@@ -21,6 +21,7 @@
   display: none;
 }
 
+.tab-bar__close-all,
 .tab-bar__add {
   display: flex;
   align-items: center;
@@ -37,11 +38,13 @@
   transition: all var(--transition-fast);
 }
 
+.tab-bar__close-all:hover,
 .tab-bar__add:hover {
   background-color: var(--bg-hover);
   color: var(--text-primary);
 }
 
+.tab-bar__close-all svg,
 .tab-bar__add svg {
   width: 16px;
   height: 16px;

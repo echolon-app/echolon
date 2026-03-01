@@ -103,7 +103,7 @@ interface GitProviderProps {
 
 export const GitProvider: React.FC<GitProviderProps> = ({ children }) => {
 
-  console.log('[GitProvider] Rendering GitProvider');
+  //console.log('[GitProvider] Rendering GitProvider');
   // State
   const [isInitialized, setIsInitialized] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -579,7 +579,7 @@ export const GitProvider: React.FC<GitProviderProps> = ({ children }) => {
   // Load repo status when workspace changes
   useEffect(() => {
     checkAndLoadRepo();
-    console.log('[GitContext] checkAndLoadRepo');
+    //console.log('[GitContext] checkAndLoadRepo');
   }, [checkAndLoadRepo]);
   
   // Listen for file changes and refresh git status

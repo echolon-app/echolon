@@ -86,6 +86,17 @@ export const TabBar: React.FC<TabBarProps> = ({
     onTabClose?.(tabId);
   };
 
+  const handleCloseAllTabs = () => {
+    if (tabs.length === 0 || !onTabClose) return;
+    if (window.confirm('Close all tabs?')) {
+      tabs.forEach(tab => {
+        if (tab.closable !== false) {
+          onTabClose(tab.id);
+        }
+      });
+    }
+  };
+
   // Handle middle-click to close
   const handleMouseDown = (e: React.MouseEvent, tabId: string) => {
     if (e.button === 1 && onTabClose) {
@@ -191,8 +202,18 @@ export const TabBar: React.FC<TabBarProps> = ({
           </div>
         ))}
       </div>
+      {tabs.length > 0 && onTabClose && (
+        <button
+          title="Close all tabs"
+          className="tab-bar__close-all"
+          onClick={handleCloseAllTabs}
+          aria-label="Close all tabs"
+        >
+          <CloseIcon />
+        </button>
+      )}
       {showAddButton && onNewTab && (
-        <button className="tab-bar__add" onClick={onNewTab} aria-label="New tab">
+        <button title="New tab" className="tab-bar__add" onClick={onNewTab} aria-label="New tab">
           <PlusIcon />
         </button>
       )}

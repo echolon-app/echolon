@@ -102,10 +102,33 @@ function buildUrl(request: Request, interpolate: (text: string) => string): stri
       });
       url = urlObj.toString();
     }
+
+    // Fill in path params
+    const enabledPathParams = request.pathParams.filter(p => p.enabled && p.key);
+    if (enabledPathParams.length > 0) {
+      const urlObj = new URL(url);
+      enabledPathParams.forEach(p => {
+        urlObj.pathname = replacePathParam(urlObj.pathname, p.key, interpolate(p.value));
+      });
+      url = urlObj.toString();
+    }
+
   } catch {
+    //console.error('[buildUrl] Invalid URL:', url);
     // Invalid URL, use as-is
   }
   return url;
+}
+
+// should handle both :param and {param} formats
+function replacePathParam(url: string, param: string, value: string): string {
+  // with colon:
+  const withColon = url.replace(`:${param}`, value);
+  // with curly braces:
+  const withCurlyBraces = withColon.replace(`{${param}}`, value);
+  // with curly braces and encoded:
+  const withCurlyBracesAndEncoded = withCurlyBraces.replace(`%7B${param}%7D`, encodeURIComponent(value));
+  return withCurlyBracesAndEncoded;
 }
 
 // Build a fully resolved URL (env vars + path params + query params)

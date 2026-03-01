@@ -16,7 +16,6 @@
 
 /* Draggable area for macOS */
 .top-bar__left,
-.top-bar__center,
 .top-bar__right {
   -webkit-app-region: no-drag;
 }
@@ -400,6 +399,7 @@
   font-size: var(--font-sm);
   cursor: pointer;
   transition: all var(--transition-fast);
+  -webkit-app-region: no-drag;
 }
 
 .top-bar__search:hover {

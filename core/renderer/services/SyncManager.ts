@@ -132,6 +132,26 @@ export class SyncManager {
       const result = await window.electronAPI?.fetchUrlContent(collection.specSource.url);
       
       if (!result?.success || !result.content) {
+        const statusCode = result?.statusCode ?? 0;
+        const is5xx = statusCode >= 500 && statusCode < 600;
+        if (is5xx) {
+          // Server error: don't treat as API routes changed; treat as transient
+          const errorMessage = result?.error || `Server error (${statusCode})`;
+          this.callbacks.updateCollection(collectionId, {
+            specSource: {
+              ...collection.specSource,
+              lastCheckedAt: checkTime,
+            },
+          });
+          this.updateSyncState(collectionId, {
+            status: 'error',
+            lastChecked: checkTime,
+            error: errorMessage,
+          });
+          this.log('error', `Sync check failed (server error): ${collection.name}`, errorMessage);
+          this.callbacks.onSyncError?.(collectionId, errorMessage);
+          return null;
+        }
         throw new Error(result?.error || 'Failed to fetch URL');
       }
 

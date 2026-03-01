@@ -30,6 +30,7 @@ declare global {
       restartApp?: () => Promise<void>;
       setUpdateServer?: (url: string | null) => Promise<{ success: boolean; feedUrl?: string; error?: string }>;
       computeCompressionSizes?: (payload: { body: string; levels?: { gzip?: number; brotli?: number; zstd?: number }; methods?: ('gzip' | 'brotli' | 'zstd')[] }) => Promise<{ gzip?: number; brotli?: number; zstd?: number }>;
+      fetchUrlContent?: (url: string) => Promise<{ success: boolean; content?: string; contentType?: string; error?: string; statusCode?: number }>;
     };
   }
 }

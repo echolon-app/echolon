@@ -18,7 +18,7 @@ interface RequestContextValue {
   history: HistoryEntry[];
   canGoBack: boolean;
   canGoForward: boolean;
-  addTab: (request?: Request) => void;
+  addTab: (request?: Request, options?: { insertAfterTabId?: string }) => void;
   addSampleTab: () => void;
   addCollectionTab: (collection: Collection, initialSubTab?: string) => void;
   addEnvironmentTab: (environment: Environment) => void;
@@ -357,7 +357,7 @@ export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [navIndex]);
 
-  const addTab = useCallback((request?: Request) => {
+  const addTab = useCallback((request?: Request, options?: { insertAfterTabId?: string }) => {
     const newRequest = request || requestService.createEmptyRequest();
     // Set workspaceId on the request if not already set
     if (!newRequest.workspaceId && activeWorkspaceId) {
@@ -371,7 +371,15 @@ export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ child
       workspaceId: activeWorkspaceId || undefined,
       isDirty: false,
     };
-    setTabs(prev => [...prev, newTab]);
+    setTabs(prev => {
+      const afterId = options?.insertAfterTabId;
+      if (!afterId) return [...prev, newTab];
+      const i = prev.findIndex(t => t.id === afterId);
+      if (i === -1) return [...prev, newTab];
+      const next = [...prev];
+      next.splice(i + 1, 0, newTab);
+      return next;
+    });
     setActiveTabId(newTab.id);
   }, [setActiveTabId, activeWorkspaceId]);
 

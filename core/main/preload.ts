@@ -139,6 +139,7 @@ interface FetchUrlResult {
   content?: string;
   contentType?: string;
   error?: string;
+  statusCode?: number;
 }
 
 // File Storage types (simplified versions for preload)
@@ -967,7 +968,7 @@ declare global {
       cloudProxyUploadMock: (serverUrl: string, namespace: string, mock: CloudStoredMock) => Promise<{ success: boolean; error?: string }>;
       cloudProxyDeleteMock: (serverUrl: string, namespace: string, mockId: string) => Promise<{ success: boolean; error?: string }>;
       // URL Content Fetch
-      fetchUrlContent: (url: string) => Promise<{ success: boolean; content?: string; contentType?: string; error?: string }>;
+      fetchUrlContent: (url: string) => Promise<{ success: boolean; content?: string; contentType?: string; error?: string; statusCode?: number }>;
       // File Storage
       initFileStorage: () => Promise<{ success: boolean; error?: string }>;
       getEcholonPath: () => Promise<string>;

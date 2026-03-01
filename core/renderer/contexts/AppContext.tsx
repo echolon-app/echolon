@@ -137,7 +137,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Apply font size setting to CSS custom properties
   useEffect(() => {
-    const baseFontSize = 13; // Default font size
+    const baseFontSize = 14; // Default font size
     const scale = settings.fontSize / baseFontSize;
     const root = document.documentElement;
     

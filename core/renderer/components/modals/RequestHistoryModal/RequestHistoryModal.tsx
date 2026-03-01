@@ -129,6 +129,7 @@ export const RequestHistoryModal: React.FC<RequestHistoryModalProps> = ({
   
   // Track if modal was previously open to avoid resetting on every render
   const wasOpenRef = useRef(false);
+  const selectedItemRef = useRef<HTMLDivElement | null>(null);
   
   // Generate curl command for the selected entry
   const curlCommand = useMemo(() => {
@@ -259,6 +260,32 @@ export const RequestHistoryModal: React.FC<RequestHistoryModalProps> = ({
       setSelectedEntry(requestHistory[0]);
     }
   }, [isOpen, requestHistory, selectedEntry]);
+
+  // Arrow key navigation in the history list
+  useEffect(() => {
+    if (!isOpen || requestHistory.length === 0) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('input, textarea, [contenteditable="true"]')) return;
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      e.preventDefault();
+      const idx = selectedEntry ? requestHistory.findIndex((entry) => entry.id === selectedEntry.id) : -1;
+      if (e.key === 'ArrowDown') {
+        const next = idx < requestHistory.length - 1 ? idx + 1 : idx;
+        if (next !== idx) setSelectedEntry(requestHistory[next]);
+      } else {
+        const prev = idx > 0 ? idx - 1 : idx < 0 ? requestHistory.length - 1 : 0;
+        if (prev !== idx) setSelectedEntry(requestHistory[prev]);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, requestHistory, selectedEntry]);
+
+  // Scroll selected item into view when selection changes
+  useEffect(() => {
+    selectedItemRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [selectedEntry?.id]);
 
 
   const formatDuration = (ms: number) => {
@@ -417,6 +444,7 @@ export const RequestHistoryModal: React.FC<RequestHistoryModalProps> = ({
                   requestHistory.map((entry) => (
                     <div
                       key={entry.id}
+                      ref={selectedEntry?.id === entry.id ? selectedItemRef : null}
                       className={`request-history-modal__item ${selectedEntry?.id === entry.id ? 'selected' : ''}`}
                       onClick={() => setSelectedEntry(entry)}
                     >

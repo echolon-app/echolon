@@ -16,6 +16,7 @@ import { ResponseSizeTooltip } from './ResponseSizeTooltip';
 import { ResponseSizeModal } from './ResponseSizeModal';
 import { NetworkInfoTooltip } from './NetworkInfoTooltip';
 import { formatLogTime } from '@/utils';
+import { getResponseBodySearch, setResponseBodySearch } from '@/stores/responseBodySearchStore';
 import './ResponseViewer.css';
 
 // Simple JSONPath implementation
@@ -119,7 +120,9 @@ const isPreviewableMedia = (contentType: string): boolean => {
 // Helper to determine if content type is HTML
 const isHtmlContent = (contentType: string): boolean => {
   const ct = contentType.toLowerCase();
-  return ct.includes('text/html') || ct.includes('application/xhtml');
+  let isHtml = ct.includes('text/html') || ct.includes('application/xhtml');
+  //', isHtml);
+  return isHtml;
 };
 
 // Helper to determine the media type category
@@ -194,6 +197,8 @@ interface ResponseViewerProps {
   onClose?: () => void;
   onExpandToggle?: () => void;
   isExpanded?: boolean;
+  /** Request tab id for per-tab Ace search value persistence */
+  tabId?: string | null;
 }
 
 // Media Preview component - properly manages blob URLs for video/audio/PDF
@@ -389,7 +394,7 @@ const ScriptOutputSection: React.FC<{ title: string; output: ScriptOutput }> = (
 };
 
 
-export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoading, height = 300, specResponseInfo, onClose, onExpandToggle, isExpanded }) => {
+export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoading, height = 300, specResponseInfo, onClose, onExpandToggle, isExpanded, tabId }) => {
   const { resolvedTheme } = useTheme();
   const { openSettingsModal } = useApp();
   const [sizeModalData, setSizeModalData] = useState<{
@@ -426,7 +431,30 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
   const prevExecutionRef = useRef<RequestExecution | null>(null);
   // Track previous loading state to detect when loading starts
   const prevIsLoadingRef = useRef(false);
-  
+  // Ref for current tabId so editor search handlers always see the active request tab
+  const tabIdRef = useRef<string | null>(tabId ?? null);
+  const prevTabIdRef = useRef<string | null>(tabId ?? null);
+  useEffect(() => {
+    tabIdRef.current = tabId ?? null;
+  }, [tabId]);
+
+  // When switching request tabs with search open: save current input to the tab we're leaving, then show the activated tab's value
+  useEffect(() => {
+    if (tabId == null || !showSearch) return;
+    const editor = editorRef.current?.editor;
+    const sb = editor?.searchBox;
+    if (!editor || !sb?.searchInput) return;
+    const prevTabId = prevTabIdRef.current;
+    if (prevTabId !== tabId && prevTabId != null) {
+      const valueToSave = sb.searchInput.value ?? '';
+      setResponseBodySearch(prevTabId, valueToSave);
+    }
+    prevTabIdRef.current = tabId;
+    const savedSearch = getResponseBodySearch(tabId);
+    sb.searchInput.value = savedSearch;
+    sb.find(false, false, true);
+  }, [tabId, showSearch]);
+
   // Switch to body tab immediately when loading starts (Send clicked)
   useEffect(() => {
     if (isLoading && !prevIsLoadingRef.current) {
@@ -534,33 +562,40 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
     }
   }, [activeTab]);
 
-  // Setup editor with search functionality (CMD+F / Ctrl+F)
+  // Setup editor with search functionality (CMD+F / Ctrl+F). Per-tab search value: save on close, load on open / tab switch.
   const handleEditorLoad = useCallback((editor: any) => {
-    // Override find command to track search state and work with read-only editors
+    const searchboxModule = ace.require('ace/ext/searchbox');
+    const SearchBox = searchboxModule.SearchBox;
+
+    // Find command: open search with this tab's saved value
     editor.commands.addCommand({
       name: 'find',
       bindKey: { win: 'Ctrl-F', mac: 'Command-F' },
       exec: (ed: any) => {
         ed.focus();
-        const Search = ace.require('ace/ext/searchbox').Search;
-        const sb = ed.searchBox || new Search(ed);
-        sb.show('', false);
+        const sb = ed.searchBox || new SearchBox(ed);
+        const currentTabId = tabIdRef.current;
+        const savedSearch = getResponseBodySearch(currentTabId);
+        sb.show(savedSearch, false);
         setShowSearch(true);
       },
-      readOnly: true, // Allow this command in read-only mode
+      readOnly: true,
     });
-    
-    // Wrap the searchbox hide method to track when it's closed
+
+    // On close (ESC or X): always save current input to the tab we're viewing (tabIdRef.current)
     const initSearchBox = () => {
-      if (editor.searchBox) {
+      if (editor.searchBox && !editor.searchBox._hideWrapped) {
         const originalHide = editor.searchBox.hide.bind(editor.searchBox);
         editor.searchBox.hide = () => {
+          const value = editor.searchBox?.searchInput?.value ?? '';
+          setResponseBodySearch(tabIdRef.current, value);
           originalHide();
           setShowSearch(false);
         };
+        editor.searchBox._hideWrapped = true;
       }
     };
-    
+
     // Initialize searchbox wrapper if it exists, or wait for it
     if (editor.searchBox) {
       initSearchBox();
@@ -594,28 +629,30 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
         return;
       }
       
-      // Otherwise, use editor search
+      // Otherwise, use editor search: show this tab's saved value; on close we save to current tab
       const editor = editorRef.current?.editor;
       if (editor) {
         editor.focus();
-        const Search = ace.require('ace/ext/searchbox').Search;
-        const sb = editor.searchBox || new Search(editor);
-        
-        // Wrap hide method if not already wrapped
+        const SearchBox = ace.require('ace/ext/searchbox').SearchBox;
+        const sb = editor.searchBox || new SearchBox(editor);
+
         if (!sb._hideWrapped) {
           const originalHide = sb.hide.bind(sb);
           sb.hide = () => {
+            const value = sb.searchInput?.value ?? '';
+            setResponseBodySearch(tabIdRef.current, value);
             originalHide();
             setShowSearch(false);
           };
           sb._hideWrapped = true;
         }
-        
-        sb.show('', false);
+
+        const savedSearch = getResponseBodySearch(tabIdRef.current);
+        sb.show(savedSearch, false);
         setShowSearch(true);
       }
     }
-    
+
     // Handle ESC to close headers search
     if (e.key === 'Escape' && activeTab === 'headers' && showHeadersSearch) {
       setShowHeadersSearch(false);
@@ -872,30 +909,28 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ execution, isLoa
     const editor = editorRef.current?.editor;
     if (editor) {
       if (showSearch) {
-        // Close the search box
         const searchBox = editor.searchBox;
         if (searchBox) {
           searchBox.hide();
         }
-        // State is updated by the wrapped hide method
       } else {
-        // Focus the editor first to ensure search works
         editor.focus();
-        // Open the search box using the Search class directly (works better for read-only editors)
-        const Search = ace.require('ace/ext/searchbox').Search;
-        const sb = editor.searchBox || new Search(editor);
-        
-        // Wrap hide method if not already wrapped
+        const SearchBox = ace.require('ace/ext/searchbox').SearchBox;
+        const sb = editor.searchBox || new SearchBox(editor);
+
         if (!sb._hideWrapped) {
           const originalHide = sb.hide.bind(sb);
           sb.hide = () => {
+            const value = sb.searchInput?.value ?? '';
+            setResponseBodySearch(tabIdRef.current, value);
             originalHide();
             setShowSearch(false);
           };
           sb._hideWrapped = true;
         }
-        
-        sb.show('', false);
+
+        const savedSearch = getResponseBodySearch(tabIdRef.current);
+        sb.show(savedSearch, false);
         setShowSearch(true);
       }
     }

@@ -522,6 +522,17 @@ function setupIpcHandlers(): void {
         return {
           success: false,
           error: result.error || 'Failed to fetch URL',
+          statusCode: result.status,
+        };
+      }
+      
+      // Treat 4xx/5xx as failure so we don't compare error-page body to spec
+      const status = result.status ?? 0;
+      if (status >= 400) {
+        return {
+          success: false,
+          error: result.statusText || `HTTP ${status}`,
+          statusCode: status,
         };
       }
       

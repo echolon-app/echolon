@@ -47,19 +47,38 @@
   border-top: none;
 }
 
+/* When response has fixed height (vertical mode), request takes the rest so we never overflow */
+.center-panel__content--vertical-split .center-panel__request-section {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .center-panel__request-section {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  flex: 0 1 auto;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .center-panel__response-section {
   display: flex;
   flex-direction: column;
-  flex-shrink: 0;
+  flex: 1;
   min-height: 0;
+  overflow: hidden;
+  /*
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    z-index: 2;
+  */
+}
+
+/* When response is hidden via close btn, keep section at bottom (don't grow) */
+.center-panel__response-section--collapsed {
+  flex: 0 0 auto;
+  margin-top: auto;
 }
 
 .center-panel__url-bar {
@@ -228,7 +247,10 @@
 }
 
 .center-panel__option-content {
+  display: flex;
+  flex-direction: column;
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: visible;
   padding: var(--spacing-md);
@@ -252,11 +274,38 @@
 
 .center-panel__params-section-header {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
+  flex-direction: column;
+  gap: var(--spacing-xs);
   margin-bottom: var(--spacing-sm);
   padding-bottom: var(--spacing-xs);
   border-bottom: 1px solid var(--border-primary);
+}
+
+.center-panel__params-section-header-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.center-panel__params-section-descriptions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs) var(--spacing-md);
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+  line-height: 1.4;
+}
+
+.center-panel__params-section-desc-item {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.center-panel__params-section-desc-key {
+  font-weight: 500;
+  color: var(--text-secondary);
 }
 
 .center-panel__params-section-title {
@@ -404,8 +453,9 @@
 .center-panel__body {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
   gap: var(--spacing-md);
-  height: 100%;
 }
 
 .center-panel__body-type {
@@ -988,7 +1038,8 @@
 .center-panel__response {
   display: flex;
   flex-direction: column;
-  flex-shrink: 0;
+  flex: 1;
+  min-height: 0;
   border-top: 1px solid var(--border-primary);
   position: relative;
   overflow: hidden;

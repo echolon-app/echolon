@@ -354,6 +354,22 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
   const [urlCopied, setUrlCopied] = useState(false);
   const resizeRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const resizeStartRef = useRef<{ clientY: number; height: number }>({ clientY: 0, height: 0 });
+  const [responseContainerHeight, setResponseContainerHeight] = useState(300);
+
+  // Measure response container height when it fills (vertical mode) so ResponseViewer's editor can use it
+  useEffect(() => {
+    const el = resizeRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const h = entry.contentRect.height;
+        if (h > 0) setResponseContainerHeight(h);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // In readonly web mode, auto-open collection reference tab if no tab is active
   // This ensures we never show the empty state in embedded readonly mode
@@ -789,6 +805,9 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
   };
 
   const handleSend = async () => {
+    if (isResponsePanelCollapsed && !isResponseExpanded) {
+      setIsResponsePanelCollapsed(false);
+    }
     await sendRequest();
   };
 
@@ -797,6 +816,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
     
     // Build the fully resolved URL (env vars + path params + query params)
     const resolvedUrl = buildResolvedUrl(request, activeEnvironment, requestCollection);
+    //console.log('[CenterPanel] Resolved URL:', resolvedUrl);
     
     try {
       await navigator.clipboard.writeText(resolvedUrl);
@@ -820,6 +840,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
   const handleResizeMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    resizeStartRef.current = { clientY: e.clientY, height: responseHeight };
     setIsResizing(true);
   };
 
@@ -841,8 +862,10 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
         newWidth = Math.max(300, Math.min(containerRect.right - e.clientX, containerRect.width - 300));
         setResponseWidth(newWidth);
       } else {
-        // Vertical mode - resize height
-        newHeight = Math.max(100, Math.min(containerRect.bottom - e.clientY, containerRect.height - 200));
+        // Vertical mode: handle at top; drag up = grow response (height increases), drag down = shrink (height decreases)
+        const { clientY: startY, height: startHeight } = resizeStartRef.current;
+        const deltaY = e.clientY - startY;
+        newHeight = Math.max(100, Math.min(startHeight - deltaY, containerRect.height - 100));
         setResponseHeight(newHeight);
       }
     };
@@ -932,7 +955,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
         />
       ) : request ? (
         <div 
-          className={`center-panel__content ${isResponseExpanded ? 'center-panel__content--horizontal' : ''}`}
+          className={`center-panel__content ${isResponseExpanded ? 'center-panel__content--horizontal' : ''} ${!isResponseExpanded && !isResponsePanelCollapsed ? 'center-panel__content--vertical-split' : ''}`}
           ref={contentRef}
         >
           {/* Request Section (URL Bar + Options) */}
@@ -1054,8 +1077,10 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                   {urlPathVariables.length > 0 && (
                     <div className="center-panel__params-section center-panel__params-section--path">
                       <div className="center-panel__params-section-header">
-                        <span className="center-panel__params-section-title">Path Variables</span>
-                        <span className="center-panel__params-section-count">{urlPathVariables.length}</span>
+                        <div className="center-panel__params-section-header-row">
+                          <span className="center-panel__params-section-title">Path Variables</span>
+                          <span className="center-panel__params-section-count">{urlPathVariables.length}</span>
+                        </div>
                       </div>
                       <EditableTable
                         data={request.pathParams || []}
@@ -1073,14 +1098,24 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
                   
                   {/* Query Parameters */}
                   <div className="center-panel__params-section">
-                    {urlPathVariables.length > 0 && (
-                      <div className="center-panel__params-section-header">
+                    <div className="center-panel__params-section-header">
+                      {/*<div className="center-panel__params-section-header-row">
                         <span className="center-panel__params-section-title">Query Parameters</span>
                         {request.queryParams.filter(p => p.key).length > 0 && (
                           <span className="center-panel__params-section-count">{request.queryParams.filter(p => p.key).length}</span>
                         )}
-                      </div>
-                    )}
+                      </div>*/}
+                      {/*request.queryParams.some(p => p.description) && (
+                        <div className="center-panel__params-section-descriptions">
+                          {request.queryParams.filter(p => p.key && p.description).map((p) => (
+                            <span key={p.id} className="center-panel__params-section-desc-item" title={p.description || undefined}>
+                              <span className="center-panel__params-section-desc-key">{p.key}:</span>{' '}
+                              {p.description}
+                            </span>
+                          ))}
+                        </div>
+                      )*/}
+                    </div>
                   <EditableTable
                     data={request.queryParams}
                     onChange={handleQueryParamsChange}
@@ -1918,8 +1953,14 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
 
           {/* Response Section */}
           <div 
-            className={`center-panel__response-section ${isResponseExpanded ? 'center-panel__response-section--horizontal' : ''}`}
-            style={isResponseExpanded ? { width: responseWidth } : undefined}
+            className={`center-panel__response-section ${isResponseExpanded ? 'center-panel__response-section--horizontal' : ''} ${isResponsePanelCollapsed && !isResponseExpanded ? 'center-panel__response-section--collapsed' : ''}`}
+            style={
+              isResponseExpanded
+                ? { width: responseWidth }
+                : isResponsePanelCollapsed
+                  ? undefined
+                  : { height: responseHeight, flex: '0 0 auto' }
+            }
           >
             {/* Horizontal resize handle - only show in horizontal mode */}
             {isResponseExpanded && (
@@ -1946,7 +1987,7 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
             {/* Response Viewer */}
             <div 
               className={`center-panel__response ${isResponsePanelCollapsed && !isResponseExpanded ? 'center-panel__response--hidden' : ''}`}
-              style={!isResponseExpanded ? { height: isResponsePanelCollapsed ? 0 : responseHeight } : undefined}
+              style={!isResponseExpanded && isResponsePanelCollapsed ? { height: 0 } : undefined}
               ref={resizeRef}
             >
               {!isResponsePanelCollapsed && !isResponseExpanded && (
@@ -1958,11 +1999,12 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({ onShowCodePanel }) => 
               {<ResponseViewer 
                 execution={currentExecution} 
                 isLoading={isLoading}
-                height={responseHeight}
+                height={responseContainerHeight}
                 specResponseInfo={specResponseInfo}
                 onClose={!isResponseExpanded ? () => setIsResponsePanelCollapsed(true) : undefined}
                 onExpandToggle={() => setIsResponseExpanded(!isResponseExpanded)}
                 isExpanded={isResponseExpanded}
+                tabId={activeTabId}
               />}
             </div>
           </div>

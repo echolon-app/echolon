@@ -158,15 +158,38 @@ export const ImportModal: React.FC = () => {
           throw new Error('Please enter a valid HTTP or HTTPS URL');
         }
         
-        const response = await window.electronAPI?.fetchUrlContent(url);
-        if (!response?.success || !response.content) {
-          throw new Error(response?.error || 'Failed to fetch URL');
-      }
+        let content: string;
+        if (window.electronAPI?.fetchUrlContent) {
+          const response = await window.electronAPI.fetchUrlContent(url);
+          if (!response?.success || !response.content) {
+            throw new Error(response?.error || 'Failed to fetch URL');
+          }
+          content = response.content;
+        } else {
+          // Web: fetch directly (subject to CORS)
+          try {
+            const res = await fetch(url);
+            if (!res.ok) {
+              throw new Error(`Failed to fetch URL: ${res.status} ${res.statusText}`);
+            }
+            content = await res.text();
+          } catch (fetchErr) {
+            const isCorsOrNetwork =
+              fetchErr instanceof TypeError &&
+              (fetchErr.message === 'Failed to fetch' || fetchErr.message === 'Load failed');
+            if (isCorsOrNetwork) {
+              throw new Error(
+                'This URL could not be loaded, likely due to CORS restrictions. The server may not allow requests from this origin. Try the desktop app to import this URL, or setup a CORS proxy in the settings.'
+              );
+            }
+            throw fetchErr;
+          }
+        }
 
-        const info = specImporter.getSpecInfo(response.content);
-      if (!info) {
+        const info = specImporter.getSpecInfo(content);
+        if (!info) {
           throw new Error('The URL does not contain a valid API specification (OpenAPI, Postman, Insomnia)');
-      }
+        }
 
         setParsedResult({
           type: 'url',
@@ -175,7 +198,7 @@ export const ImportModal: React.FC = () => {
           preview: info,
           format: info.format
         });
-        setFetchedContent(response.content);
+        setFetchedContent(content);
       
       if (info.baseUrl) {
         setBaseUrlValue(info.baseUrl);
