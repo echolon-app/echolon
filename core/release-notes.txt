@@ -1,13 +1,20 @@
 ## Highlights
-- Response size breakdown and savings calculator
+- Query param samples from OpenAPI
+- Close all tabs
+- Duplicate request placement
 
 ### ✨ Added
-- Response size modal: compare Uncompressed, Currently used, gzip, brotli, and zstd with bar chart
-- Savings calculator: total download over a duration at a given request rate (per sec/min/hour/day/week/month)
-- Launch at login support
+- Samples for query parameters when present in OpenAPI spec (e.g. app-api version_name)
+- Close all tabs quick action button
 
 ### 🚀 Improved
-- Search is now highlighted in matches in the UI
-- #1 Fix for https://github.com/echolon-app/echolon/issues/1
-- Editor: Number of results is now configurable in Settings
-- Fix for not detected variable in request auth tab
+- Landing page: initial specs are now shown
+- Import modal on web: CORS hint when import does not work
+- AceEditor search value is memorized
+- Body details scale according to available space
+- Request name: text selection works without triggering drag
+- Default font size set to 14
+- API background check ignores 5XX errors
+- Copy URL now includes resolved URL without variables
+- Top bar: larger draggable area for window dragging
+- Duplicate request is placed directly under the duplicated one

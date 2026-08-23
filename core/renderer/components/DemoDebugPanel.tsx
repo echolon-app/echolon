@@ -214,6 +214,7 @@ export const DemoDebugPanel: React.FC = () => {
   
   // Start video recording
   const startRecording = useCallback(async () => {
+    console.log('[DemoDebugPanel] Starting recording...');
     try {
       // Close the panel first
       setIsOpen(false);
@@ -227,10 +228,13 @@ export const DemoDebugPanel: React.FC = () => {
         },
         audio: false,
       });
+      console.log('[DemoDebugPanel] Stream:', stream);
       
       // Get video track and try to apply element restriction
       const videoTrack = stream.getVideoTracks()[0];
+      console.log('[DemoDebugPanel] Video track:', videoTrack);
       await applyElementRestriction(videoTrack);
+      console.log('[DemoDebugPanel] Applied element restriction to document.body');
       
       streamRef.current = stream;
       
@@ -244,12 +248,14 @@ export const DemoDebugPanel: React.FC = () => {
       recordedChunksRef.current = [];
       
       mediaRecorder.ondataavailable = (e) => {
+        console.log('[DemoDebugPanel] Data available:', e.data.size);
         if (e.data.size > 0) {
           recordedChunksRef.current.push(e.data);
         }
       };
       
       mediaRecorder.onstop = () => {
+        console.log('[DemoDebugPanel] Recording stopped');
         // Create download link
         const blob = new Blob(recordedChunksRef.current, { type: mimeType });
         const url = URL.createObjectURL(blob);
